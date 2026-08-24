@@ -1073,7 +1073,7 @@ async function performFullSync(db) {
         // Step 4: Incremental Cloud Delta Sync (Push delta directly to Cloud VPS in milliseconds)
         if (allDeltaChanges.length > 0) {
             setProgress(90, 'مزامنة السحابة التلقائية', `إرسال ${allDeltaChanges.length} تعديلاً فورياً إلى السيرفر السحابي...`, 'cloud_delta_sync', 4);
-            await pushDeltaToCloud(allDeltaChanges);
+            await pushDeltaToCloud(db, allDeltaChanges);
         }
 
         setProgress(95, 'تحديث الإحصائيات والمؤشرات', 'إعادة حساب إحصائيات لوحة القيادة والتقارير...', 'dashboard_kpis', 5);
@@ -1176,13 +1176,14 @@ async function wipeDatabase(db) {
 /**
  * Push Incremental Delta Changes to Oracle Cloud VPS in milliseconds
  */
-async function pushDeltaToCloud(deltaChanges) {
+async function pushDeltaToCloud(db, deltaChanges) {
     if (!deltaChanges || deltaChanges.length === 0) return;
     const config = readConfigSafely();
     if (config.isCloudServer) return; // Skip if already on cloud
 
     const cloudEndpoint = 'http://141.147.136.170/api/sync/delta';
     const secret = 'smartcs-cloud-secret-2026';
+    const startTime = Date.now();
 
     console.log(`[CLOUD DELTA SYNC] Pushing ${deltaChanges.length} incremental change(s) to Oracle Cloud VPS...`);
     try {
@@ -1199,8 +1200,26 @@ async function pushDeltaToCloud(deltaChanges) {
             })
         });
         const data = await response.json();
+        const duration = Date.now() - startTime;
         if (data.success) {
             console.log(`[CLOUD DELTA SYNC SUCCESS] Applied ${data.applied} change(s) in cloud database! ⚡`);
+            if (db) {
+                try {
+                    await dbRun(db, `
+                        INSERT INTO sync_history (sync_type, status, tables_count, records_count, changes_count, duration_ms, message, details)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    `, [
+                        'CLOUD_VPS',
+                        'SUCCESS',
+                        new Set(deltaChanges.map(c => c.table_name)).size,
+                        data.applied || deltaChanges.length,
+                        data.applied || deltaChanges.length,
+                        duration,
+                        `تم إرسال ودفع ${data.applied || deltaChanges.length} تغييراً فورياً إلى السيرفر السحابي (VPS) بنجاح ⚡`,
+                        JSON.stringify({ cloud_endpoint: cloudEndpoint, changes_pushed: deltaChanges.length })
+                    ]);
+                } catch (e) {}
+            }
         } else {
             console.warn(`[CLOUD DELTA SYNC WARNING] Cloud response:`, data.error);
         }

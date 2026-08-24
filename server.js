@@ -2936,11 +2936,9 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`================================================================`);
     console.log(`  [+] Local Host Access   : http://localhost:${PORT}`);
     console.log(`  [+] Network LAN Access  : http://${localIp}:${PORT}`);
+    console.log(`  [+] Oracle Cloud VPS    : https://smartcs.m-kamel.workers.dev`);
     console.log(`  [+] Access DB Connected : ${syncEngine.getAccessFilePath()}`);
     console.log(`  [+] Mode                : READ-ONLY Safe Engine | Multi-User LAN Ready`);
     console.log(`================================================================`);
     syncEngine.startFileWatcher(db);
-    
-    // Auto-start Cloudflare Tunnel for instant global web access
-    tunnelMgr.start().catch(err => console.log('[Tunnel] Auto-start notice:', err.message));
 });
