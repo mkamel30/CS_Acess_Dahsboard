@@ -2732,9 +2732,33 @@ app.post('/api/webhook/github', (req, res) => {
 });
 
 // ==========================================
-// 6. CLOUD INCREMENTAL DELTA SYNC RECEIVER
+// 6. CLOUD INCREMENTAL DELTA SYNC RECEIVER & SSE BROADCAST
 // ==========================================
 const SYNC_SECRET = 'smartcs-cloud-secret-2026';
+const sseClients = [];
+
+app.get('/api/sync/events', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    sseClients.push(res);
+
+    req.on('close', () => {
+        const idx = sseClients.indexOf(res);
+        if (idx !== -1) sseClients.splice(idx, 1);
+    });
+});
+
+function sendRealtimeSyncEvent(eventName, data) {
+    const payload = `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`;
+    for (const client of sseClients) {
+        try {
+            client.write(payload);
+        } catch (e) {}
+    }
+}
 
 app.post('/api/sync/delta', express.json({ limit: '50mb' }), async (req, res) => {
     const secret = req.headers['x-sync-secret'] || req.query.secret;
