@@ -4987,21 +4987,26 @@ window.drilldownSpareParts = drilldownSpareParts;
 // ==========================================================================
 // 17. HEADER DATABASE STATUS INDICATOR (GREEN / RED HEALTH MONITOR)
 // ==========================================================================
-function updateHeaderDatabaseStatus(isOnline, dbName, errorMessage) {
+function updateHeaderDatabaseStatus(isOnline, dbName, errorMessage, outboxPendingCount = 0) {
     const pill = document.getElementById('header-db-pill');
     const statusText = document.getElementById('header-db-status');
     if (!pill || !statusText) return;
 
-    if (isOnline) {
-        pill.classList.remove('offline');
-        pill.classList.add('online');
-        statusText.textContent = dbName || 'Bread_Final_be.accdb';
-        pill.title = 'قاعدة بيانات الآكسيس متصلة والمزامنة التلقائية نشطة 24/7 ✅';
-    } else {
-        pill.classList.remove('online');
+    if (!isOnline) {
+        pill.classList.remove('online', 'warning');
         pill.classList.add('offline');
         statusText.textContent = 'الآكسيس غير متصل ⚠️';
         pill.title = errorMessage || 'المزامنة متوقفة / تعذر الاتصال بملف الآكسيس ❌';
+    } else if (outboxPendingCount > 0) {
+        pill.classList.remove('online', 'offline');
+        pill.classList.add('warning');
+        statusText.textContent = `${dbName || 'الآكسيس'} (جاري دفع ${outboxPendingCount} حركات ⏳)`;
+        pill.title = `تم حفظ ${outboxPendingCount} تعديلات محلياً وجاري المحاولة التلقائية لدفعها إلى السيرفر السحابي (VPS) ☁️`;
+    } else {
+        pill.classList.remove('offline', 'warning');
+        pill.classList.add('online');
+        statusText.textContent = dbName || 'Bread_Final_be.accdb';
+        pill.title = 'قاعدة بيانات الآكسيس متصلة والمزامنة التلقائية مع السحابة نشطة 24/7 ✅';
     }
 }
 window.updateHeaderDatabaseStatus = updateHeaderDatabaseStatus;
@@ -5016,7 +5021,8 @@ async function checkSyncHealth() {
         // Healthy if status is NOT error and data.success is not false
         const isHealthy = data && data.status !== 'error' && data.success !== false;
         const fileName = (data && data.accessFilePath) ? data.accessFilePath.split(/[\\/]/).pop() : 'Bread_Final_be.accdb';
-        updateHeaderDatabaseStatus(isHealthy, fileName, data?.message);
+        const pendingCount = data.outboxPendingCount || 0;
+        updateHeaderDatabaseStatus(isHealthy, fileName, data?.message, pendingCount);
     } catch (err) {
         updateHeaderDatabaseStatus(false, null, 'تعذر الاتصال بالسيرفر أو ملف الآكسيس');
     }

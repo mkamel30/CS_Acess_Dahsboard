@@ -527,6 +527,10 @@ app.get('/api/sync/status', async (req, res) => {
         const status = syncEngine.getSyncStatus();
         const lastHistory = await getQuery("SELECT * FROM sync_history ORDER BY id DESC LIMIT 1");
         const totalLogsCount = (await getQuery("SELECT COUNT(*) as count FROM audit_change_logs"))?.count || 0;
+        let outboxPending = 0;
+        try {
+            outboxPending = (await getQuery("SELECT COUNT(*) as count FROM delta_outbox"))?.count || 0;
+        } catch (e) {}
         
         res.json({
             success: true,
@@ -539,7 +543,8 @@ app.get('/api/sync/status', async (req, res) => {
             tablesSynced: lastHistory ? lastHistory.tables_count : status.tablesSynced,
             totalRecords: lastHistory ? lastHistory.records_count : status.totalRecords,
             durationMs: lastHistory ? lastHistory.duration_ms : status.durationMs,
-            totalAuditLogs: totalLogsCount
+            totalAuditLogs: totalLogsCount,
+            outboxPendingCount: outboxPending
         });
     } catch (err) {
         res.status(500).json({ error: err.message });

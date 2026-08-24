@@ -505,6 +505,29 @@ body.light-theme .nav-item.active {
     color: #ef4444 !important;
 }
 
+.meta-pill.system-status.warning {
+    background: rgba(245, 158, 11, 0.15) !important;
+    border-color: rgba(245, 158, 11, 0.45) !important;
+    color: #f59e0b !important;
+    animation: pulse-warning-badge 2s infinite ease-in-out;
+}
+
+.meta-pill.system-status.warning i,
+.meta-pill.system-status.warning svg {
+    color: #f59e0b !important;
+}
+
+@keyframes pulse-warning-badge {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.15);
+        transform: scale(1.02);
+    }
+}
+
 @keyframes pulse-offline-badge {
     0%, 100% {
         box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
