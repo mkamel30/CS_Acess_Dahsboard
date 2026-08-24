@@ -2333,7 +2333,7 @@ app.get('/api/assets/timeline', async (req, res) => {
                 const noteG = String(t.NoteG || '').trim();
 
                 // Check if this action involved a spare part replacement
-                const isPartReplacement = /تغير|تغيير|استبدال|تركيب|بوردة|شاشة|بطارية|تروس|قارئ|طابعة|كابل|سوكت/i.test(noteD);
+                const isPartReplacement = /(?:تغير|تغيير|استبدال|تركيب)\s+([^\s,]+(?:\s+[^\s,]+)?)/i.test(noteD) && !/تنظيف|سوفت|تحديث|فحص|برمجة/.test(noteD);
 
                 let matchedSp = null;
                 if (isPartReplacement && allSpForAsset.length > 0) {
