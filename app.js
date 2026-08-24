@@ -5008,11 +5008,12 @@ async function checkSyncHealth() {
         if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
         const data = await res.json();
         
-        const isHealthy = data && (data.status === 'success' || data.status === 'ok' || !data.status);
+        // Healthy if status is NOT error and data.success is not false
+        const isHealthy = data && data.status !== 'error' && data.success !== false;
         const fileName = (data && data.accessFilePath) ? data.accessFilePath.split(/[\\/]/).pop() : 'Bread_Final_be.accdb';
         updateHeaderDatabaseStatus(isHealthy, fileName, data?.message);
     } catch (err) {
-        updateHeaderDatabaseStatus(false, null, 'تعذر الاتصال بالسيرفر المحلي أو ملف الآكسيس');
+        updateHeaderDatabaseStatus(false, null, 'تعذر الاتصال بالسيرفر أو ملف الآكسيس');
     }
 }
 window.checkSyncHealth = checkSyncHealth;
