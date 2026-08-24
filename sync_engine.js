@@ -156,8 +156,11 @@ function startFileWatcher(db) {
         console.error('[FILE WATCHER] Could not attach fs.watch (will rely on polling):', err.message);
     }
 
-    // 2. Periodic Polling fallback (every 25 seconds)
+    // 2. Periodic Polling fallback (every 25 seconds) + Outbox retry flush
     periodicInterval = setInterval(() => {
+        // Always try to flush outbox if any pending
+        flushDeltaOutbox(db).catch(() => {});
+
         if (!isAutoSyncEnabled() || isSyncInProgress) return;
         try {
             if (fs.existsSync(accessPath)) {
@@ -248,6 +251,15 @@ async function initSyncDatabase(db) {
             duration_ms INTEGER,
             message TEXT,
             details TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS delta_outbox (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            payload TEXT NOT NULL,
+            changes_count INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            attempts INTEGER DEFAULT 0,
+            last_error TEXT
         );
     `);
 
@@ -558,24 +570,43 @@ async function syncTableWithDiff(db, tableName, primaryKey, jsonRecords) {
 }
 
 /**
- * Dynamically recreate/upsert raw tables
+ * Dynamically recreate/upsert raw tables safely without DROP TABLE downtime
  */
 async function upsertTableData(db, tableName, pkField, records) {
     if (!records || records.length === 0) return;
 
-    const sample = records[0];
-    const cols = Object.keys(sample);
+    // Collect ALL unique column names across all records (prevents sparse column omission)
+    const allColsSet = new Set();
+    for (const row of records) {
+        for (const k of Object.keys(row)) {
+            allColsSet.add(k);
+        }
+    }
+    const cols = Array.from(allColsSet);
     const createCols = cols.map(c => `"${c}" TEXT`).join(', ');
 
-    await dbRun(db, `DROP TABLE IF EXISTS "${tableName}";`);
-    await dbRun(db, `CREATE TABLE "${tableName}" (${createCols});`);
+    // Ensure table exists without dropping it so active readers are never interrupted
+    await dbRun(db, `CREATE TABLE IF NOT EXISTS "${tableName}" (${createCols});`);
+
+    // Ensure all columns exist in the table (in case schema expanded)
+    try {
+        const existingInfo = await dbAll(db, `PRAGMA table_info("${tableName}");`);
+        const existingColNames = new Set(existingInfo.map(i => i.name));
+        for (const col of cols) {
+            if (!existingColNames.has(col)) {
+                await dbRun(db, `ALTER TABLE "${tableName}" ADD COLUMN "${col}" TEXT;`);
+            }
+        }
+    } catch (e) {}
 
     const placeholders = cols.map(() => '?').join(', ');
     const quotedCols = cols.map(c => `"${c}"`).join(', ');
     const insertSql = `INSERT INTO "${tableName}" (${quotedCols}) VALUES (${placeholders});`;
 
+    // Atomic replace in single transaction (zero downtime, WAL snapshot safe)
     await dbRun(db, 'BEGIN TRANSACTION;');
     try {
+        await dbRun(db, `DELETE FROM "${tableName}";`);
         const stmt = db.prepare(insertSql);
         for (const row of records) {
             const vals = cols.map(c => {
@@ -600,8 +631,7 @@ async function upsertTableData(db, tableName, pkField, records) {
 async function syncHighLevelDomainEntities(db) {
     console.log('[SYNC] Rebuilding Structured Domain Entities...');
 
-    // 1. Merchants
-    await dbRun(db, `DROP TABLE IF EXISTS merchants;`);
+    // 1. Merchants (Ensure schema exists safely without DROP TABLE)
     await dbRun(db, `
         CREATE TABLE IF NOT EXISTS merchants (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1190,6 +1220,10 @@ async function wipeDatabase(db) {
 /**
  * Push Incremental Delta Changes to Oracle Cloud VPS in milliseconds
  */
+/**
+ * Push Incremental Delta Changes to Oracle Cloud VPS in milliseconds
+ * Features automatic local queueing (delta_outbox) on offline/network failure
+ */
 async function pushDeltaToCloud(db, deltaChanges) {
     if (!deltaChanges || deltaChanges.length === 0) return;
     const config = readConfigSafely();
@@ -1233,13 +1267,79 @@ async function pushDeltaToCloud(db, deltaChanges) {
                         JSON.stringify({ cloud_endpoint: cloudEndpoint, changes_pushed: deltaChanges.length })
                     ]);
                 } catch (e) {}
+                // Also flush any pending queued retries
+                flushDeltaOutbox(db).catch(() => {});
             }
         } else {
             console.warn(`[CLOUD DELTA SYNC WARNING] Cloud response:`, data.error);
+            // Queue to outbox
+            if (db) {
+                try {
+                    await dbRun(db, `
+                        INSERT INTO delta_outbox (payload, changes_count, attempts, last_error)
+                        VALUES (?, ?, 1, ?)
+                    `, [JSON.stringify(deltaChanges), deltaChanges.length, data.error || 'Unknown cloud error']);
+                    console.log(`[CLOUD DELTA OUTBOX] Queued ${deltaChanges.length} change(s) in local outbox for automatic retry.`);
+                } catch (e) {}
+            }
         }
     } catch (err) {
         console.warn(`[CLOUD DELTA SYNC NOTICE] Cloud sync offline/delayed: ${err.message}`);
+        // Queue to local delta_outbox for automatic background retry
+        if (db) {
+            try {
+                await dbRun(db, `
+                    INSERT INTO delta_outbox (payload, changes_count, attempts, last_error)
+                    VALUES (?, ?, 1, ?)
+                `, [JSON.stringify(deltaChanges), deltaChanges.length, err.message]);
+                console.log(`[CLOUD DELTA OUTBOX] Queued ${deltaChanges.length} change(s) in local outbox for automatic retry.`);
+            } catch (e) {}
+        }
     }
+}
+
+/**
+ * Flush and retry any pending delta changes queued in delta_outbox
+ */
+async function flushDeltaOutbox(db) {
+    if (!db) return;
+    const config = readConfigSafely();
+    if (config.isCloudServer) return;
+
+    try {
+        const pending = await dbAll(db, `SELECT * FROM delta_outbox ORDER BY id ASC LIMIT 5;`);
+        if (!pending || pending.length === 0) return;
+
+        const cloudEndpoint = config.cloudEndpoint || 'https://smartcs.m-kamel.workers.dev/api/sync/delta';
+        const secret = config.syncSecret || 'smartcs-cloud-secret-2026';
+        const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
+
+        for (const item of pending) {
+            try {
+                const changes = JSON.parse(item.payload);
+                const response = await fetchFn(cloudEndpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-sync-secret': secret
+                    },
+                    body: JSON.stringify({
+                        changes: changes,
+                        timestamp: new Date().toISOString()
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    await dbRun(db, `DELETE FROM delta_outbox WHERE id = ?;`, [item.id]);
+                    console.log(`[CLOUD DELTA OUTBOX] Successfully flushed outbox batch #${item.id} (${item.changes_count} changes) to cloud! ⚡`);
+                } else {
+                    await dbRun(db, `UPDATE delta_outbox SET attempts = attempts + 1, last_error = ? WHERE id = ?;`, [data.error || 'Cloud error', item.id]);
+                }
+            } catch (err) {
+                await dbRun(db, `UPDATE delta_outbox SET attempts = attempts + 1, last_error = ? WHERE id = ?;`, [err.message, item.id]);
+            }
+        }
+    } catch (e) {}
 }
 
 module.exports = {
