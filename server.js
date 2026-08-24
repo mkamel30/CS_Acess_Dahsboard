@@ -2873,10 +2873,14 @@ app.post('/api/sync/delta', express.json({ limit: '50mb' }), async (req, res) =>
         if (tablesData && typeof tablesData === 'object') {
             for (const [tbl, rows] of Object.entries(tablesData)) {
                 if (Array.isArray(rows) && rows.length > 0) {
+                    const sample = rows[0];
+                    const keys = Object.keys(sample);
+                    const createCols = keys.map(k => `"${k}" TEXT`).join(', ');
+                    await runQuery(`CREATE TABLE IF NOT EXISTS "${tbl}" (${createCols});`);
                     for (const row of rows) {
-                        const keys = Object.keys(row);
-                        const placeholders = keys.map(() => '?').join(', ');
-                        const quotedCols = keys.map(k => `"${k}"`).join(', ');
+                        const rowKeys = Object.keys(row);
+                        const placeholders = rowKeys.map(() => '?').join(', ');
+                        const quotedCols = rowKeys.map(k => `"${k}"`).join(', ');
                         await runQuery(`INSERT OR REPLACE INTO "${tbl}" (${quotedCols}) VALUES (${placeholders})`, Object.values(row));
                         appliedCount++;
                     }
