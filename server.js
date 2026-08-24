@@ -274,46 +274,6 @@ async function initAppSchema() {
             }
         }
 
-        // Initialize store_sp_maintenance_raw from Store_SP_maintenance.json
-        await runQuery(`
-            CREATE TABLE IF NOT EXISTS store_sp_maintenance_raw (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                serial TEXT,
-                type TEXT,
-                faulty TEXT,
-                faulty_details TEXT,
-                form_no TEXT,
-                model TEXT,
-                count_out INTEGER,
-                out_date TEXT,
-                notes TEXT
-            )
-        `);
-        const countSpMaint = (await getQuery("SELECT COUNT(*) as count FROM store_sp_maintenance_raw"))?.count || 0;
-        if (countSpMaint === 0) {
-            const spMaintFile = path.join(__dirname, 'data_sync', 'Store_SP_maintenance.json');
-            if (fs.existsSync(spMaintFile)) {
-                const rawJson = fs.readFileSync(spMaintFile, 'utf8').replace(/^\uFEFF/, '');
-                const list = JSON.parse(rawJson);
-                for (const item of list) {
-                    await runQuery(
-                        `INSERT INTO store_sp_maintenance_raw (serial, type, faulty, faulty_details, form_no, model, count_out, out_date, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                        [
-                            item.Serial || '',
-                            item.type || '',
-                            item.faulty || 'False',
-                            item.faulty_detils || '',
-                            item.formNo || '',
-                            item.Model || null,
-                            parseInt(item.count_out) || 1,
-                            item.out_date || '',
-                            item.notes || ''
-                        ]
-                    );
-                }
-                console.log(`[DB INIT] Initialized store_sp_maintenance_raw with ${list.length} records from Store_SP_maintenance.json.`);
-            }
-        }
 
         console.log("[DB INIT] App Database Schema Verified and Ready.");
     } catch(err) {
