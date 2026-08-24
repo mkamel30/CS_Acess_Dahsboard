@@ -674,11 +674,10 @@ async function syncHighLevelDomainEntities(db) {
     // 2. Devices (POS)
     await dbRun(db, `DELETE FROM devices;`);
     await dbRun(db, `
-        INSERT INTO devices (
-            id, serial, manufacturer, model, status, faulty_details, solder_bridges
+        INSERT OR REPLACE INTO devices (
+            serial, manufacturer, model, status, faulty_details, solder_bridges
         )
         SELECT 
-            ROW_NUMBER() OVER (ORDER BY serial) AS id,
             serial, manufacturer, model, status, faulty_details, solder_bridges
         FROM (
             SELECT 
@@ -727,17 +726,17 @@ async function syncHighLevelDomainEntities(db) {
             FROM store_pos_raw
             WHERE Serial IS NOT NULL AND TRIM(Serial) != ''
             GROUP BY Serial
-        );
+        )
+        GROUP BY serial;
     `);
 
     // 3. SIM Cards
     await dbRun(db, `DELETE FROM sim_cards;`);
     await dbRun(db, `
-        INSERT INTO sim_cards (
-            id, serial, carrier, status
+        INSERT OR REPLACE INTO sim_cards (
+            serial, carrier, status
         )
         SELECT 
-            ROW_NUMBER() OVER (ORDER BY serial) AS id,
             serial, carrier, status
         FROM (
             SELECT 
@@ -784,7 +783,8 @@ async function syncHighLevelDomainEntities(db) {
             FROM store_sim_raw
             WHERE sim_serial IS NOT NULL AND TRIM(sim_serial) != ''
             GROUP BY sim_serial
-        );
+        )
+        GROUP BY serial;
     `);
 
     // 4. Merchant Assets Mapping
