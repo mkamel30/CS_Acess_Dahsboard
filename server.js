@@ -525,29 +525,35 @@ app.post('/api/settings/reset-database', requireAdmin, async (req, res) => {
 app.get('/api/sync/status', async (req, res) => {
     try {
         const status = syncEngine.getSyncStatus();
-        const lastHistory = await getQuery("SELECT * FROM sync_history ORDER BY id DESC LIMIT 1");
-        const totalLogsCount = (await getQuery("SELECT COUNT(*) as count FROM audit_change_logs"))?.count || 0;
+        let lastHistory = null;
+        try { lastHistory = await getQuery("SELECT * FROM sync_history ORDER BY id DESC LIMIT 1"); } catch(e){}
+        let totalLogsCount = 0;
+        try { totalLogsCount = (await getQuery("SELECT COUNT(*) as count FROM audit_change_logs"))?.count || 0; } catch(e){}
         let outboxPending = 0;
-        try {
-            outboxPending = (await getQuery("SELECT COUNT(*) as count FROM delta_outbox"))?.count || 0;
-        } catch (e) {}
+        try { outboxPending = (await getQuery("SELECT COUNT(*) as count FROM delta_outbox"))?.count || 0; } catch (e) {}
         
         res.json({
             success: true,
-            status: status.status,
-            isSyncInProgress: status.isSyncInProgress,
-            progress: status.progress,
+            status: status.status || 'idle',
+            isSyncInProgress: !!status.isSyncInProgress,
+            progress: status.progress || {},
             lastSyncTime: lastHistory ? lastHistory.sync_time : status.lastSyncTime,
-            message: status.message,
-            changesDetected: lastHistory ? lastHistory.changes_count : status.changesDetected,
-            tablesSynced: lastHistory ? lastHistory.tables_count : status.tablesSynced,
-            totalRecords: lastHistory ? lastHistory.records_count : status.totalRecords,
-            durationMs: lastHistory ? lastHistory.duration_ms : status.durationMs,
+            message: status.message || 'جاهز',
+            changesDetected: lastHistory ? lastHistory.changes_count : (status.changesDetected || 0),
+            tablesSynced: lastHistory ? lastHistory.tables_count : (status.tablesSynced || 0),
+            totalRecords: lastHistory ? lastHistory.records_count : (status.totalRecords || 0),
+            durationMs: lastHistory ? lastHistory.duration_ms : (status.durationMs || 0),
             totalAuditLogs: totalLogsCount,
             outboxPendingCount: outboxPending
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.json({
+            success: true,
+            status: 'idle',
+            isSyncInProgress: false,
+            message: err.message,
+            outboxPendingCount: 0
+        });
     }
 });
 

@@ -252,7 +252,9 @@ async function initSyncDatabase(db) {
             message TEXT,
             details TEXT
         );
+    `);
 
+    await dbRun(db, `
         CREATE TABLE IF NOT EXISTS delta_outbox (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             payload TEXT NOT NULL,
