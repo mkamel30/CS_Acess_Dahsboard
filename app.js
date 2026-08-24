@@ -4948,5 +4948,273 @@ function drilldownSpareParts(opts = {}) {
 }
 window.drilldownSpareParts = drilldownSpareParts;
 
+// ==========================================================================
+// 17. HEADER DATABASE STATUS INDICATOR (GREEN / RED HEALTH MONITOR)
+// ==========================================================================
+function updateHeaderDatabaseStatus(isOnline, dbName, errorMessage) {
+    const pill = document.getElementById('header-db-pill');
+    const statusText = document.getElementById('header-db-status');
+    if (!pill || !statusText) return;
 
+    if (isOnline) {
+        pill.classList.remove('offline');
+        pill.classList.add('online');
+        statusText.textContent = dbName || 'Bread_Final_be.accdb';
+        pill.title = 'قاعدة بيانات الآكسيس متصلة والمزامنة التلقائية نشطة 24/7 ✅';
+    } else {
+        pill.classList.remove('online');
+        pill.classList.add('offline');
+        statusText.textContent = 'الآكسيس غير متصل ⚠️';
+        pill.title = errorMessage || 'المزامنة متوقفة / تعذر الاتصال بملف الآكسيس ❌';
+    }
+}
+window.updateHeaderDatabaseStatus = updateHeaderDatabaseStatus;
 
+async function checkSyncHealth() {
+    try {
+        const res = await fetch('/api/sync/status');
+        if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
+        const data = await res.json();
+        
+        const isHealthy = data && (data.status === 'success' || data.status === 'ok' || !data.status);
+        const fileName = (data && data.accessFilePath) ? data.accessFilePath.split(/[\\/]/).pop() : 'Bread_Final_be.accdb';
+        updateHeaderDatabaseStatus(isHealthy, fileName, data?.message);
+    } catch (err) {
+        updateHeaderDatabaseStatus(false, null, 'تعذر الاتصال بالسيرفر المحلي أو ملف الآكسيس');
+    }
+}
+window.checkSyncHealth = checkSyncHealth;
+
+// ==========================================================================
+// 18. FONT CUSTOMIZATION SYSTEM (GOOGLE FONTS ARABIC ENGINE)
+// ==========================================================================
+const AVAILABLE_FONTS = [
+    {
+        id: 'cairo',
+        name: 'Cairo (كايرا)',
+        family: "'Cairo', 'Tajawal', sans-serif",
+        desc: 'الخط الافتراضي الرسمي - واضح وأنيق ومتوازن للقراءة',
+        sample: 'نظام إدارة ومتابعة بلاغات الصيانة لخدمة عملاء المخابز الذكية'
+    },
+    {
+        id: 'alexandria',
+        name: 'Alexandria (الإسكندرية)',
+        family: "'Alexandria', sans-serif",
+        desc: 'خط هندسي حديث فائق الأناقة ومميز للواجهات العصرية',
+        sample: 'نظام إدارة ومتابعة بلاغات الصيانة لخدمة عملاء المخابز الذكية'
+    },
+    {
+        id: 'tajawal',
+        name: 'Tajawal (تجوال)',
+        family: "'Tajawal', sans-serif",
+        desc: 'خط سلس وناعم ومريح جداً للعين أثناء العمل الطويل',
+        sample: 'نظام إدارة ومتابعة بلاغات الصيانة لخدمة عملاء المخابز الذكية'
+    },
+    {
+        id: 'almarai',
+        name: 'Almarai (المراعي)',
+        family: "'Almarai', sans-serif",
+        desc: 'خط مؤسسي رسمي واضح ومثالي للتقارير والبيانات الإدارية',
+        sample: 'نظام إدارة ومتابعة بلاغات الصيانة لخدمة عملاء المخابز الذكية'
+    },
+    {
+        id: 'readex',
+        name: 'Readex Pro (ريدكس برو)',
+        family: "'Readex Pro', sans-serif",
+        desc: 'خط تقني متطور ممتاز للأرقام والجداول واللوحات التحليلية',
+        sample: 'نظام إدارة ومتابعة بلاغات الصيانة لخدمة عملاء المخابز الذكية'
+    },
+    {
+        id: 'ibm-plex',
+        name: 'IBM Plex Sans Arabic (آي بي إم)',
+        family: "'IBM Plex Sans Arabic', sans-serif",
+        desc: 'خط برمجي وهندسي دقيق وعالي الوضوح في الشاشات',
+        sample: 'نظام إدارة ومتابعة بلاغات الصيانة لخدمة عملاء المخابز الذكية'
+    },
+    {
+        id: 'noto-sans',
+        name: 'Noto Sans Arabic (نوتو سانس)',
+        family: "'Noto Sans Arabic', sans-serif",
+        desc: 'خط جوجل العالمي الموحد لكل الأجهزة والشاشات',
+        sample: 'نظام إدارة ومتابعة بلاغات الصيانة لخدمة عملاء المخابز الذكية'
+    }
+];
+
+function initFontSystem() {
+    const savedFontId = localStorage.getItem('smartcs_custom_font') || 'cairo';
+    applyFont(savedFontId, false);
+    renderFontSelectionCards();
+}
+
+function applyFont(fontId, saveToStorage = true) {
+    const fontObj = AVAILABLE_FONTS.find(f => f.id === fontId) || AVAILABLE_FONTS[0];
+    document.documentElement.style.setProperty('--font-ar', fontObj.family);
+    
+    if (saveToStorage) {
+        localStorage.setItem('smartcs_custom_font', fontObj.id);
+    }
+
+    // Update active badges in settings
+    const activeBadge = document.getElementById('preview-active-font-name');
+    if (activeBadge) activeBadge.textContent = fontObj.name;
+
+    document.querySelectorAll('.font-card').forEach(card => {
+        if (card.dataset.fontId === fontObj.id) {
+            card.classList.add('active');
+        } else {
+            card.classList.remove('active');
+        }
+    });
+}
+
+function renderFontSelectionCards() {
+    const container = document.getElementById('font-selection-container');
+    if (!container) return;
+
+    const currentFontId = localStorage.getItem('smartcs_custom_font') || 'cairo';
+
+    container.innerHTML = AVAILABLE_FONTS.map(f => {
+        const isActive = f.id === currentFontId;
+        return `
+            <div class="font-card ${isActive ? 'active' : ''}" data-font-id="${f.id}" onclick="switchAppFont('${f.id}')" style="font-family:${f.family};">
+                <div class="font-card-header">
+                    <div class="font-card-title">${f.name}</div>
+                    ${isActive ? '<span class="badge inmerchant" style="font-size:10px; font-weight:700;"><i data-lucide="check" style="width:10px;height:10px;vertical-align:middle;"></i> مفعل</span>' : ''}
+                </div>
+                <div class="font-card-desc">${f.desc}</div>
+                <div class="font-card-sample" style="font-family:${f.family};">
+                    ${f.sample}
+                    <div style="margin-top:4px; font-weight:700; font-size:12px; color:var(--color-primary);">123,456.78 جم • 24-08-2026</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    refreshIcons();
+}
+
+function switchAppFont(fontId) {
+    applyFont(fontId, true);
+    renderFontSelectionCards();
+}
+window.switchAppFont = switchAppFont;
+
+function resetAppFont() {
+    switchAppFont('cairo');
+}
+window.resetAppFont = resetAppFont;
+
+// ==========================================================================
+// 19. SETTINGS SUBTABS & SYNC TELEMETRY LOGS VIEWER
+// ==========================================================================
+function switchSettingsSubtab(subtabId) {
+    // 1. Update buttons
+    document.querySelectorAll('.settings-subtab-btn').forEach(btn => {
+        if (btn.dataset.subtab === subtabId) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+
+    // 2. Update panes
+    const paneMap = {
+        'settings-db': 'pane-settings-db',
+        'settings-fonts': 'pane-settings-fonts',
+        'settings-sync-logs': 'pane-settings-sync-logs'
+    };
+
+    Object.entries(paneMap).forEach(([key, paneId]) => {
+        const paneEl = document.getElementById(paneId);
+        if (!paneEl) return;
+        if (key === subtabId) {
+            paneEl.style.display = 'block';
+            paneEl.classList.add('active');
+        } else {
+            paneEl.style.display = 'none';
+            paneEl.classList.remove('active');
+        }
+    });
+
+    // If switching to logs, fetch fresh data
+    if (subtabId === 'settings-sync-logs') {
+        loadSyncTelemetryLogs();
+    } else if (subtabId === 'settings-fonts') {
+        renderFontSelectionCards();
+    }
+
+    refreshIcons();
+}
+window.switchSettingsSubtab = switchSettingsSubtab;
+
+async function loadSyncTelemetryLogs() {
+    const tableBody = document.getElementById('sync-telemetry-table-body');
+    const refreshIcon = document.getElementById('icon-sync-log-refresh');
+    const filterType = document.getElementById('sync-log-filter-type')?.value || 'ALL';
+
+    if (refreshIcon) refreshIcon.classList.add('spin-animation');
+    if (tableBody) tableBody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--text-muted);"><i data-lucide="loader-2" class="spin-animation"></i> جاري جلب وتحديث سجلات المزامنة...</td></tr>`;
+    refreshIcons();
+
+    try {
+        const res = await fetch(`/api/sync/telemetry-logs?type=${encodeURIComponent(filterType)}`);
+        const data = await res.json();
+
+        if (!res.ok || !data.success) throw new Error(data.error || 'فشل جلب سجلات المزامنة');
+
+        const logs = data.logs || [];
+        if (!tableBody) return;
+
+        if (logs.length === 0) {
+            tableBody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--text-muted);">لا توجد سجلات مزامنة مسجلة حتى الآن.</td></tr>`;
+            return;
+        }
+
+        tableBody.innerHTML = logs.map((log, idx) => {
+            const isCloud = log.sync_type === 'CLOUD_VPS';
+            const typeBadge = isCloud 
+                ? `<span class="badge" style="background:rgba(59,130,246,0.15); color:#3b82f6; border:1px solid rgba(59,130,246,0.3); font-weight:700;"><i data-lucide="cloud" style="width:11px;height:11px;vertical-align:middle;margin-left:3px;"></i> سحابي (VPS Delta) ☁️</span>`
+                : `<span class="badge" style="background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); font-weight:700;"><i data-lucide="database" style="width:11px;height:11px;vertical-align:middle;margin-left:3px;"></i> محلي (Access Share) 🖥️</span>`;
+
+            const isSuccess = log.status === 'SUCCESS';
+            const statusBadge = isSuccess
+                ? `<span class="badge inmerchant" style="font-weight:700;"><i data-lucide="check-circle" style="width:11px;height:11px;vertical-align:middle;margin-left:3px;"></i> ناجحة ✅</span>`
+                : `<span class="badge faulty" style="font-weight:700;"><i data-lucide="alert-triangle" style="width:11px;height:11px;vertical-align:middle;margin-left:3px;"></i> تعثرت ❌</span>`;
+
+            const formattedTime = formatCairoDateTime(log.sync_time || log.timestamp || new Date().toISOString());
+            const durationText = log.duration_ms ? `${log.duration_ms} ms` : '-';
+            const deltaCount = log.changes_count !== undefined ? Number(log.changes_count).toLocaleString('ar-EG') : '0';
+            const tablesCount = log.tables_count !== undefined ? `${log.tables_count} جداول` : '-';
+
+            return `
+                <tr>
+                    <td style="font-family:var(--font-en); font-weight:700; color:var(--text-muted);">${idx + 1}</td>
+                    <td>${typeBadge}</td>
+                    <td>${formattedTime}</td>
+                    <td>${statusBadge}</td>
+                    <td style="font-weight:700;">${tablesCount}</td>
+                    <td><strong style="font-family:var(--font-en); color:${log.changes_count > 0 ? 'var(--color-primary)' : 'var(--text-muted)'};">${deltaCount}</strong></td>
+                    <td style="font-family:var(--font-en); font-size:11px; color:var(--text-muted);">${durationText}</td>
+                    <td style="font-size:12px; color:var(--text-primary); max-width:300px; white-space:normal;">${log.message || log.details || '-'}</td>
+                </tr>
+            `;
+        }).join('');
+
+    } catch (err) {
+        console.error("Telemetry logs error:", err);
+        if (tableBody) {
+            tableBody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--color-critical); padding:25px;">خطأ في جلب السجلات: ${err.message}</td></tr>`;
+        }
+    } finally {
+        if (refreshIcon) refreshIcon.classList.remove('spin-animation');
+        refreshIcons();
+    }
+}
+window.loadSyncTelemetryLogs = loadSyncTelemetryLogs;
+
+// Auto-run font initialization & sync health monitor
+if (typeof document !== 'undefined') {
+    initFontSystem();
+    checkSyncHealth();
+    setInterval(checkSyncHealth, 15000);
+}

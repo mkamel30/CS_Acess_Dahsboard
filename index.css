@@ -477,6 +477,136 @@ body.light-theme .nav-item.active {
     white-space: nowrap;
 }
 
+.meta-pill.system-status {
+    transition: all 0.25s ease;
+    user-select: none;
+}
+
+.meta-pill.system-status.online {
+    background: rgba(16, 185, 129, 0.12) !important;
+    border-color: rgba(16, 185, 129, 0.35) !important;
+    color: #10b981 !important;
+}
+
+.meta-pill.system-status.online i,
+.meta-pill.system-status.online svg {
+    color: #10b981 !important;
+}
+
+.meta-pill.system-status.offline {
+    background: rgba(239, 68, 68, 0.16) !important;
+    border-color: rgba(239, 68, 68, 0.5) !important;
+    color: #ef4444 !important;
+    animation: pulse-offline-badge 2s infinite ease-in-out;
+}
+
+.meta-pill.system-status.offline i,
+.meta-pill.system-status.offline svg {
+    color: #ef4444 !important;
+}
+
+@keyframes pulse-offline-badge {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+        transform: scale(1);
+    }
+    50% {
+        box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15);
+        transform: scale(1.02);
+    }
+}
+
+/* Settings Subtabs & Panels */
+.settings-subtab-btn {
+    padding: 8px 18px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid var(--md-sys-color-outline-variant);
+    background: var(--md-sys-color-surface-container);
+    color: var(--md-sys-color-on-surface);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.settings-subtab-btn:hover {
+    background: var(--md-sys-color-surface-container-high);
+    border-color: var(--md-sys-color-primary);
+}
+
+.settings-subtab-btn.active {
+    background: var(--md-sys-color-primary) !important;
+    color: #ffffff !important;
+    border-color: var(--md-sys-color-primary) !important;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+}
+
+.settings-subtab-btn.active i,
+.settings-subtab-btn.active svg {
+    color: #ffffff !important;
+}
+
+/* Font Customization Cards */
+.font-selection-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+    margin-top: 14px;
+}
+
+.font-card {
+    padding: 16px;
+    border-radius: 12px;
+    background: var(--md-sys-color-surface-container-low);
+    border: 2px solid var(--md-sys-color-outline-variant);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.font-card:hover {
+    border-color: var(--md-sys-color-primary);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+}
+
+.font-card.active {
+    border-color: var(--md-sys-color-primary);
+    background: var(--md-sys-color-primary-container);
+    box-shadow: 0 4px 16px rgba(37, 99, 235, 0.18);
+}
+
+.font-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.font-card-title {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--md-sys-color-on-surface);
+}
+
+.font-card-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.font-card-sample {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 .content-body {
     padding: 20px 24px;
     width: 100%;

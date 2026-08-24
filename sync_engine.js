@@ -227,15 +227,21 @@ async function initSyncDatabase(db) {
     await dbRun(db, `
         CREATE TABLE IF NOT EXISTS sync_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sync_type TEXT DEFAULT 'LOCAL_ACCESS',
             sync_time DATETIME DEFAULT CURRENT_TIMESTAMP,
             status TEXT,
             tables_count INTEGER,
             records_count INTEGER,
             changes_count INTEGER,
             duration_ms INTEGER,
+            message TEXT,
             details TEXT
         );
     `);
+
+    // Safely add missing columns for backward compatibility
+    try { await dbRun(db, `ALTER TABLE sync_history ADD COLUMN sync_type TEXT DEFAULT 'LOCAL_ACCESS';`); } catch(e){}
+    try { await dbRun(db, `ALTER TABLE sync_history ADD COLUMN message TEXT;`); } catch(e){}
 
     await dbRun(db, `
         CREATE TABLE IF NOT EXISTS merchants (
@@ -1067,9 +1073,9 @@ async function performFullSync(db) {
 
         // Record in sync history
         await dbRun(db, `
-            INSERT INTO sync_history (status, tables_count, records_count, changes_count, duration_ms, details)
-            VALUES (?, ?, ?, ?, ?, ?)
-        `, ['SUCCESS', tablesCount, totalRecords, totalChanges, duration, lastSyncResult.message]);
+            INSERT INTO sync_history (sync_type, status, tables_count, records_count, changes_count, duration_ms, message, details)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, ['LOCAL_ACCESS', 'SUCCESS', tablesCount, totalRecords, totalChanges, duration, lastSyncResult.message, JSON.stringify({ tables_synced: tablesCount, total_records: totalRecords })]);
 
         isSyncInProgress = false;
         syncProgress.isSyncInProgress = false;
@@ -1091,9 +1097,9 @@ async function performFullSync(db) {
         };
 
         await dbRun(db, `
-            INSERT INTO sync_history (status, tables_count, records_count, changes_count, duration_ms, details)
-            VALUES (?, 0, 0, 0, ?, ?)
-        `, ['ERROR', duration, err.message]).catch(() => {});
+            INSERT INTO sync_history (sync_type, status, tables_count, records_count, changes_count, duration_ms, message, details)
+            VALUES (?, ?, 0, 0, 0, ?, ?, ?)
+        `, ['LOCAL_ACCESS', 'ERROR', duration, err.message, JSON.stringify({ error: err.message })]).catch(() => {});
 
         throw err;
     }

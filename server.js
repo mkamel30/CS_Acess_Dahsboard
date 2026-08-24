@@ -2867,12 +2867,58 @@ app.post('/api/sync/delta', express.json({ limit: '50mb' }), async (req, res) =>
             type: 'cloud_delta_applied',
             changesCount: appliedCount,
             timestamp: new Date().toISOString()
-        });
+        // Log to sync_history for cloud telemetry
+        try {
+            await runQuery(`
+                INSERT INTO sync_history (sync_type, status, tables_count, records_count, changes_count, duration_ms, message, details)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+                'CLOUD_VPS',
+                'SUCCESS',
+                tablesData ? Object.keys(tablesData).length : (changes ? new Set(changes.map(c => c.table_name)).size : 0),
+                appliedCount,
+                appliedCount,
+                0,
+                `استلام وتطبيق ${appliedCount} سجل دلتا على السيرفر السحابي (VPS) بنجاح ⚡`,
+                JSON.stringify({ client_ip: req.ip, applied_records: appliedCount })
+            ]);
+        } catch(e) {}
 
         console.log(`[CLOUD DELTA SYNC] Successfully applied ${appliedCount} delta record(s) to cloud database!`);
         res.json({ success: true, applied: appliedCount, timestamp: new Date().toISOString() });
     } catch (err) {
         console.error('[CLOUD DELTA SYNC ERROR]', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Telemetry & Sync History Logs API
+app.get('/api/sync/telemetry-logs', async (req, res) => {
+    try {
+        const filterType = req.query.type;
+        let logs;
+        if (filterType && filterType !== 'ALL') {
+            logs = await allQuery(`
+                SELECT * FROM sync_history 
+                WHERE sync_type = ? 
+                ORDER BY id DESC LIMIT 100
+            `, [filterType]);
+        } else {
+            logs = await allQuery(`
+                SELECT * FROM sync_history 
+                ORDER BY id DESC LIMIT 100
+            `);
+        }
+
+        const syncStatus = syncEngine.getSyncStatus();
+        res.json({
+            success: true,
+            logs: logs || [],
+            current_status: syncStatus,
+            timestamp: new Date().toISOString()
+        });
+    } catch (err) {
+        console.error("Telemetry logs error:", err);
         res.status(500).json({ success: false, error: err.message });
     }
 });

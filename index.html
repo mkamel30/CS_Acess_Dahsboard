@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CS Dashboard | Customer Support & Operations Platform</title>
-    <!-- Google Fonts: Cairo (Arabic) & Plus Jakarta Sans (English) -->
+    <!-- Google Fonts: Cairo, Alexandria, Tajawal, Almarai, Readex Pro, IBM Plex Sans Arabic, Noto Sans Arabic -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;600;700;800&family=Almarai:wght@400;700;800&family=Cairo:wght@400;500;600;700;800;900&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Readex+Pro:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
     <!-- PWA & Mobile Meta -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0284c7">
@@ -156,8 +156,8 @@
                         <span id="cairo-time">توقيت القاهرة...</span>
                         <span class="sync-pulse" id="time-status-dot" style="width:6px; height:6px;"></span>
                     </div>
-                    <div class="meta-pill system-status">
-                        <i data-lucide="database" style="color:var(--md-sys-color-tertiary); width:16px; height:16px;"></i>
+                    <div class="meta-pill system-status" id="header-db-pill" style="cursor:pointer; transition: all 0.2s ease;" onclick="switchTab('settings')" title="حالة اتصال قاعدة بيانات الآكسيس والمزامنة">
+                        <i data-lucide="database" id="header-db-icon" style="color:var(--color-success); width:16px; height:16px;"></i>
                         <span id="header-db-status">Bread_Final_be.accdb</span>
                     </div>
                 </div>
@@ -1851,179 +1851,264 @@
                 <!-- 5. TAB: SETTINGS & SYSTEM INFO (إعدادات النظام والاتصال) -->
                 <!-- ======================================================== -->
                 <section class="tab-content" id="tab-settings">
-                    <div class="page-title-area">
-                        <h1>إعدادات النظام والاتصال</h1>
-                        <p>معلومات الربط بقاعدة بيانات الآكسيس، خيارات المزامنة، والفحص الفني</p>
+                    <div class="page-title-area" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+                        <div>
+                            <h1>إعدادات المنظومة وتخصيص المظهر</h1>
+                            <p>إدارة اتصال قاعدة البيانات، تخصيص الخطوط والمظهر، ومراقبة سجلات المزامنة اللحظية</p>
+                        </div>
                     </div>
 
-                    <div class="responsive-2col-grid equal">
-                        <!-- DB Connection Settings -->
-                        <div class="glass-panel">
-                            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
-                                <h3><i data-lucide="database"></i> اتصال ومسار قاعدة بيانات الآكسيس</h3>
-                                <span class="badge inmerchant" id="settings-db-status-badge" style="font-size:11px;">
-                                    <i data-lucide="check-circle" style="width:12px; height:12px; vertical-align:middle;"></i> متصل
-                                </span>
-                            </div>
-                            <div class="panel-body">
-                                <!-- Read-Only Safety Notice -->
-                                <div style="margin-bottom:16px; padding:10px 14px; background:rgba(6,182,212,0.1); border:1px solid rgba(6,182,212,0.25); border-radius:8px; font-size:12px; display:flex; align-items:center; gap:8px;">
-                                    <i data-lucide="shield-check" style="width:18px; height:18px; color:#06b6d4; flex-shrink:0;"></i>
-                                    <span style="color:var(--text-primary);"><strong>ضمان الأمان وحماية البيانات:</strong> التطبيق يعمل بوضع <strong>القراءة فقط (Read-Only)</strong> التام، ولا يقوم بتعديل أو حذف أي سجل بملف الآكسيس.</span>
-                                </div>
+                    <!-- Settings Sub-Navigation Header -->
+                    <div class="settings-subtabs-nav" style="display:flex; gap:10px; border-bottom:1px solid var(--border-color); margin-bottom:20px; overflow-x:auto; padding-bottom:8px;">
+                        <button type="button" class="btn btn-secondary settings-subtab-btn active" data-subtab="settings-db" id="btn-subtab-settings-db" onclick="switchSettingsSubtab('settings-db')">
+                            <i data-lucide="database"></i> <span>اتصال الآكسيس والشبكة</span>
+                        </button>
+                        <button type="button" class="btn btn-secondary settings-subtab-btn" data-subtab="settings-fonts" id="btn-subtab-settings-fonts" onclick="switchSettingsSubtab('settings-fonts')">
+                            <i data-lucide="type"></i> <span>تخصيص الخطوط والمظهر 🎨</span>
+                        </button>
+                        <button type="button" class="btn btn-secondary settings-subtab-btn" data-subtab="settings-sync-logs" id="btn-subtab-settings-sync-logs" onclick="switchSettingsSubtab('settings-sync-logs')">
+                            <i data-lucide="activity"></i> <span>سجل (لوج) المزامنة اللوكال والـ VPS 📜</span>
+                        </button>
+                    </div>
 
-                                <div class="form-group">
-                                    <label for="settings-access-path" style="display:flex; justify-content:space-between; align-items:center;">
-                                        <span>مسار ملف الآكسيس المربوط (.accdb / .mdb)</span>
-                                        <span id="settings-file-size" style="font-size:11px; color:var(--text-muted); font-family:var(--font-en);">- MB</span>
-                                    </label>
-                                    <div style="display:flex; gap:8px; align-items:stretch; flex-wrap:wrap;">
-                                        <input type="text" id="settings-access-path" placeholder="H:\Programming\Br_DB\BE\Bread_Final_be.accdb" style="flex:1; min-width:260px; font-family:var(--font-en); font-weight:700; font-size:12px; direction:ltr; text-align:left;">
-                                        <input type="file" id="settings-file-picker" accept=".accdb,.mdb" style="display:none;">
-                                        <button type="button" class="btn btn-secondary" id="btn-settings-browse" style="padding:8px 14px; font-size:12px; display:flex; align-items:center; gap:6px;" title="استعراض واختيار ملف من جهازك">
-                                            <i data-lucide="folder-open" style="width:14px; height:14px;"></i>
-                                            <span>استعراض (Browse)</span>
+                    <!-- ======================================================== -->
+                    <!-- SUBTAB 1: DB & NETWORK SETTINGS                          -->
+                    <!-- ======================================================== -->
+                    <div class="settings-subtab-pane active" id="pane-settings-db">
+                        <div class="responsive-2col-grid equal">
+                            <!-- DB Connection Settings -->
+                            <div class="glass-panel">
+                                <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
+                                    <h3><i data-lucide="database"></i> اتصال ومسار قاعدة بيانات الآكسيس</h3>
+                                    <span class="badge inmerchant" id="settings-db-status-badge" style="font-size:11px;">
+                                        <i data-lucide="check-circle" style="width:12px; height:12px; vertical-align:middle;"></i> متصل
+                                    </span>
+                                </div>
+                                <div class="panel-body">
+                                    <!-- Read-Only Safety Notice -->
+                                    <div style="margin-bottom:16px; padding:10px 14px; background:rgba(6,182,212,0.1); border:1px solid rgba(6,182,212,0.25); border-radius:8px; font-size:12px; display:flex; align-items:center; gap:8px;">
+                                        <i data-lucide="shield-check" style="width:18px; height:18px; color:#06b6d4; flex-shrink:0;"></i>
+                                        <span style="color:var(--text-primary);"><strong>ضمان الأمان وحماية البيانات:</strong> التطبيق يعمل بوضع <strong>القراءة فقط (Read-Only)</strong> التام، ولا يقوم بتعديل أو حذف أي سجل بملف الآكسيس.</span>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="settings-access-path" style="display:flex; justify-content:space-between; align-items:center;">
+                                            <span>مسار ملف الآكسيس المربوط (.accdb / .mdb)</span>
+                                            <span id="settings-file-size" style="font-size:11px; color:var(--text-muted); font-family:var(--font-en);">- MB</span>
+                                        </label>
+                                        <div style="display:flex; gap:8px; align-items:stretch; flex-wrap:wrap;">
+                                            <input type="text" id="settings-access-path" placeholder="\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb" style="flex:1; min-width:260px; font-family:var(--font-en); font-weight:700; font-size:12px; direction:ltr; text-align:left;">
+                                            <input type="file" id="settings-file-picker" accept=".accdb,.mdb" style="display:none;">
+                                            <button type="button" class="btn btn-secondary" id="btn-settings-browse" style="padding:8px 14px; font-size:12px; display:flex; align-items:center; gap:6px;" title="استعراض واختيار ملف من جهازك">
+                                                <i data-lucide="folder-open" style="width:14px; height:14px;"></i>
+                                                <span>استعراض (Browse)</span>
+                                            </button>
+                                        </div>
+                                        <small style="color:var(--text-muted); font-size:11px; margin-top:4px; display:block;">يمكنك كتابة أو لصق مسار ملف الآكسيس المحدث مباشرة هنا، أو اختياره من جهازك.</small>
+                                    </div>
+
+                                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-top:14px;">
+                                        <div class="form-group" style="margin-bottom:0;">
+                                            <label>مزود الاتصال (OLEDB Provider)</label>
+                                            <input type="text" id="settings-provider-name" value="Microsoft.ACE.OLEDB.12.0" readonly style="font-family:var(--font-en); font-size:12px;">
+                                        </div>
+                                        <div class="form-group" style="margin-bottom:0;">
+                                            <label>قاعدة بيانات الويب (Web Engine)</label>
+                                            <input type="text" id="settings-local-engine" value="SQLite3 (branch_database.db) - WAL" readonly style="font-family:var(--font-en); font-size:12px;">
+                                        </div>
+                                    </div>
+
+                                    <div style="display:flex; gap:10px; margin-top:18px; flex-wrap:wrap;">
+                                        <button type="button" class="btn btn-primary" id="btn-settings-save-path" style="padding:10px 18px; font-size:12px; display:flex; align-items:center; gap:6px;">
+                                            <i data-lucide="save"></i>
+                                            <span>حفظ وتطبيق المسار</span>
+                                        </button>
+                                        <button type="button" class="btn btn-secondary" id="btn-settings-test-sync" style="padding:10px 16px; font-size:12px; display:flex; align-items:center; gap:6px;">
+                                            <i data-lucide="refresh-cw" id="icon-settings-sync-spinner"></i>
+                                            <span>اختبار وإجراء مزامنة فورية</span>
+                                        </button>
+                                        <button type="button" class="btn btn-secondary" id="btn-settings-reset-db" style="padding:10px 16px; font-size:12px; display:flex; align-items:center; gap:6px; background:rgba(239, 68, 68, 0.1); color:#f87171; border-color:rgba(239, 68, 68, 0.3);" title="تفريغ كافة الجداول وتصفير قاعدة بيانات الويب">
+                                            <i data-lucide="trash-2"></i>
+                                            <span>تصفير وتفريغ قاعدة بيانات الويب</span>
                                         </button>
                                     </div>
-                                    <small style="color:var(--text-muted); font-size:11px; margin-top:4px; display:block;">يمكنك كتابة أو لصق مسار ملف الآكسيس المحدث مباشرة هنا، أو اختياره من جهازك.</small>
+                                    <div id="settings-status-message" style="margin-top:12px; font-size:12px; display:none;"></div>
                                 </div>
+                            </div>
 
-                                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-top:14px;">
-                                    <div class="form-group" style="margin-bottom:0;">
-                                        <label>مزود الاتصال (OLEDB Provider)</label>
-                                        <input type="text" id="settings-provider-name" value="Microsoft.ACE.OLEDB.12.0" readonly style="font-family:var(--font-en); font-size:12px;">
-                                    </div>
-                                    <div class="form-group" style="margin-bottom:0;">
-                                        <label>قاعدة بيانات الويب المحلية (Web Engine)</label>
-                                        <input type="text" id="settings-local-engine" value="SQLite3 (database.sqlite) - WAL" readonly style="font-family:var(--font-en); font-size:12px;">
-                                    </div>
+                            <!-- System Diagnostics & Info -->
+                            <div class="glass-panel">
+                                <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
+                                    <h3><i data-lucide="shield-check"></i> حالة وموثوقية النظام والمراقبة اللحظية</h3>
+                                    <span class="badge inmerchant" id="settings-auto-sync-status-badge" style="font-size:11px;">
+                                        <i data-lucide="zap" style="width:12px; height:12px; vertical-align:middle;"></i> مراقبة حية نشطة
+                                    </span>
                                 </div>
+                                <div class="panel-body">
+                                    <!-- Real-Time Auto Sync Toggle Box -->
+                                    <div style="margin-bottom:16px; padding:14px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.25); border-radius:10px;">
+                                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                            <div style="display:flex; align-items:center; gap:8px;">
+                                                <i data-lucide="refresh-cw" style="width:18px; height:18px; color:var(--color-success);"></i>
+                                                <strong style="font-size:13px; color:var(--text-primary);">المزامنة اللحظية التلقائية (Real-Time Auto-Sync)</strong>
+                                            </div>
+                                            <label class="toggle-switch" title="تشغيل / إيقاف المزامنة التلقائية اللحظية">
+                                                <input type="checkbox" id="settings-auto-sync-toggle" checked>
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                        <p style="margin:0; font-size:11px; color:var(--text-secondary); line-height:1.5;">
+                                            يقوم الخادم بمراقبة ملف قاعدة بيانات الآكسيس لحظياً في الخلفية. أي حركة إدخال أو تعديل تتم داخل الآكسيس يتم رصدها فوراً ودفعها للـ VPS تلقائياً.
+                                        </p>
+                                    </div>
 
-                                <div style="display:flex; gap:10px; margin-top:18px; flex-wrap:wrap;">
-                                    <button type="button" class="btn btn-primary" id="btn-settings-save-path" style="padding:10px 18px; font-size:12px; display:flex; align-items:center; gap:6px;">
-                                        <i data-lucide="save"></i>
-                                        <span>حفظ وتطبيق المسار</span>
-                                    </button>
-                                    <button type="button" class="btn btn-secondary" id="btn-settings-test-sync" style="padding:10px 16px; font-size:12px; display:flex; align-items:center; gap:6px;">
-                                        <i data-lucide="refresh-cw" id="icon-settings-sync-spinner"></i>
-                                        <span>اختبار وإجراء مزامنة فورية</span>
-                                    </button>
-                                    <button type="button" class="btn btn-secondary" id="btn-settings-reset-db" style="padding:10px 16px; font-size:12px; display:flex; align-items:center; gap:6px; background:rgba(239, 68, 68, 0.1); color:#f87171; border-color:rgba(239, 68, 68, 0.3);" title="تفريغ كافة الجداول وتصفير قاعدة بيانات الويب">
-                                        <i data-lucide="trash-2"></i>
-                                        <span>تصفير وتفريغ قاعدة بيانات الويب</span>
-                                    </button>
+                                    <div style="display:flex; flex-direction:column; gap:12px; font-size:13px;">
+                                        <div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border-color); padding-bottom:8px;">
+                                            <span style="color:var(--text-secondary);">حالة الخادم:</span>
+                                            <strong style="color:var(--color-success);">يعمل (Node.js Express) 24/7</strong>
+                                        </div>
+                                        <div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border-color); padding-bottom:8px;">
+                                            <span style="color:var(--text-secondary);">محرك مراقبة الملف الذكي (File Watcher):</span>
+                                            <strong style="color:var(--color-success);" id="settings-watcher-state">مفعل ونشط (Debounce 3s)</strong>
+                                        </div>
+                                        <div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border-color); padding-bottom:8px;">
+                                            <span style="color:var(--text-secondary);">المزامنة الهجينة مع الـ VPS (Hybrid Delta Sync):</span>
+                                            <strong style="color:var(--color-primary);">مفعل ونشط (Push to Cloud ⚡)</strong>
+                                        </div>
+                                        <div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border-color); padding-bottom:8px;">
+                                            <span style="color:var(--text-secondary);">قناة البث اللحظي (SSE Stream):</span>
+                                            <strong style="color:var(--color-primary);" id="settings-sse-state">متصل ومستعد (Live Connected)</strong>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div id="settings-status-message" style="margin-top:12px; font-size:12px; display:none;"></div>
+                            </div>
+
+                            <!-- Local Network & Cloud Info -->
+                            <div class="glass-panel" style="grid-column: 1 / -1;">
+                                <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
+                                    <h3><i data-lucide="globe"></i> روابط الوصول السحابية والمحلية (Cloud & Network Access)</h3>
+                                    <span class="badge inmerchant" style="font-size:11px;">
+                                        <i data-lucide="check-circle" style="width:12px; height:12px; vertical-align:middle;"></i> جاهز 24/7
+                                    </span>
+                                </div>
+                                <div class="panel-body">
+                                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:16px;">
+                                        <div style="padding:14px; background:rgba(37,99,235,0.06); border:1px solid rgba(37,99,235,0.25); border-radius:10px;">
+                                            <label style="font-size:12px; font-weight:700; color:var(--text-primary); display:block; margin-bottom:6px;">
+                                                <i data-lucide="cloud" style="width:14px;height:14px;vertical-align:middle;color:#3b82f6;"></i> الرابط السحابي العالمي (Oracle Cloud VPS + Cloudflare):
+                                            </label>
+                                            <div style="display:flex; gap:8px;">
+                                                <input type="text" readonly value="https://smartcs.m-kamel.workers.dev" style="flex:1; font-family:var(--font-en); font-weight:800; font-size:13px; color:#3b82f6; background:rgba(37,99,235,0.08); border:1px solid rgba(37,99,235,0.3); direction:ltr; text-align:left;">
+                                                <a href="https://smartcs.m-kamel.workers.dev" target="_blank" class="btn btn-primary" style="padding:8px 14px; font-size:12px; display:flex; align-items:center; gap:4px;">
+                                                    <i data-lucide="external-link"></i> فتح
+                                                </a>
+                                            </div>
+                                        </div>
+                                        <div style="padding:14px; background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.25); border-radius:10px;">
+                                            <label style="font-size:12px; font-weight:700; color:var(--text-primary); display:block; margin-bottom:6px;">
+                                                <i data-lucide="wifi" style="width:14px;height:14px;vertical-align:middle;color:#10b981;"></i> الرابط الداخلي بالشبكة المحلية (LAN):
+                                            </label>
+                                            <div style="display:flex; gap:8px;">
+                                                <input type="text" id="settings-network-url" readonly value="http://localhost:8970" style="flex:1; font-family:var(--font-en); font-weight:800; font-size:13px; color:var(--color-success); background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.3); direction:ltr; text-align:left;">
+                                                <button type="button" class="btn btn-secondary" id="btn-copy-network-url" style="padding:8px 14px; font-size:12px; display:flex; align-items:center; gap:4px;">
+                                                    <i data-lucide="copy"></i> نسخ
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
+                    </div>
 
-                        <!-- System Diagnostics & Info -->
+                    <!-- ======================================================== -->
+                    <!-- SUBTAB 2: FONT CUSTOMIZATION (تخصيص الخطوط)             -->
+                    <!-- ======================================================== -->
+                    <div class="settings-subtab-pane" id="pane-settings-fonts" style="display:none;">
                         <div class="glass-panel">
-                            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
-                                <h3><i data-lucide="shield-check"></i> حالة وموثوقية النظام والمراقبة اللحظية</h3>
-                                <span class="badge inmerchant" id="settings-auto-sync-status-badge" style="font-size:11px;">
-                                    <i data-lucide="zap" style="width:12px; height:12px; vertical-align:middle;"></i> مراقبة حية نشطة
-                                </span>
+                            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                                <div>
+                                    <h3><i data-lucide="type"></i> تخصيص الخط العربي لواجهة التطبيق بالكامل</h3>
+                                    <p style="font-size:12px; color:var(--text-secondary); margin:2px 0 0 0;">اختر الخط المفضل لك، وسيتم تطبيقه فوراً وحفظه في جهازك</p>
+                                </div>
+                                <button type="button" class="btn btn-secondary" onclick="resetAppFont()" style="padding:6px 14px; font-size:12px;">
+                                    <i data-lucide="rotate-ccw"></i> استعادة الخط الافتراضي (Cairo)
+                                </button>
                             </div>
                             <div class="panel-body">
-                                <!-- Real-Time Auto Sync Toggle Box -->
-                                <div style="margin-bottom:16px; padding:14px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.25); border-radius:10px;">
-                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                                        <div style="display:flex; align-items:center; gap:8px;">
-                                            <i data-lucide="refresh-cw" style="width:18px; height:18px; color:var(--color-success);"></i>
-                                            <strong style="font-size:13px; color:var(--text-primary);">المزامنة اللحظية التلقائية (Real-Time Auto-Sync)</strong>
-                                        </div>
-                                        <label class="toggle-switch" title="تشغيل / إيقاف المزامنة التلقائية اللحظية">
-                                            <input type="checkbox" id="settings-auto-sync-toggle" checked>
-                                            <span class="toggle-slider"></span>
-                                        </label>
-                                    </div>
-                                    <p style="margin:0; font-size:11px; color:var(--text-secondary); line-height:1.5;">
-                                        يقوم الخادم بمراقبة ملف قاعدة بيانات الآكسيس لحظياً في الخلفية. أي حركة إدخال، تعديل، أو حذف تتم داخل الآكسيس يتم رصدها فوراً وتحديث كافة لوحات البيانات والشاشات المفتوحة أمامك تلقائياً دون الحاجة لضغط أي زر.
-                                    </p>
+                                <!-- Font Selection Cards Grid -->
+                                <div class="font-selection-grid" id="font-selection-container">
+                                    <!-- Populated dynamically by app.js -->
                                 </div>
 
-                                <div style="display:flex; flex-direction:column; gap:12px; font-size:13px;">
-                                    <div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border-color); padding-bottom:8px;">
-                                        <span style="color:var(--text-secondary);">حالة الخادم المحلي:</span>
-                                        <strong style="color:var(--color-success);">يعمل (Node.js Express)</strong>
+                                <!-- Live Interactive Preview Area -->
+                                <div style="margin-top:24px; padding:20px; border-radius:14px; background:var(--md-sys-color-surface-container-high); border:1px solid var(--md-sys-color-outline-variant);">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
+                                        <span style="font-size:13px; font-weight:800; color:var(--md-sys-color-primary);"><i data-lucide="eye" style="width:14px;height:14px;vertical-align:middle;"></i> معاينة الخط المختار حالياً:</span>
+                                        <span class="badge inmerchant" id="preview-active-font-name" style="font-size:12px; font-weight:bold;">Cairo</span>
                                     </div>
-                                    <div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border-color); padding-bottom:8px;">
-                                        <span style="color:var(--text-secondary);">محرك مراقبة الملف الذكي (File Watcher):</span>
-                                        <strong style="color:var(--color-success);" id="settings-watcher-state">مفعل ونشط (Debounce 3s)</strong>
-                                    </div>
-                                    <div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border-color); padding-bottom:8px;">
-                                        <span style="color:var(--text-secondary);">محرك سجل التدقيق (Audit Tracker):</span>
-                                        <strong style="color:var(--color-success);">مفعل ونشط (Audit Diff Active)</strong>
-                                    </div>
-                                    <div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border-color); padding-bottom:8px;">
-                                        <span style="color:var(--text-secondary);">قناة البث اللحظي (SSE Stream):</span>
-                                        <strong style="color:var(--color-primary);" id="settings-sse-state">متصل ومستعد (Live Connected)</strong>
-                                    </div>
-                                    <div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border-color); padding-bottom:8px;">
-                                        <span style="color:var(--text-secondary);">تشفير ومحاذاة التوقيت:</span>
-                                        <strong style="color:var(--color-primary);">توقيت القاهرة الرسمي (UTC+3)</strong>
+                                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap:14px; font-size:13px;">
+                                        <div style="padding:14px; background:var(--md-sys-color-surface-container); border-radius:10px;">
+                                            <h4 style="margin:0 0 6px 0; font-size:16px; font-weight:800; color:var(--text-primary);">العناوين الرئيسية والفرعية</h4>
+                                            <p style="margin:0; font-size:12px; color:var(--text-secondary); line-height:1.6;">نظام إدارة ومتابعة بلاغات الصيانة لخدمة عملاء المخابز الذكية.</p>
+                                        </div>
+                                        <div style="padding:14px; background:var(--md-sys-color-surface-container); border-radius:10px;">
+                                            <h4 style="margin:0 0 6px 0; font-size:16px; font-weight:800; color:var(--text-primary);">الأرقام والجداول والتواريخ</h4>
+                                            <div style="display:flex; align-items:center; gap:8px; margin-top:6px; flex-wrap:wrap;">
+                                                <span class="badge inmerchant" style="font-size:11px; font-weight:700;">مسدد 600 جم</span>
+                                                <span style="font-family:var(--font-en); font-weight:700; color:var(--color-primary);">24-08-2026</span>
+                                                <span style="font-family:var(--font-en); font-size:11px; color:var(--text-muted);">11:30:00 ص</span>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
+                    </div>
 
-                        <!-- Local Network Sharing & Multi-Device Access -->
-                        <div class="glass-panel" style="grid-column: 1 / -1;">
-                            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
-                                <h3><i data-lucide="network"></i> مشاركة المنظومة عبر الشبكة المحلية (Multi-Device LAN Access)</h3>
-                                <span class="badge inmerchant" style="font-size:11px;">
-                                    <i data-lucide="wifi" style="width:12px; height:12px; vertical-align:middle;"></i> جاهز للمشاركة على الشبكة
-                                </span>
-                            </div>
-                            <div class="panel-body">
-                                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:16px; align-items:center;">
-                                    <div>
-                                        <label style="font-size:12px; font-weight:700; color:var(--text-secondary); display:block; margin-bottom:6px;">رابط الدخول من الأجهزة الأخرى بالشبكة (PCs, Laptops, Tablets, Mobiles):</label>
-                                        <div style="display:flex; gap:8px;">
-                                            <input type="text" id="settings-network-url" readonly value="http://127.0.0.1:3000" style="flex:1; font-family:var(--font-en); font-weight:800; font-size:13px; color:var(--color-primary); background:rgba(59,130,246,0.08); border:1px solid rgba(59,130,246,0.3); direction:ltr; text-align:left;">
-                                            <button type="button" class="btn btn-primary" id="btn-copy-network-url" style="padding:8px 16px; font-size:12px; display:flex; align-items:center; gap:6px;">
-                                                <i data-lucide="copy"></i>
-                                                <span id="copy-btn-label">نسخ الرابط</span>
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div style="padding:12px 16px; background:rgba(255,255,255,0.03); border-radius:10px; border:1px solid var(--border-color); font-size:12px; color:var(--text-secondary); line-height:1.6;">
-                                        💡 <strong>معمارية الخادم الموحد:</strong> جهاز واحد فقط يتصل بملف الآكسيس، وباقي الموظفين يفتحون الرابط من أجهزتهم بسلاسة فائقة، مما يمنع بطء أو تلف ملف الآكسيس ويوفر تحديثاً لحظياً للجميع فوراً.
-                                    </div>
+                    <!-- ======================================================== -->
+                    <!-- SUBTAB 3: SYNC TELEMETRY LOGS (سجل المزامنة لوكال + VPS)  -->
+                    <!-- ======================================================== -->
+                    <div class="settings-subtab-pane" id="pane-settings-sync-logs" style="display:none;">
+                        <div class="glass-panel">
+                            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                                <div>
+                                    <h3><i data-lucide="activity"></i> سجل المزامنة وتدفق البيانات (Sync Telemetry & Audit Logs)</h3>
+                                    <p style="font-size:12px; color:var(--text-secondary); margin:2px 0 0 0;">مقارنة وعرض سجلات سحب الآكسيس المحلي وتحديثات السيرفر السحابي (VPS)</p>
+                                </div>
+                                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                    <select id="sync-log-filter-type" style="padding:6px 12px; font-size:12px;" onchange="loadSyncTelemetryLogs()">
+                                        <option value="ALL">كافة سجلات المزامنة (اللوكال + الـ VPS)</option>
+                                        <option value="LOCAL_ACCESS">سجلات السيرفر المحلي (Access File Watcher) 🖥️</option>
+                                        <option value="CLOUD_VPS">سجلات السيرفر السحابي (Oracle Cloud Delta) ☁️</option>
+                                    </select>
+                                    <button type="button" class="btn btn-secondary" onclick="loadSyncTelemetryLogs()" style="padding:6px 12px; font-size:12px;">
+                                        <i data-lucide="refresh-cw" id="icon-sync-log-refresh"></i> تحديث
+                                    </button>
                                 </div>
                             </div>
-                        <!-- Cloudflare Zero-Trust Global Web Tunnel -->
-                        <div class="glass-panel" style="grid-column: 1 / -1; border-color: rgba(245,158,11,0.3); background: linear-gradient(135deg, rgba(245,158,11,0.04), rgba(217,119,6,0.02));">
-                            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
-                                <h3 style="color:#f59e0b;"><i data-lucide="globe"></i> النفق السحابي العالمي للويب (Cloudflare Zero-Trust Tunnel)</h3>
-                                <span class="badge inmerchant" id="settings-tunnel-status-badge" style="font-size:11px; background:rgba(245,158,11,0.15); color:#f59e0b; border-color:rgba(245,158,11,0.3);">
-                                    <i data-lucide="zap" style="width:12px; height:12px; vertical-align:middle;"></i> جاري الفحص...
-                                </span>
-                            </div>
                             <div class="panel-body">
-                                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:16px; align-items:center;">
-                                    <div>
-                                        <label style="font-size:12px; font-weight:700; color:var(--text-secondary); display:block; margin-bottom:6px;">رابط الوصول السحابي المشفر من أي مكان بالعالم (Global HTTPS Web Access):</label>
-                                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                                            <input type="text" id="settings-tunnel-url" readonly placeholder="جاري تشغيل النفق السحابي..." style="flex:1; min-width:200px; font-family:var(--font-en); font-weight:800; font-size:13px; color:#f59e0b; background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.3); direction:ltr; text-align:left;">
-                                            <button type="button" class="btn btn-primary" id="btn-copy-tunnel-url" style="padding:8px 16px; font-size:12px; display:flex; align-items:center; gap:6px; background:linear-gradient(135deg, #d97706, #f59e0b); border:none;">
-                                                <i data-lucide="copy"></i>
-                                                <span id="copy-tunnel-btn-label">نسخ رابط الويب</span>
-                                            </button>
-                                            <a href="#" target="_blank" class="btn btn-secondary" id="btn-open-tunnel-url" style="padding:8px 14px; font-size:12px; display:none; align-items:center; gap:6px;">
-                                                <i data-lucide="external-link"></i>
-                                                <span>فتح الموقع</span>
-                                            </a>
-                                        </div>
-                                    </div>
-                                    <div style="padding:12px 16px; background:rgba(245,158,11,0.05); border-radius:10px; border:1px solid rgba(245,158,11,0.2); font-size:12px; color:var(--text-secondary); line-height:1.6;">
-                                        🛡️ <strong>حماية سحابية كاملة:</strong> يتيح لك وللفنيين والمديرين فتح التطبيق وتصفحه من خارج الفرع ومن على الموبايل عبر نفق مشفر وآمن عالمياً بـ SSL/HTTPS من Cloudflare دون الحاجة لأي IP ثابت أو فتح بورتات في الراوتر.
-                                    </div>
+                                <div class="table-responsive" style="max-height: 480px; overflow-y: auto;">
+                                    <table class="data-table" id="sync-telemetry-table">
+                                        <thead>
+                                            <tr>
+                                                <th style="width:45px;">#</th>
+                                                <th>نوع العملية والمصدر</th>
+                                                <th>تاريخ وتوقيت المزامنة</th>
+                                                <th>الحالة</th>
+                                                <th>الجداول المفحوصة</th>
+                                                <th>التغييرات المرصودة (Delta)</th>
+                                                <th>زمن الاستجابة (Latency)</th>
+                                                <th>رسالة وبيان المزامنة</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="sync-telemetry-table-body">
+                                            <tr><td colspan="8" style="text-align:center; padding:30px; color:var(--text-muted);"><i data-lucide="loader-2" class="spin-animation"></i> جاري جلب سجلات المزامنة...</td></tr>
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
                         </div>
-
                     </div>
                 </section>
 
