@@ -2332,14 +2332,27 @@ app.get('/api/assets/timeline', async (req, res) => {
                 const noteD = String(t.NoteD || '').trim();
                 const noteG = String(t.NoteG || '').trim();
 
-                // Find corresponding spare part record from store_sp_raw
-                let matchedSp = allSpForAsset.find(sp => {
-                    const s = String(sp.serial_raw || '');
-                    const n = String(sp.notes || '');
-                    const posMatch = (t.POSN && (n.includes(t.POSN) || s.includes(t.POSN)));
-                    const dateMatch = sp.out_date && t.IssueDate && (sp.out_date.substring(0, 9) === t.IssueDate.substring(0, 9));
-                    return posMatch && (dateMatch || s.includes(t.GrocerName) || (noteD && s.includes(sp.type)));
-                });
+                // Check if this action involved a spare part replacement
+                const isPartReplacement = /تغير|تغيير|استبدال|تركيب|بوردة|شاشة|بطارية|تروس|قارئ|طابعة|كابل|سوكت/i.test(noteD);
+
+                let matchedSp = null;
+                if (isPartReplacement && allSpForAsset.length > 0) {
+                    matchedSp = allSpForAsset.find(sp => {
+                        const s = String(sp.serial_raw || '');
+                        const n = String(sp.notes || '');
+                        const posMatch = (t.POSN && (n.includes(t.POSN) || s.includes(t.POSN)));
+                        const d1 = sp.out_date ? sp.out_date.substring(0, 9).toLowerCase() : '';
+                        const d2 = t.IssueDate ? t.IssueDate.substring(0, 9).toLowerCase() : (t.ActionDate ? t.ActionDate.substring(0, 9).toLowerCase() : '');
+                        const dateMatch = d1 && d2 && d1 === d2;
+                        const typeMatch = sp.type && (noteD.includes(sp.type) || sp.type.includes(noteD.replace(/تغير|تغيير|استبدال|تركيب/g, '').trim()));
+                        
+                        // Exact match: POS + (Same Date OR Same Part Type)
+                        if (posMatch && (dateMatch || typeMatch)) return true;
+                        // Merchant match if date and part type match
+                        if (dateMatch && typeMatch && (s.includes(t.GrocerName) || n.includes(t.GrocerName))) return true;
+                        return false;
+                    });
+                }
 
                 let cost_status = 'FREE';
                 let cost_badge = 'مجاني (ضمان)';
@@ -2361,7 +2374,7 @@ app.get('/api/assets/timeline', async (req, res) => {
                         cost_status = 'FREE';
                         cost_badge = 'مجاني (بدون مقابل - ضمان)';
                     }
-                } else if (noteD.includes('تغير') || noteD.includes('تغيير') || noteD.includes('استبدال') || noteD.includes('تركيب')) {
+                } else if (isPartReplacement) {
                     replaced_part = noteD.replace(/تغير|تغيير|استبدال|تركيب/g, '').trim();
                     if (t.Fees === 'True' || parseFloat(t.FeesAmount) > 0 || t.Paid === 'True') {
                         cost_status = 'PAID';
@@ -2370,9 +2383,10 @@ app.get('/api/assets/timeline', async (req, res) => {
                         cost_status = 'FREE';
                         cost_badge = 'مجاني (بدون مقابل - ضمان)';
                     }
-                } else if (t.Fees === 'True' || parseFloat(t.FeesAmount) > 0) {
-                    cost_status = 'PAID';
-                    cost_badge = `مسدد بمقابل (${t.FeesAmount || 0} جم)`;
+                } else {
+                    // Regular maintenance without spare parts (e.g. cleaning, software update)
+                    cost_status = (t.Fees === 'True' || parseFloat(t.FeesAmount) > 0) ? 'PAID' : 'FREE';
+                    cost_badge = (t.Fees === 'True' || parseFloat(t.FeesAmount) > 0) ? `مسدد بمقابل (${t.FeesAmount || 0} جم)` : 'صيانة مجانية';
                 }
 
                 timelineEvents.push({
