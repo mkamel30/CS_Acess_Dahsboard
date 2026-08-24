@@ -247,12 +247,6 @@ async function initSyncDatabase(db) {
             contact_phone_2 TEXT,
             address TEXT,
             government TEXT,
-            bank_account TEXT,
-            tax_card TEXT,
-            fuel_type TEXT,
-            bread_type TEXT,
-            training TEXT,
-            papers_date TEXT,
             national_id TEXT,
             notes TEXT,
             status TEXT DEFAULT 'active'
@@ -566,11 +560,27 @@ async function syncHighLevelDomainEntities(db) {
     console.log('[SYNC] Rebuilding Structured Domain Entities...');
 
     // 1. Merchants
+    await dbRun(db, `DROP TABLE IF EXISTS merchants;`);
+    await dbRun(db, `
+        CREATE TABLE IF NOT EXISTS merchants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            merchant_code TEXT UNIQUE,
+            name TEXT,
+            type TEXT,
+            contact_phone TEXT,
+            contact_phone_2 TEXT,
+            address TEXT,
+            government TEXT,
+            national_id TEXT,
+            notes TEXT,
+            status TEXT DEFAULT 'active'
+        );
+    `);
+
     await dbRun(db, `
         INSERT OR REPLACE INTO merchants (
             merchant_code, name, type, contact_phone, contact_phone_2,
-            address, government, bank_account, tax_card, fuel_type,
-            bread_type, training, papers_date, national_id, notes, status
+            address, government, national_id, notes, status
         )
         SELECT 
             COALESCE(bkcode, ID) AS merchant_code,
@@ -580,12 +590,6 @@ async function syncHighLevelDomainEntities(db) {
             COALESCE(telephone_2, '') AS contact_phone_2,
             COALESCE(Address, '') AS address,
             COALESCE(dep, 'القاهرة') AS government,
-            COALESCE(bankacc, '') AS bank_account,
-            COALESCE(Tax_Card, '') AS tax_card,
-            COALESCE(fueltype, 'سولار') AS fuel_type,
-            COALESCE(breadtype, 'طري') AS bread_type,
-            COALESCE(training, '') AS training,
-            COALESCE(papers_date, '') AS papers_date,
             COALESCE(NationalD, '') AS national_id,
             COALESCE(notes, '') AS notes,
             CASE 

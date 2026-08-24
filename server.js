@@ -317,7 +317,8 @@ app.get('/api/explorer/:table', async (req, res) => {
         
         // Get column names
         const columnsInfo = await allQuery(`PRAGMA table_info("${table}")`);
-        const colNames = columnsInfo.map(c => c.name);
+        const UNWANTED_COLS = ['bank_account', 'tax_card', 'fuel_type', 'bread_type', 'training', 'papers_date'];
+        const colNames = columnsInfo.map(c => c.name).filter(c => table !== 'merchants' || !UNWANTED_COLS.includes(c));
 
         let whereClause = "";
         let params = [];
@@ -337,7 +338,8 @@ app.get('/api/explorer/:table', async (req, res) => {
         const total = countRow ? countRow.total : 0;
 
         params.push(parseInt(limit), parseInt(offset));
-        const rows = await allQuery(`SELECT * FROM "${table}" ${whereClause} LIMIT ? OFFSET ?`, params);
+        const selectCols = colNames.map(c => `"${c}"`).join(', ');
+        const rows = await allQuery(`SELECT ${selectCols} FROM "${table}" ${whereClause} LIMIT ? OFFSET ?`, params);
 
         res.json({
             success: true,
