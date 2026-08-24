@@ -392,6 +392,42 @@ async function initSyncDatabase(db) {
         );
     `);
 
+    await dbRun(db, `
+        CREATE TABLE IF NOT EXISTS temp_transfer_raw (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bkCode TEXT,
+            OldPOS TEXT,
+            NewPOS TEXT,
+            Transfer_Date TEXT,
+            procedure TEXT,
+            new_type TEXT,
+            notes TEXT
+        );
+    `);
+
+    await dbRun(db, `
+        CREATE TABLE IF NOT EXISTS temp_transfer (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            bkcode TEXT,
+            old_serial TEXT,
+            new_serial TEXT,
+            transfer_date TEXT,
+            procedure_maker TEXT,
+            new_type TEXT,
+            notes TEXT
+        );
+    `);
+
+    await dbRun(db, `
+        CREATE TABLE IF NOT EXISTS trade_raw (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT,
+            type TEXT,
+            amount REAL,
+            notes TEXT
+        );
+    `);
+
     await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_audit_table_time ON audit_change_logs(table_name, timestamp DESC);`);
     await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_audit_type ON audit_change_logs(change_type);`);
 }

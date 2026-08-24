@@ -934,10 +934,10 @@ app.get('/api/inventory/warehouse-dashboard', async (req, res) => {
                 LEFT JOIN merchant_assets ma ON ma.device_id = d.id
                 LEFT JOIN merchants m ON m.merchant_code = ma.merchant_code
             `),
-            allQuery('SELECT * FROM store_pos_raw ORDER BY rowid ASC'),
-            allQuery('SELECT * FROM temp_transfer_raw ORDER BY rowid DESC'),
-            allQuery('SELECT * FROM trade_raw ORDER BY rowid DESC'),
-            allQuery('SELECT merchant_code, name, government FROM merchants')
+            allQuery('SELECT * FROM store_pos_raw ORDER BY rowid ASC').catch(() => []),
+            allQuery('SELECT * FROM temp_transfer_raw ORDER BY rowid DESC').catch(() => []),
+            allQuery('SELECT * FROM trade_raw ORDER BY rowid DESC').catch(() => []),
+            allQuery('SELECT merchant_code, name, government FROM merchants').catch(() => [])
         ]);
 
         const totalDevices = allDevices.length;
@@ -2536,13 +2536,18 @@ app.get('/api/assets/timeline', async (req, res) => {
 
         // 3. Events from Transfers / Movements (temp_transfer_raw)
         if (allPossibleCodes.length > 0) {
-            const transferParams = [...allPossibleCodes, ...allPossibleCodes, ...allPossibleCodes];
-            const transfers = await allQuery(`
-                SELECT tt.*
-                FROM temp_transfer_raw tt
-                WHERE tt.bkCode IN (${placeholders}) OR tt.OldPOS IN (${placeholders}) OR tt.NewPOS IN (${placeholders})
-                ORDER BY tt.Transfer_Date DESC
-            `, transferParams);
+            let transfers = [];
+            try {
+                const transferParams = [...allPossibleCodes, ...allPossibleCodes, ...allPossibleCodes];
+                transfers = await allQuery(`
+                    SELECT tt.*
+                    FROM temp_transfer_raw tt
+                    WHERE tt.bkCode IN (${placeholders}) OR tt.OldPOS IN (${placeholders}) OR tt.NewPOS IN (${placeholders})
+                    ORDER BY tt.Transfer_Date DESC
+                `, transferParams);
+            } catch (e) {
+                transfers = [];
+            }
 
             transfers.forEach(tr => {
                 let tech = tr.procedure || '';
