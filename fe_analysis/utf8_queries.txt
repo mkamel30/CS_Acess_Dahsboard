@@ -1,0 +1,942 @@
+﻿=== QUERIES IN Bread_DB.accdb (216 Total) ===
+--------------------------------------------------
+QUERY: abuse
+SQL: SELECT TransAction.GrocerName, TransAction.ActionType, Count(TransAction.NoteG) AS CountOfNoteG, TransAction.ActionDate, TransAction.NoteG, TransAction.NoteD, TransAction.Procedure, Assets.bkcode
+FROM AuthorizedUsers INNER JOIN (Assets RIGHT JOIN [TransAction] ON Assets.Comments = TransAction.GrocerName) ON AuthorizedUsers.username = TransAction.Procedure
+GROUP BY TransAction.GrocerName, TransAction.ActionType, TransAction.ActionDate, TransAction.NoteG, TransAction.NoteD, TransAction.Procedure, Assets.bkcode
+HAVING (((TransAction.ActionType)="اصلاح عطل"))
+ORDER BY TransAction.GrocerName;
+
+--------------------------------------------------
+QUERY: abuse_total
+SQL: SELECT Assets.bkcode, TransAction.GrocerName, TransAction.ActionType, Count(TransAction.NoteG) AS CountOfNoteG
+FROM AuthorizedUsers INNER JOIN (Assets RIGHT JOIN [TransAction] ON Assets.Comments = TransAction.GrocerName) ON AuthorizedUsers.username = TransAction.Procedure
+GROUP BY Assets.bkcode, TransAction.GrocerName, TransAction.ActionType
+HAVING (((TransAction.ActionType)="اصلاح عطل"))
+ORDER BY TransAction.GrocerName;
+
+--------------------------------------------------
+QUERY: All POS on Assets Query
+SQL: SELECT pos from assets
+UNION ALL select pos_2 from assets;
+
+--------------------------------------------------
+QUERY: All POS on Store_pos Query
+SQL: SELECT;
+
+--------------------------------------------------
+QUERY: ALL_Cell_EVER
+SQL: SELECT cell_serial, "cell1_on assets" as TableName from assets
+union all
+select [cell_2-ser], "cell2_on assets" from assets
+union all
+SELECT cell_serial3, "cell3_on assets" as TableName from assets
+union all
+SELECT cell_serial4, "cell4_on assets" as TableName from assets
+UNION ALL select sim_serial, "sim on Store" from store_sim;
+
+--------------------------------------------------
+QUERY: ALL_PA_Ever
+SQL: SELECT PA, "cable 1 grocers" as TableName from assets
+union all
+SELECT PA2, "cable 2 grocers"  from assets
+union all
+select [serial], "cable on store" from [store_Power Adapter]
+UNION ALL
+select PA, "cable on daman" from [copy of معاش الضمان الإجتماعي]
+union all
+select [رقم الكابل1], "cable1 on wholesaler" from [Wholesaler]
+UNION ALL select [رقم الكابل2], "cable2 on wholesaler" from [Wholesaler];
+
+--------------------------------------------------
+QUERY: ALL_POS_EVER
+SQL: SELECT pos, "pos1_on assets" as TableName FROM assets WHERE pos IS NOT NULL
+UNION ALL
+SELECT pos_2, "pos2_on assets" FROM assets WHERE pos_2 IS NOT NULL
+UNION ALL
+SELECT pos_3, "pos3_on assets" FROM assets WHERE pos_3 IS NOT NULL
+UNION ALL
+SELECT serial, "pos on Store" FROM store_pos WHERE serial IS NOT NULL
+UNION ALL SELECT Maintenance.[Unit Serial], "pos on maintenance"
+FROM Maintenance
+WHERE Maintenance.[Unit Type] = "pos" AND Maintenance.[Checked In Date] IS NULL AND Maintenance.[Unit Serial] IS NOT NULL;
+
+--------------------------------------------------
+QUERY: ALL_POS_EVER_OR
+SQL: SELECT pos, "pos1_on assets" as TableName from assets
+union all
+select pos_2, "pos2_on assets" from assets
+union all
+select POS, "pos on Gates" from Gates
+union all
+select [مسلسل الماكينة1], "pos on Wholesaler" from wholesaler
+union all
+select serial, "pos on Store" from store_pos
+union all
+select [pos serial], "pos on Daman" FROM [Copy Of معاش الضمان الإجتماعي]
+union all
+select [cmo_pos ser], "cmo pos on HIO" from [hio-v3]
+UNION ALL select [adm_pos ser], "adm pos on HIO" from [hio-v3];
+UNION ALL SELECT Maintenance.[Unit Serial], "pos on maintenance"
+FROM Maintenance
+WHERE (((Maintenance.[Unit Type])="pos") AND ((Maintenance.[Checked In Date]) Is Null));
+
+--------------------------------------------------
+QUERY: ALL_UPS_EVER
+SQL: SELECT [UPS] , "UPS_on assets" as TableName from assets
+UNION ALL Select serial, "UPS on Store" from store_UPS;
+
+--------------------------------------------------
+QUERY: Copy Of QrySpareParts_out
+SQL: SELECT Store_SP.type, ConcatenateNotes(Store_SP.type, DateSerial([Enter Year],[Enter Month],[Enter Day])) AS Notes, Sum(Store_SP.count_in) * -1 AS SumOfcount_in, Year([out_date]) & "/" & Month([out_date]) & "/" & Day([out_date]) AS Expr2, Sum(IIf(Store_SP.serial Like "*مجاني*", Store_SP.count_in, 0)) * -1 AS FreeCount, (Sum(Store_SP.count_in) * -1 - Sum(IIf(Store_SP.serial Like "*مجاني*", Store_SP.count_in, 0)) * -1) AS NonFreeCount
+FROM Store_SP
+WHERE Year([out_date]) = [Enter Year]
+    AND Month([out_date]) = [Enter Month]
+    AND Day([out_date]) = [Enter Day]
+GROUP BY Store_SP.type, Year([out_date]) & "/" & Month([out_date]) & "/" & Day([out_date]);
+
+--------------------------------------------------
+QUERY: Find duplicates for ALL_PA_Ever
+SQL: SELECT ALL_PA_Ever.PA AS Expr1, ALL_PA_Ever.TableName AS Expr2
+FROM ALL_PA_Ever
+WHERE ((([ALL_PA_Ever].[PA]) In (SELECT [PA] FROM [ALL_PA_Ever] As Tmp GROUP BY [PA] HAVING Count(*)>1 )))
+ORDER BY ALL_PA_Ever.PA;
+
+--------------------------------------------------
+QUERY: Find duplicates for Assets
+SQL: SELECT Assets.POS, Assets.[Pinpad Serial] AS Expr1, Assets.PA2, Assets.PA, Assets.Cell_Serial, Assets.UPS, Assets.POS_2, Assets.Pinpad_2, Assets.[cell_2-ser], Assets.Owner, Assets.[Grocer Number] AS Expr2
+FROM Assets
+WHERE (((Assets.POS) In (SELECT [POS] FROM [Assets] As Tmp GROUP BY [POS],[Pinpad Serial],[PA2],[PA],[Cell_Serial],[UPS],[POS_2],[Pinpad_2],[cell_2-ser] HAVING Count(*)>1  And [Pinpad Serial] = [Assets].[Pinpad Serial] And [PA2] = [Assets].[PA2] And [PA] = [Assets].[PA] And [Cell_Serial] = [Assets].[Cell_Serial] And [UPS] = [Assets].[UPS] And [POS_2] = [Assets].[POS_2] And [Pinpad_2] = [Assets].[Pinpad_2] And [cell_2-ser] = [Assets].[cell_2-ser])))
+ORDER BY Assets.POS, Assets.[Pinpad Serial], Assets.PA2, Assets.PA, Assets.Cell_Serial, Assets.UPS, Assets.POS_2, Assets.Pinpad_2, Assets.[cell_2-ser];
+
+--------------------------------------------------
+QUERY: FindDuplicatesAllOVER
+SQL: SELECT ALL_POS_EVER.pos AS Expr1, Count(ALL_POS_EVER.pos) AS CountOfpos, First(ALL_POS_EVER.TableName) AS FirstOfTableName, Last(ALL_POS_EVER.TableName) AS LastOfTableName
+FROM ALL_POS_EVER
+GROUP BY ALL_POS_EVER.pos
+HAVING (((Count([ALL_POS_EVER].[pos]))>1));
+
+--------------------------------------------------
+QUERY: FindDuplicatesAllOVER_Sim
+SQL: SELECT ALL_Cell_EVER.cell_serial AS Expr1, Count(ALL_Cell_EVER.cell_serial) AS CountOfcell_serial, First(ALL_Cell_EVER.TableName) AS FirstOfTableName, Last(ALL_Cell_EVER.TableName) AS LastOfTableName
+FROM ALL_Cell_EVER
+GROUP BY ALL_Cell_EVER.cell_serial
+HAVING (((Count([ALL_Cell_EVER].[cell_serial]))>1));
+
+--------------------------------------------------
+QUERY: Grocer_Cell_by_type
+SQL: SELECT Assets.Cell_type, Assets.Cell_Serial
+FROM Assets;
+UNION ALL SELECT Assets.[Cell_type-2], Assets.[cell_2-ser]
+FROM Assets;
+UNION ALL SELECT Assets.[Cell_type3], Assets.[cell_serial3]
+FROM Assets;
+UNION ALL SELECT Assets.[Cell_type4], Assets.[cell_serial4]
+FROM Assets;
+UNION ALL SELECT Gates.[Cell_type], Gates.[cell_serial]
+FROM Gates;
+
+--------------------------------------------------
+QUERY: grocers sim types totals
+SQL: SELECT Grocer_Cell_by_type.Cell_type AS Expr1, Count(Grocer_Cell_by_type.Cell_Serial) AS CountOfCell_Serial
+FROM Grocer_Cell_by_type
+GROUP BY Grocer_Cell_by_type.Cell_type;
+
+--------------------------------------------------
+QUERY: note_bkQ
+SQL: SELECT TOP 001 note_bk.notes
+FROM note_bk
+WHERE (((note_bk.notes)<>"") And ((note_bk.bkcode_0) Is Not Null) And ((note_bk.BqName)=Forms![Assets Form]!Comments))
+ORDER BY note_bk.bkdate DESC;
+
+--------------------------------------------------
+QUERY: note_bkQ_old
+SQL: SELECT TOP 001 note_bk.notes
+FROM note_bk
+WHERE (((note_bk.notes)<>"") And ((note_bk.bkcode_0)=Forms![Assets Form]!Combo7))
+ORDER BY note_bk.bkdate DESC;
+
+--------------------------------------------------
+QUERY: pos_ID1+2
+SQL: SELECT Assets.POSid, Assets.bkcode,Assets.comments FROM Assets;
+UNION ALL SELECT Assets.[pos-id_2] , Assets.bkcode,Assets.comments FROM Assets;
+
+--------------------------------------------------
+QUERY: POS_in_maintenance
+SQL: SELECT m.[Unit Serial] AS [رقم الماكينة], m.[Checked Out Date] AS [تاريخ الخروج للصيانة], m.Notes AS [العطل المرسل للصيانة], t.POSCode AS [اسم المخبز], t.Transfer_Date AS [تاريخ تغيير الماكينة], a.bkcode AS [رقم المخبز], t.Notes AS [سبب تغيير الماكينة], m.Procedure, a.POS AS [ماكينة المخبز الحالية1], a.POS_2 AS [ماكينة المخبز الحالية2]
+FROM (Maintenance AS m INNER JOIN Temp_transfer AS t ON m.[Unit Serial] = t.OldPOS) INNER JOIN Assets AS a ON t.POSCode = a.Comments
+WHERE m.[Checked In Date] IS NULL
+  AND m.[Checked Out Date] = (
+      SELECT MAX(m2.[Checked Out Date])
+      FROM Maintenance m2
+      WHERE m2.[Unit Serial] = m.[Unit Serial]
+  );
+
+--------------------------------------------------
+QUERY: pos1+2
+SQL: SELECT Assets.POS, Assets.model,Assets.POSid,Assets.supplyoffice,Assets.bkcode,Assets.comments FROM Assets;
+UNION ALL SELECT Assets.POS_2,Assets.model2,Assets.[POS-id_2],Assets.supplyoffice, Assets.bkcode,Assets.comments FROM Assets;
+
+--------------------------------------------------
+QUERY: pos1+2_temptrans
+SQL: select temp_transfer.oldpos,"oldpos" as transtype,temp_transfer.POScode,temp_transfer.transfer_date,temp_transfer.notes FROM temp_transfer;
+UNION ALL select temp_transfer.newpos,"newpos" as transtype,temp_transfer.POScode,temp_transfer.transfer_date,temp_transfer.notes FROM temp_transfer;
+
+--------------------------------------------------
+QUERY: posid
+SQL: select posid from Assets
+UNION select [pos-id_2] from Assets;
+
+--------------------------------------------------
+QUERY: qry_approval_payment
+SQL: SELECT payments.payment_date, payments.payment_amount, payments.payer, payments.payment_reason, payments.ref_num, payments.procedure_maker, payments.policy, payments.send_date, payments.pos_number, payments.payment_place
+FROM payments
+WHERE (((payments.payment_amount)>20) AND ((payments.ref_num) Is Not Null))
+ORDER BY payments.payment_date DESC;
+
+--------------------------------------------------
+QUERY: qry_approval_pending
+SQL: SELECT payments.payment_reason, payments.payment_amount, payments.pos_number, payments.payer, payments.policy
+FROM payments
+WHERE (((payments.payment_amount)>20) AND ((payments.ref_num) Is Null));
+
+--------------------------------------------------
+QUERY: qry_bakeries_by_name
+SQL: SELECT Temp_transfer.OldPOS, Temp_transfer.NewPOS, Temp_transfer.Transfer_Date, Temp_transfer.procedure, Temp_transfer.bkCode, Temp_transfer.POSCode
+FROM Temp_transfer
+GROUP BY Temp_transfer.OldPOS, Temp_transfer.NewPOS, Temp_transfer.Transfer_Date, Temp_transfer.procedure, Temp_transfer.bkCode, Temp_transfer.POSCode
+HAVING (((Temp_transfer.bkCode)=[Forms]![Assets Form]![bkcode]))
+ORDER BY Temp_transfer.Transfer_Date DESC;
+
+--------------------------------------------------
+QUERY: Qry_byPOSID
+SQL: SELECT Assets.Comments, Assets.POSID, Assets.[POS-ID_2], Assets.bkcode
+FROM Assets;
+
+--------------------------------------------------
+QUERY: Qry_changed_spareparts
+SQL: SELECT Store_SP.notes, Store_SP.type, Store_SP.out_date, Store_SP.Serial, Store_SP.count_in
+FROM Store_SP
+WHERE (((Store_SP.notes) Like "*" & [TempVars]![poshis] & "*"));
+
+--------------------------------------------------
+QUERY: qry_count_pos1+pos2
+SQL: SELECT Count([Assets].[POS]) AS Expr1, Count([Assets].[pos_2]) AS Expr2
+FROM Assets;
+
+--------------------------------------------------
+QUERY: Qry_D210_issues
+SQL: SELECT TransAction.*, TransAction.ActionType
+FROM [TransAction]
+WHERE (((TransAction.ActionType)="عطل مسح الذاكرة"));
+
+--------------------------------------------------
+QUERY: Qry_D210_sales
+SQL: SELECT payments.pos_number AS [مسلسل الماكينة], payments.policy AS [اسم النشاط على النظام], payments.procedure_maker AS [موظف خدمه العملاء مسئول البيع], payments.payment_date AS [تاريخ الإيداع], payments.payment_amount AS المبلغ, payments.payer AS [أسم المودع], payments.ref_num AS [رقم القسيمة], Temp_transfer.Transfer_Date AS [تاريخ تسليم الماكينه للعميل], payments.payment_reason AS [سبب الدفع]
+FROM payments LEFT JOIN Temp_transfer ON payments.pos_number = Temp_transfer.NewPOS
+WHERE (((payments.pos_number) Like "5F*") AND ((payments.payment_amount)>=6500))
+ORDER BY Temp_transfer.Transfer_Date;
+
+--------------------------------------------------
+QUERY: Qry_D230_sales
+SQL: SELECT payments.pos_number AS [مسلسل الماكينة], payments.policy AS [اسم النشاط على النظام], payments.procedure_maker AS [موظف خدمه العملاء مسئول البيع], payments.payment_date AS [تاريخ الإيداع], payments.payment_amount AS المبلغ, payments.payer AS [أسم المودع], payments.ref_num AS [رقم القسيمة], payments.payment_reason AS [سبب الدفع], QryTempTransfer_first.FirstOfTransfer_Date AS [تاريخ التسليم]
+FROM payments INNER JOIN QryTempTransfer_first ON payments.pos_number = QryTempTransfer_first.NewPOS
+WHERE (((payments.pos_number) Like "233*") AND ((payments.payment_amount)>=7000));
+
+--------------------------------------------------
+QUERY: qry_del_Ms
+SQL: DELETE Store_POS.Serial
+FROM Store_POS
+WHERE (((Store_POS.Serial) Like "M*"));
+
+--------------------------------------------------
+QUERY: qry_depts_pos
+SQL: SELECT Count(Assets.SupplyOffice) AS CountOfSupplyOffice, Assets.dep, Count(Assets.POS) AS CountOfPOS, Count(Assets.pos_2) AS CountOfpos_2, Assets.SupplyOffice, Assets.bk_type
+FROM Assets
+GROUP BY Assets.dep, Assets.SupplyOffice, Assets.bk_type
+HAVING (((Count(Assets.POS)) Is Not Null) AND ((Count(Assets.pos_2)) Is Not Null) AND ((Assets.bk_type)="مخبز"));
+
+--------------------------------------------------
+QUERY: Qry_fixduplicated with M-
+SQL: UPDATE assets SET assets.pos = "M-" & "pos"
+WHERE (((assets.[pos]) In (SELECT pos FROM ALL_POS_EVER 
+    GROUP BY pos 
+    HAVING COUNT(pos) > 1
+)));
+
+--------------------------------------------------
+QUERY: qry_in_maintenance
+SQL: SELECT Maintenance.*
+FROM Maintenance
+WHERE (((Maintenance.[Checked In Date]) Is Null));
+
+--------------------------------------------------
+QUERY: qry_internal_transfer
+SQL: SELECT transfer.from_bk AS Expr1, transfer.Date AS Expr2, transfer.from_name AS Expr3, transfer.from_pos AS Expr4, transfer.to_bk AS Expr5, transfer.to_name AS Expr6, transfer.to_pos AS Expr7, transfer.note AS Expr8
+FROM transfer
+WHERE (((transfer.from_bk)=Forms![Assets Form_20022023]!bkcode) And ((transfer.done)=No));
+
+--------------------------------------------------
+QUERY: qry_pos_search_payments
+SQL: SELECT payments.pos_number, payments.payment_date, payments.payment_amount, payments.payer, payments.payment_reason, payments.ref_num, payments.policy
+FROM payments
+WHERE (((payments.pos_number)=[Forms]![frmPOS_Search]![txtpos]));
+
+--------------------------------------------------
+QUERY: qry_pos_search_recycled
+SQL: SELECT [معدات تم إحلالها].serial, [معدات تم إحلالها].notes, [معدات تم إحلالها].type, [معدات تم إحلالها].[sent on]
+FROM [معدات تم إحلالها]
+WHERE ((([معدات تم إحلالها].serial)=[Forms]![frmPOS_Search]![txtpos]));
+
+--------------------------------------------------
+QUERY: qry_pos_search_trade
+SQL: SELECT Trade.[Item Serial], Trade.[Item Type], Trade.[Trade Type], Trade.[Trade Location], Trade.[Out Date], Trade.[In Date], Trade.[IN/OUT BY], Trade.Comments
+FROM Trade
+WHERE (((Trade.[Item Serial])=[Forms]![frmPOS_Search]![txtpos]));
+
+--------------------------------------------------
+QUERY: qry_pos_search-assets
+SQL: SELECT [pos1+2].POS, [pos1+2].bkcode, [pos1+2].comments
+FROM [pos1+2]
+WHERE ((([pos1+2].POS)=[Forms]![frmPOS_Search]![txtpos]));
+
+--------------------------------------------------
+QUERY: qry_pos_search-inttrans
+SQL: SELECT transfer.from_pos AS Expr1, transfer.Date AS Expr2, transfer.from_bk AS Expr3, transfer.from_name AS Expr4, transfer.to_bk AS Expr5, transfer.to_name AS Expr6, transfer.procedure AS Expr7, transfer.note AS Expr8
+FROM transfer
+WHERE (((transfer.from_pos)=Forms!frmPOS_Search!txtpos) And ((transfer.done)=No));
+
+--------------------------------------------------
+QUERY: qry_pos_search-maintenance
+SQL: SELECT Maintenance.[Unit Serial], Maintenance.[Checked Out Date], Maintenance.[Checked In Date], Maintenance.Notes, Maintenance.Procedure
+FROM Maintenance
+WHERE (((Maintenance.[Unit Serial])=[Forms]![frmPOS_Search]![txtpos]));
+
+--------------------------------------------------
+QUERY: qry_pos_search-store
+SQL: SELECT Store_POS.Serial, Store_POS.faulty_detils, Store_POS.faulty, Store_POS.notes
+FROM Store_POS
+WHERE (((Store_POS.Serial)=[Forms]![frmPOS_Search]![txtpos]));
+
+--------------------------------------------------
+QUERY: qry_pos_search-temptrans
+SQL: SELECT [pos1+2_temptrans].oldpos, [pos1+2_temptrans].transtype, [pos1+2_temptrans].POScode, [pos1+2_temptrans].transfer_date, [pos1+2_temptrans].notes
+FROM [pos1+2_temptrans]
+WHERE ((([pos1+2_temptrans].oldpos)=[Forms]![frmPOS_Search]![txtpos]))
+ORDER BY [pos1+2_temptrans].transfer_date DESC;
+
+--------------------------------------------------
+QUERY: qry_REFUND_details
+SQL: SELECT refund.bkcode, refund.bkname, refund.bkposid, refund.loaf_amount, refund.sender, refund.order_date
+FROM refund
+WHERE (((refund.bkcode) Like "*" & Forms![Assets Form_20022023]!bkcode) And ((refund.loaf_amount) Is Not Null))
+ORDER BY refund.order_date DESC;
+
+--------------------------------------------------
+QUERY: Qry_S90_sales
+SQL: SELECT payments.pos_number AS [مسلسل الماكينة], payments.policy AS [اسم النشاط على النظام], payments.procedure_maker AS [موظف خدمه العملاء مسئول البيع], payments.payment_date AS [تاريخ الإيداع], payments.payment_amount AS المبلغ, payments.payer AS [أسم المودع], payments.ref_num AS [رقم القسيمة], payments.payment_reason AS [سبب الدفع], QryTempTransfer_first.FirstOfTransfer_Date AS [تاريخ التسليم]
+FROM payments INNER JOIN QryTempTransfer_first ON payments.pos_number = QryTempTransfer_first.NewPOS
+WHERE (((payments.pos_number) Like "3k*" Or (payments.pos_number) Like "3d*") AND ((payments.payment_amount)>=7000));
+
+--------------------------------------------------
+QUERY: qry_sim_search_assets
+SQL: SELECT sim1_2_3_4.cell_serial, sim1_2_3_4.cell_type, sim1_2_3_4.bkcode, sim1_2_3_4.comments
+FROM sim1_2_3_4
+WHERE (((sim1_2_3_4.cell_serial)=[Forms]![frmsim_Search]![txtsim]));
+
+--------------------------------------------------
+QUERY: qry_sim_search_store
+SQL: SELECT Store_Sim.sim_serial, Store_Sim.sim_type, Store_Sim.notes, Store_Sim.faulty
+FROM Store_Sim
+WHERE (((Store_Sim.sim_serial)=[Forms]![frmsim_Search]![txtsim]));
+
+--------------------------------------------------
+QUERY: qry_sim_search_trade
+SQL: SELECT Trade.[Item Serial], Trade.[Item Type], Trade.[Trade Type], Trade.[Trade Location], Trade.[Out Date], Trade.[In Date], Trade.[IN/OUT BY], Trade.Comments
+FROM Trade
+WHERE (((Trade.[Item Serial])=[Forms]![frmSim_Search]![txtsim]));
+
+--------------------------------------------------
+QUERY: qry_sim_search-temptrans
+SQL: SELECT [pos1+2_temptrans].oldpos, [pos1+2_temptrans].transtype, [pos1+2_temptrans].POScode, [pos1+2_temptrans].transfer_date, [pos1+2_temptrans].notes
+FROM [pos1+2_temptrans]
+WHERE ((([pos1+2_temptrans].oldpos)=[Forms]![frmSim_Search]![txtsim]))
+ORDER BY [pos1+2_temptrans].transfer_date DESC;
+
+--------------------------------------------------
+QUERY: Qry_spareparts_payment_pos
+SQL: SELECT TransAction.POSN, TransAction.IssueDate, TransAction.GrocerName, TransAction.ActionType, TransAction.NoteG, TransAction.NoteD, TransAction.Procedure
+FROM [TransAction]
+WHERE (((TransAction.POSN) Like "*" & [TempVars]![poshis] & "*"))
+ORDER BY TransAction.IssueDate DESC;
+
+--------------------------------------------------
+QUERY: Qry_spareparts_payment_pos_OR
+SQL: SELECT payments.pos_number, payments.payment_date, payments.payment_amount, payments.payer, payments.payment_reason, payments.ref_num, payments.procedure_maker, payments.policy, payments.send_date, payments.payment_place
+FROM payments
+WHERE (((payments.pos_number) Like "*" & [TempVars]![poshis] & "*"))
+ORDER BY payments.payment_date DESC;
+
+--------------------------------------------------
+QUERY: qry_temp_trans
+SQL: SELECT TOP 2 Temp_transfer.POSCode, First(Temp_transfer.NewPOS) AS FirstOfNewPOS, Temp_transfer.Transfer_Date, Temp_transfer.procedure, Temp_transfer.Notes
+FROM Temp_transfer
+GROUP BY Temp_transfer.POSCode, Temp_transfer.Transfer_Date, Temp_transfer.procedure, Temp_transfer.Notes
+HAVING (((First(Temp_transfer.NewPOS)) Like "*" & [Forms]![Assets Form]![POS] & "*" Or (First(Temp_transfer.NewPOS)) Like "*" & [Forms]![Assets Form]![POS_2] & "*"))
+ORDER BY Temp_transfer.Transfer_Date DESC;
+
+--------------------------------------------------
+QUERY: Qry_TOT_spareparts_payment_pos
+SQL: SELECT TOP 1 Count(TransAction.IssueDate) AS CountOfIssueDate
+FROM [TransAction]
+GROUP BY Year([issuedate]), Month([issuedate]), TransAction.POSN, TransAction.ActionType
+HAVING (((Year([issuedate]))=Year(Now())) And ((Month([issuedate]))=Month(Now())) And ((TransAction.POSN) Like "*" & TempVars!poshis1 & "*") And ((TransAction.ActionType)<>"مسارات القارئ - البوردة"))
+ORDER BY Count(TransAction.IssueDate) DESC;
+
+--------------------------------------------------
+QUERY: qry_transaction_by_bakery
+SQL: SELECT TransAction.GrocerName, TransAction.POSN, TransAction.IssueDate, TransAction.ActionType, TransAction.NoteG, Assets.bkcode, TransAction.NoteD
+FROM Assets INNER JOIN [TransAction] ON Assets.Comments = TransAction.GrocerName
+WHERE (((TransAction.ActionType)="اصلاح عطل") And ((Assets.bkcode)=Forms![Assets Form]!bkcode));
+
+--------------------------------------------------
+QUERY: Qry_update_BKcode_temptransfer
+SQL: UPDATE Temp_transfer INNER JOIN Assets ON Temp_transfer.POSCode = Assets.Comments SET Temp_transfer.bkCode = [Assets].[bkcode];
+
+--------------------------------------------------
+QUERY: qry_update_model_s80
+SQL: UPDATE Store_POS SET Store_POS.type = "PAX", Store_POS.Model = "S80"
+WHERE (((Store_POS.Serial) Like "2K*"));
+
+--------------------------------------------------
+QUERY: qry_update_model_s90
+SQL: UPDATE Store_POS SET Store_POS.type = "PAX", Store_POS.Model = "S90"
+WHERE (((Store_POS.Serial) Like "3*"));
+
+--------------------------------------------------
+QUERY: qry_updatemodel_pos1_90_assets
+SQL: UPDATE Assets SET Assets.manufacturer = "PAX", Assets.model = "S90"
+WHERE (((Assets.pos) Like "3*" Or (Assets.pos) Like "S3*")Or (Assets.pos) Like "M-3*");
+
+--------------------------------------------------
+QUERY: qry_updatemodel_pos2_90_assets
+SQL: UPDATE Assets SET Assets.manufacturer2 = "PAX", Assets.model2 = "S90"
+WHERE (((Assets.pos_2) Like "3*" Or (Assets.pos_2) Like "S3*")Or (Assets.pos_2) Like "M-3*");
+
+--------------------------------------------------
+QUERY: QryBK_didntcome for maintenance
+SQL: SELECT a.BKcode
+FROM Assets AS a
+WHERE a.BKcode NOT IN (
+        SELECT DISTINCT t.grocername
+        FROM transaction AS t
+    );
+
+--------------------------------------------------
+QUERY: QryBK_MaintenanceTransactions
+SQL: SELECT t.grocername AS BKcode, COUNT(*) AS times_repeated
+FROM [transaction] AS t
+WHERE t.grocername IN (SELECT BKcode FROM Assets)
+GROUP BY t.grocername
+ORDER BY times_repeated DESC;
+
+--------------------------------------------------
+QUERY: qryCurVer
+SQL: SELECT TOP 1 tblVersion.Version
+FROM tblVersion
+ORDER BY tblVersion.ID DESC;
+
+--------------------------------------------------
+QUERY: QryInstallmentBase
+SQL: SELECT t.pos AS [رقم الماكينة], Max(p.payer) AS [اسم العميل], t.installments AS [مدة القسط], 3000 AS [المقدم المدفوع], t.unitprice AS [قيمة الماكينة بدون فوائد], t.finalunitprice AS [قيمة الماكينة بعد الفوائد], t.monthlyinstallmentprice AS [قيمة القسط الشهري], Min(
+        IIf(
+            p.payment_reason Like "*قسط*"
+            And Not p.payment_reason Like "مقدم*",
+            p.send_date,
+            Null
+        )
+    ) AS FirstSendDate, Int(
+        Nz(
+            Sum(
+                IIf(
+                    p.payment_reason Like "*قسط*"
+                    And Not p.payment_reason Like "مقدم*",
+                    p.payment_amount,
+                    0
+                )
+            ),
+        0) / t.monthlyinstallmentprice
+    ) AS PaidInstallments, Nz(
+        Sum(
+            IIf(
+                p.payment_reason Like "*قسط*"
+                And Not p.payment_reason Like "مقدم*",
+                p.payment_amount,
+                0
+            )
+        ),
+    0) AS [قيمة الاقساط المدفوعة], t.installments
+        - Int(
+            Nz(
+                Sum(
+                    IIf(
+                        p.payment_reason Like "*قسط*"
+                        And Not p.payment_reason Like "مقدم*",
+                        p.payment_amount,
+                        0
+                    )
+                ),
+            0) / t.monthlyinstallmentprice
+          ) AS [عدد الأقساط المتبقية], Nz(
+        (SELECT Sum(p4.payment_amount)
+         FROM payments AS p4
+         WHERE p4.pos_number = t.pos),
+    0) AS [اجمالي ما تم دفعه], t.finalunitprice
+        - (3000 + Nz(
+                Sum(
+                    IIf(
+                        p.payment_reason Like "*قسط*"
+                        And Not p.payment_reason Like "مقدم*",
+                        p.payment_amount,
+                        0
+                    )
+                ),
+            0)) AS [المبلغ المتبقي]
+FROM tblinstallments AS t LEFT JOIN payments AS p ON t.pos = p.pos_number
+GROUP BY t.pos, t.installments, t.unitprice, t.finalunitprice, t.monthlyinstallmentprice
+ORDER BY t.pos;
+
+--------------------------------------------------
+QUERY: QryInstallmentFollowups
+SQL: SELECT Q.[رقم الماكينة], Q.[اسم العميل], Q.[مدة القسط], Q.[المقدم المدفوع], Q.[قيمة الماكينة بدون فوائد], Q.[قيمة الماكينة بعد الفوائد], Q.[قيمة القسط الشهري], Q.PaidInstallments AS [عدد الأقساط المدفوعة], Q.[قيمة الاقساط المدفوعة], Q.[عدد الأقساط المتبقية], Q.[المبلغ المتبقي], Q.[اجمالي ما تم دفعه], IIf(Q.[عدد الأقساط المتبقية] > 0 AND Q.[المبلغ المتبقي] > 0,
+           "متأخر",
+           "منتظم") AS [متأخر ولا لأ], Q.[عدد الأقساط المتبقية] AS [كم شهر متأخر], Q.[عدد الأقساط المتبقية] * Q.[قيمة القسط الشهري] AS [الفلوس المتأخرة]
+FROM QryInstallmentBase AS Q
+ORDER BY Q.[رقم الماكينة];
+
+--------------------------------------------------
+QUERY: QryInstallmentFollowups_old
+SQL: SELECT payments.pos_number AS [رقم الماكينة], Max(payments.payer) AS [اسم العميل], tblinstallments.installments AS [مدة القسط], 3000 AS [المقدم المدفوع], tblinstallments.unitprice AS [قيمة الماكينة بدون فوائد], tblinstallments.finalunitprice AS [قيمة الماكينة بعد الفوائد], tblinstallments.monthlyinstallmentprice AS [قيمة القسط الشهري], Count([payments].[payment_date])-1 AS [عدد الأقساط المدفوعة], (SELECT SUM(p2.payment_amount) 
+     FROM payments p2 
+     WHERE p2.pos_number = payments.pos_number)-3000 AS [قيمة الاقساط المدفوعة], [tblinstallments].[installments]-Count([payments].[payment_date])+1 AS [عدد الأقساط المتبقية], tblinstallments.finalunitprice-(SELECT SUM(p2.payment_amount) 
+     FROM payments p2 
+     WHERE p2.pos_number = payments.pos_number) AS [المبلغ المتبقي], (SELECT SUM(p2.payment_amount) 
+     FROM payments p2 
+     WHERE p2.pos_number = payments.pos_number) AS [اجمالي ما تم دفعه]
+FROM payments INNER JOIN tblinstallments ON payments.pos_number = tblinstallments.pos
+WHERE (((payments.payment_reason) Like "*قسط*"))
+GROUP BY payments.pos_number, tblinstallments.installments, tblinstallments.unitprice, tblinstallments.finalunitprice, tblinstallments.monthlyinstallmentprice
+ORDER BY payments.pos_number;
+
+--------------------------------------------------
+QUERY: QryInstallments
+SQL: SELECT payments.payment_date AS [تاريخ الدفع], payments.payment_amount, payments.payer, payments.payment_reason, payments.ref_num, payments.send_date AS [تاريخ الاستحقاق], payments.pos_number, Month([payment_date]) & " - " & Year([payment_date]) AS Expr1
+FROM payments
+GROUP BY payments.payment_date, payments.payment_amount, payments.payer, payments.payment_reason, payments.ref_num, payments.send_date, payments.pos_number, Month([payment_date]) & " - " & Year([payment_date])
+HAVING (((payments.payment_reason) Like "*قسط*"))
+ORDER BY payments.pos_number;
+
+--------------------------------------------------
+QUERY: qryNewVer
+SQL: SELECT TOP 1 tblVersionX.Version
+FROM tblVersionX
+ORDER BY tblVersionX.ID DESC;
+
+--------------------------------------------------
+QUERY: QryPending
+SQL: SELECT tblAssets.expid, tblAssets.grocernumber, tblAssets.comments
+FROM tblAssets
+WHERE (((tblAssets.collected)=No));
+
+--------------------------------------------------
+QUERY: QryPendingPayments
+SQL: SELECT payments.*, payments.ref_num
+FROM payments
+WHERE (((payments.ref_num) Like "تحصيلات مؤجلة*"));
+
+--------------------------------------------------
+QUERY: QryPOSCounter
+SQL: SELECT Store_POS.Serial, Store_POS.type, Len([serial]) AS [not equal to 8]
+FROM Store_POS
+WHERE (((Store_POS.type)="pax") AND ((Len([serial]))<>8));
+
+--------------------------------------------------
+QUERY: QrySimCounter
+SQL: SELECT Store_Sim.sim_serial, Len([sim_serial]) AS [يزيد عن 19 رقم], Store_Sim.sim_type
+FROM Store_Sim
+WHERE (((Len([sim_serial]))<>19));
+
+--------------------------------------------------
+QUERY: QrySpareParts_in
+SQL: PARAMETERS [ادخل السنة] Long, [ ادخل رقم الشهر المراد إخرج تقريره] Long;
+SELECT [ادخل السنة] AS [year], Store_SP.type, Sum(Store_SP.count_in) AS SumOfcount_in, [ ادخل رقم الشهر المراد إخرج تقريره] AS [Month]
+FROM Store_SP
+WHERE Store_SP.in_date >= DateSerial([ادخل السنة],[ ادخل رقم الشهر المراد إخرج تقريره], 1)
+    AND Store_SP.in_date < DateAdd(
+        "m",
+        1,
+        DateSerial([ادخل السنة],[ ادخل رقم الشهر المراد إخرج تقريره], 1)
+    )
+GROUP BY Store_SP.type;
+
+--------------------------------------------------
+QUERY: QrySpareParts_M_out_Detailed_N
+SQL: SELECT Store_SP_maintenance.serial AS [رقم الماكينة], Store_SP_maintenance.formNo, Store_SP_maintenance.type AS [قطعة الغيار], Store_SP_maintenance.out_date AS [تاريخ التغيير], Store_SP_maintenance.count_out AS [عدد قطع الغيار], Nz(Store_SP_maintenance.notes, "") AS [تفاصيل الدفع]
+FROM Store_SP_maintenance
+WHERE Store_SP_maintenance.out_date >= Forms!frm_query_SP!txtfromdate
+    AND Store_SP_maintenance.out_date < DateAdd(
+        "d",
+        1,
+        Forms!frm_query_SP!txttodate
+    )
+ORDER BY Store_SP_maintenance.type, Store_SP_maintenance.out_date;
+
+--------------------------------------------------
+QUERY: QrySpareParts_NOW
+SQL: SELECT failure_points.model, Store_SP.type, Sum(Nz(Store_SP.count_in, 0)) AS SumOfcount_in
+FROM failure_points INNER JOIN Store_SP ON failure_points.type = Store_SP.type
+GROUP BY failure_points.model, Store_SP.type
+ORDER BY failure_points.model, Store_SP.type;
+
+--------------------------------------------------
+QUERY: QrySpareParts_out
+SQL: PARAMETERS [Start_Date] DateTime, [End_Date] DateTime;
+SELECT Year([out_date]) AS السنة, Month([out_date]) AS الشهر, Store_SP.type AS [قطعة الغيار], Sum(Nz(Store_SP.count_in,0))*-1 AS [مجموع قطع الغيار المنصرفة]
+FROM Store_SP
+WHERE Store_SP.out_date >= DateValue([Start_Date])
+    AND Store_SP.out_date < DateAdd(
+        "d",
+        1,
+        DateValue([End_Date])
+    )
+GROUP BY Year([out_date]), Month([out_date]), Store_SP.type
+ORDER BY Store_SP.type, Year([out_date]), Month([out_date]);
+
+--------------------------------------------------
+QUERY: QrySpareParts_out_dateperiod
+SQL: PARAMETERS [Start Date] DateTime, [End Date] DateTime;
+SELECT Year([out_date]) & '/' & Month([out_date]) & '/' & Day([out_date]) AS [Date], Store_SP.type, ConcatenateNotes(Store_SP.type, DateValue([out_date])) AS Notes, Sum(Nz(Store_SP.count_in, 0)) * -1 AS [العدد الكلي للقطع], Sum(IIf(Store_SP.serial Like "*مجاني*", Nz(Store_SP.count_in, 0), 0)) * -1 AS [عدد القطع بدون مقابل], ( Sum(Nz(Store_SP.count_in, 0)) * -1
+      - Sum(IIf(Store_SP.serial Like "*مجاني*", Nz(Store_SP.count_in, 0), 0)) * -1
+    ) AS [عدد القطع بمقابل]
+FROM Store_SP
+WHERE Store_SP.out_date >= DateValue([Start Date])
+    AND Store_SP.out_date < DateAdd("d", 1, DateValue([End Date]))
+GROUP BY Year([out_date]) & '/' & Month([out_date]) & '/' & Day([out_date]), Store_SP.type, ConcatenateNotes(Store_SP.type, DateValue([out_date]))
+ORDER BY Year([out_date]) & '/' & Month([out_date]) & '/' & Day([out_date]) DESC , Store_SP.type;
+
+--------------------------------------------------
+QUERY: QrySpareParts_out_Detailed
+SQL: PARAMETERS [ادخل السنة المراد إخرج تقريرها] Long, [ادخل رقم الشهر المراد إخرج تقريره] Long;
+SELECT DISTINCT Q.type AS [قطعة الغيار], Q.out_date AS [تاريخ التغيير], Q.notes AS [رقم الماكينة], Q.count_in * -1 AS [عدد قطع الغيار], Q.Serial AS [تفاصيل الدفع], Q.الجزء_الثالث, IIf(Q.Serial Like "*مجاني*", "بدون مقابل", "بمقابل") AS [بمقابل/بدون مقابل], Assets.Owner AS [اسم العميل]
+FROM Query_ExtractThirdPart AS Q INNER JOIN Assets ON Q.الجزء_الثالث = Assets.bkcode
+WHERE Q.out_date >= DateSerial(
+        [ادخل السنة المراد إخرج تقريرها],
+        [ادخل رقم الشهر المراد إخرج تقريره],
+        1
+    )
+    AND Q.out_date < DateAdd(
+        "m",
+        1,
+        DateSerial(
+            [ادخل السنة المراد إخرج تقريرها],
+            [ادخل رقم الشهر المراد إخرج تقريره],
+            1
+        )
+    )
+ORDER BY Q.type;
+
+--------------------------------------------------
+QUERY: QrySpareParts_out_Detailed_N
+SQL: SELECT Store_SP.type AS [قطعة الغيار], Store_SP.out_date AS [تاريخ التغيير], Store_SP.notes AS [رقم الماكينة], Store_SP.count_in * -1 AS [عدد قطع الغيار], Store_SP.Serial AS [تفاصيل الدفع], IIf(
+        InStr(Store_SP.serial, "-") > 0,
+        Left(Store_SP.serial, InStr(Store_SP.serial, "-") - 1),
+        Store_SP.serial
+    ) AS [بمقابل/بدون مقابل]
+FROM Store_SP
+WHERE Store_SP.out_date >= Forms!frm_query_SP!txtfromdate
+    AND Store_SP.out_date < DateAdd(
+        "d",
+        1,
+        Forms!frm_query_SP!txttodate
+    )
+ORDER BY Store_SP.type, Store_SP.out_date;
+
+--------------------------------------------------
+QUERY: QrySpareParts_out_month
+SQL: PARAMETERS [EnterMonth] Long;
+SELECT Year([out_date]) AS [Year], Month([out_date]) AS [Month], Store_SP.type, Sum(Nz(Store_SP.count_in,0))*-1 AS SumOfcount_in_Neg
+FROM Store_SP
+WHERE (((Store_SP.out_date)>=DateSerial(Year(Date()),[EnterMonth],1) And (Store_SP.out_date)<DateAdd("m",1,DateSerial(Year(Date()),[EnterMonth],1))))
+GROUP BY Year([out_date]), Month([out_date]), Store_SP.type
+ORDER BY Year([out_date]), Month([out_date]), Store_SP.type;
+
+--------------------------------------------------
+QUERY: QrySpareParts_out_monthly
+SQL: PARAMETERS [Enter Year] Long, [Enter Month] Long;
+SELECT Store_SP.type, ConcatenateNotesMonth(Store_SP.type, [Enter Year], [Enter Month]) AS Notes, Year(Store_SP.out_date) & "/" & Month(Store_SP.out_date) AS Expr2, Sum(Nz(Store_SP.count_in, 0)) * -1 AS SumOfcount_in, failure_points.price, Sum(Nz(Store_SP.count_in, 0)) * -1 *
+        Nz(failure_points.price, 0) AS TotalPrice, failure_points.fees
+FROM failure_points INNER JOIN Store_SP ON failure_points.type = Store_SP.type
+WHERE Store_SP.out_date >= DateSerial([Enter Year], [Enter Month], 1)
+    AND Store_SP.out_date < DateAdd(
+        "m",
+        1,
+        DateSerial([Enter Year], [Enter Month], 1)
+    )
+GROUP BY Store_SP.type, ConcatenateNotesMonth(Store_SP.type, [Enter Year], [Enter Month]), Year(Store_SP.out_date) & "/" & Month(Store_SP.out_date), failure_points.price, failure_points.fees
+ORDER BY Year(Store_SP.out_date) & "/" & Month(Store_SP.out_date), Store_SP.type;
+
+--------------------------------------------------
+QUERY: QrySpareParts_out_or
+SQL: SELECT Store_SP.type, Sum(Store_SP.count_in) AS SumOfcount_in, Year([out_date]) AS [year], Month([out_date]) AS [Month], tbl_sp_prices.price, [SumOfcount_in]*-[price] AS [Total Price]
+FROM tbl_sp_prices INNER JOIN Store_SP ON tbl_sp_prices.sp = Store_SP.type
+GROUP BY Store_SP.type, Year([out_date]), Month([out_date]), tbl_sp_prices.price
+HAVING (((Year([out_date]))=[ادخل السنة]) AND ((Month([out_date]))=[ ادخل رقم الشهر المراد إخرج تقريره]));
+
+--------------------------------------------------
+QUERY: qrySpareparts_out_totals
+SQL: SELECT QrySpareParts_out.[قطعة الغيار], Sum(QrySpareParts_out.[مجموع قطع الغيار المنصرفة]) AS Total
+FROM QrySpareParts_out
+GROUP BY QrySpareParts_out.[قطعة الغيار];
+
+--------------------------------------------------
+QUERY: QrySPinquiry
+SQL: SELECT Store_SP.notes, Store_SP.type, Store_SP.out_date, Store_SP.Serial
+FROM Store_SP
+WHERE (((Store_SP.notes)=[ادخل مسلسل الماكينة]))
+ORDER BY Store_SP.out_date DESC;
+
+--------------------------------------------------
+QUERY: QryStatistics_Payment
+SQL: PARAMETERS [ادخل رقم الشهر المطلوب اخراج تقريره] Long;
+SELECT payments.payer AS [اسم المودع], IIf(payments.payment_place="ضامن",DateSerial(2000+CInt(Mid(payments.ref_num,13,2)),CInt(Mid(payments.ref_num,11,2)),CInt(Mid(payments.ref_num,9,2))),DateSerial(CInt(Left(payments.ref_num,4)),CInt(Mid(payments.ref_num,5,2)),CInt(Mid(payments.ref_num,7,2)))) AS [تاريخ الايداع], payments.payment_amount AS [قيمة الايداع], payments.payment_reason AS [نوع قطعة الغيار], payments.ref_num AS [رقم الحركة], payments.payment_place AS [البنك/البريد]
+FROM payments
+WHERE (((payments.payment_date)>=DateSerial(Year(Date()),[ادخل رقم الشهر المطلوب اخراج تقريره],1) And (payments.payment_date)<DateAdd("m",1,DateSerial(Year(Date()),[ادخل رقم الشهر المطلوب اخراج تقريره],1))));
+
+--------------------------------------------------
+QUERY: QryStatistics_Payment_N
+SQL: SELECT payments.ID, payments.payer AS [اسم المودع], payments.payment_date AS [تاريخ الإيداع], payments.payment_amount AS [قيمة الايداع], payments.payment_reason AS [نوع قطعة الغيار], payments.ref_num AS [رقم الحركة], payments.payment_place AS [البنك/البريد], payments.pos_number AS [رقم الماكينة], payments.send_date AS [تاريخ التسجيل]
+FROM payments
+WHERE (((payments.payment_place)="البريد" Or (payments.payment_place)="ضامن") And ((payments.send_date)>=Forms!frm_query_SP!txtfromdate And (payments.send_date)<=Forms!frm_query_sp!txttodate));
+
+--------------------------------------------------
+QUERY: QryStatistics_Replacements
+SQL: PARAMETERS [ادخل الشهر المطلوب عرض استبدال الماكينات خلاله] Long;
+SELECT Temp_transfer.POSCode, Temp_transfer.OldPOS, Temp_transfer.NewPOS, Year([Transfer_Date]) AS Expr1, Month([transfer_date]) AS Expr2, Temp_transfer.Notes, Temp_transfer.OldType
+FROM Temp_transfer
+WHERE Temp_transfer.Transfer_Date >= DateSerial(
+        Year(Date()),
+        [ادخل الشهر المطلوب عرض استبدال الماكينات خلاله],
+        1
+    )
+    AND Temp_transfer.Transfer_Date < DateAdd(
+        "m",
+        1,
+        DateSerial(
+            Year(Date()),
+            [ادخل الشهر المطلوب عرض استبدال الماكينات خلاله],
+            1
+        )
+    );
+
+--------------------------------------------------
+QUERY: QryStatistics_TMS
+SQL: SELECT refund.bkcode, refund.bkname, refund.bkposid, refund.loaf_amount, refund.sender, Month([order_date]) AS Expr2, Year([order_date]) AS Expr1
+FROM refund
+WHERE (((refund.loaf_amount) Not Like "*ماكينه*") AND ((Month([order_date]))=[ادخل رقم الشهر المراد اخراج تقريره]) AND ((Year([order_date]))=Year(Now())));
+
+--------------------------------------------------
+QUERY: QryTamUser
+SQL: SELECT Assets.[POS ID] AS Expr1, Assets.[POS-ID_2], Assets.pexchange AS Expr2, Right([Grocer Number],8) AS [User], Assets.[Supply Office] AS Expr3, Assets.[Grocer Number] AS Expr4, Assets.Comments, Assets.POS, Assets.POS_2
+FROM Assets
+WHERE ((([Assets].[active])=Yes))
+ORDER BY Assets.[Supply Office];
+
+--------------------------------------------------
+QUERY: QryTemptrans+معدات تم احلالها
+SQL: SELECT Temp_transfer.*, [معدات تم إحلالها].*
+FROM [معدات تم إحلالها] INNER JOIN Temp_transfer ON [معدات تم إحلالها].serial = Temp_transfer.OldPOS
+WHERE (((Temp_transfer.NewPOS) Like "5f*"));
+
+--------------------------------------------------
+QUERY: QryTempTransfer_first
+SQL: SELECT Temp_transfer.NewPOS, First(Temp_transfer.Transfer_Date) AS FirstOfTransfer_Date
+FROM Temp_transfer
+GROUP BY Temp_transfer.NewPOS
+ORDER BY First(Temp_transfer.Transfer_Date);
+
+--------------------------------------------------
+QUERY: qryUpdateRequired
+SQL: SELECT qryNewVer.Version
+FROM qryNewVer LEFT JOIN qryCurVer ON qryNewVer.[Version] = qryCurVer.[Version]
+WHERE (((qryCurVer.Version) Is Null));
+
+--------------------------------------------------
+QUERY: qryWeeklySIMStatus
+SQL: SELECT Assets.Comments, Assets.[Grocer Number] AS [رقم التاجر], Assets.[POS ID] AS [رقم ماكينة التموين1], Assets.[POS-ID_2] AS [رقم ماكينة التموين2], Assets.Cell_type AS [نوع شريحة1], Assets.Cell_Serial AS [مسلسل شريحة1], Assets.[Cell_type-2] AS [نوع شريحة2], Assets.[cell_2-ser] AS [مسلسل شريحة2], Assets.pexchange AS [كود الاستبدال], Assets.expid1 AS [كود الماكينة استبدال1], Assets.expid2 AS [كود الماكينة استيدال2]
+FROM Assets
+WHERE ((([Assets].[active])=Yes));
+
+--------------------------------------------------
+QUERY: query_after_maintenance_dates
+SQL: SELECT Assets.dep AS الادارة, Assets.bkcode AS [رقم المخبز], Assets.Comments AS [اسم المخبز], Temp_transfer.NewPOS, Assets.telephone_1, Assets.telephone_2, Temp_transfer.Transfer_Date
+FROM Assets INNER JOIN Temp_transfer ON Assets.Comments = Temp_transfer.POSCode
+WHERE (((Temp_transfer.NewPOS) Like "2K??????" Or (Temp_transfer.NewPOS) Like "3C??????") And ((Temp_transfer.Transfer_Date) Between Forms!frm_query_after_maintenance_delivery!txtfromdate And Forms!frm_query_after_maintenance_delivery!txttodate))
+ORDER BY Temp_transfer.Transfer_Date;
+
+--------------------------------------------------
+QUERY: Query_ExtractThirdPart
+SQL: SELECT Store_SP.*, Trim(Mid([Serial], 
+           InStr([Serial], "-") + 
+           InStr(Mid([Serial], InStr([Serial], "-") + 1), "-") + 1, 
+           InStr(Mid([Serial], 
+                     InStr([Serial], "-") + 
+                     InStr(Mid([Serial], InStr([Serial], "-") + 1), "-") + 1), "-") - 1)) AS الجزء_الثالث
+FROM Store_SP;
+
+--------------------------------------------------
+QUERY: query_issues_dates
+SQL: SELECT T.GrocerName AS [اسم المخبز], T.POSN AS [رقم الماكينة], T.IssueDate AS [تاريخ حدوث العطل], T.NoteG AS [تفاصيل العطل], T.ActionDate AS [تاريخ اصلاح العطل], Q.FaultCount AS [عدد مرات حدوث العطل], T.ActionType
+FROM [TransAction] AS T INNER JOIN (SELECT
+            TransAction.GrocerName,
+            TransAction.POSN,
+            Count(*) AS FaultCount
+        FROM
+            TransAction
+        WHERE
+            TransAction.ActionType = "اصلاح عطل"
+            AND TransAction.IssueDate >= DateValue(Forms!frm_query_issues!txtfromdate)
+            AND TransAction.IssueDate < DateAdd(
+                "d",
+                1,
+                DateValue(Forms!frm_query_issues!txttodate)
+            )
+        GROUP BY
+            TransAction.GrocerName,
+            TransAction.POSN
+    )  AS Q ON (T.POSN = Q.POSN) AND (T.GrocerName = Q.GrocerName)
+WHERE T.ActionType = "اصلاح عطل"
+    AND T.IssueDate >= DateValue(Forms!frm_query_issues!txtfromdate)
+    AND T.IssueDate < DateAdd(
+        "d",
+        1,
+        DateValue(Forms!frm_query_issues!txttodate)
+    )
+ORDER BY T.IssueDate;
+
+--------------------------------------------------
+QUERY: query_link maintenance with temp
+SQL: PARAMETERS [ادخل اسم التاجر المراد الاستعلام عنه] Text ( 255 ), [ادخل رقم الماكينة المراد الاستعلام عنها] Text ( 255 );
+SELECT Temp_transfer.POSCode, Temp_transfer.OldPOS, Temp_transfer.NewPOS, Maintenance.[Checked Out Date], Maintenance.[Checked In Date], Maintenance.Notes, Assets.bkcode
+FROM Assets INNER JOIN (Maintenance INNER JOIN Temp_transfer ON Maintenance.[Unit Serial] = Temp_transfer.OldPOS) ON Assets.Comments = Temp_transfer.POSCode
+WHERE Temp_transfer.POSCode Like "*" & Nz([ادخل اسم التاجر المراد الاستعلام عنه], "") & "*"
+    AND Temp_transfer.OldPOS Like "*" & Nz([ادخل رقم الماكينة المراد الاستعلام عنها], "") & "*";
+
+--------------------------------------------------
+QUERY: query_maintenance_dates
+SQL: SELECT Assets.bkcode AS [رقم المخبز], Assets.Comments AS [اسم المخبز], Temp_transfer.OldPOS AS [رقم الماكينة], Temp_transfer.NewType AS [نوع الماكينة], Temp_transfer.Transfer_Date AS [تاريخ حدوث العطل], Temp_transfer.Notes AS [تفاصيل العطل], Temp_transfer.Transfer_Date AS [تاريخ تسليم الماكينة], Temp_transfer.NewPOS AS [مسلسل الماكينة الجديدة], Assets.telephone_1 AS [تليفون المخبز]
+FROM Assets INNER JOIN Temp_transfer ON Assets.Comments = Temp_transfer.POSCode
+WHERE Temp_transfer.Transfer_Date >= DateValue(Forms!frm_query_maintenance!txtfromdate)
+    AND Temp_transfer.Transfer_Date < DateAdd(
+        "d",
+        1,
+        DateValue(Forms!frm_query_maintenance!txttodate)
+    )
+ORDER BY Temp_transfer.Transfer_Date;
+
+--------------------------------------------------
+QUERY: query_on_the_GO
+SQL: SELECT Assets.bkcode, Assets.Comments, Assets.POSID, Assets.[POS-ID_2], Assets.Cell_type, Assets.Cell_Serial, Assets.[cell_2-ser], Assets.[Cell_type-2], [pos1+2].POS
+FROM [pos1+2] INNER JOIN Assets ON ([pos1+2].bkcode = Assets.bkcode) AND ([pos1+2].POS = Assets.POS_2)
+WHERE (((Assets.bkcode) Like "*" & [ادخل كود المخبز المراد الاستعلام عنها] & "*") AND ((Assets.Comments) Like "*" & [ادخل اسم التاجر المراد الاستعلام عنه] & "*") AND (([pos1+2].POS) Like "*" & [ادخل رقم الماكينة المراد الاستعلام عنها] & "*"));
+
+--------------------------------------------------
+QUERY: query_payment
+SQL: SELECT DateValue(payments.payment_date) AS [تاريخ الدفع], Sum(payments.payment_amount) AS [المبلغ المفوع], payments.payer AS [القائم بالدفع], payments.policy AS [اسم التاجر], payments.payment_reason AS [سبب الدفع], payments.procedure_maker AS [القائم بالتسجيل], payments.ref_num AS [رقم العملية], payments.payment_place AS [مكان الدفع], payments.pos_number AS [رقم الماكينة]
+FROM payments
+WHERE payments.payment_date >= DateValue(Forms!frm_payment_entry!txtfromdate)
+    AND payments.payment_date < DateAdd("d", 1, DateValue(Forms!frm_payment_entry!txttodate))
+GROUP BY DateValue(payments.payment_date), payments.payer, payments.policy, payments.payment_reason, payments.procedure_maker, payments.ref_num, payments.payment_place, payments.pos_number
+ORDER BY DateValue(payments.payment_date);
+
+--------------------------------------------------
+QUERY: query_supply_police
+SQL: SELECT Temp_transfer.POSCode, Temp_transfer.OldPOS, Temp_transfer.NewPOS, Maintenance.[Checked Out Date], Maintenance.[Checked In Date], Maintenance.Notes
+FROM Maintenance INNER JOIN Temp_transfer ON Maintenance.[Unit Serial] = Temp_transfer.OldPOS
+WHERE (((Temp_transfer.POSCode) Like "*" & [ادخل اسم التاجر المراد الاستعلام عنه] & "*")) OR (((Temp_transfer.OldPOS) Like "*" & [ادخل رقم الماكينة المراد الاستعلام عنها] & "*"));
+
+--------------------------------------------------
+QUERY: query_transAction
+SQL: SELECT Assets.SupplyOffice, Assets.Address, Assets.bkcode, TransAction.GrocerName, TransAction.POSN, TransAction.Place, TransAction.ActionType, TransAction.IssueDate, TransAction.ActionDate, TransAction.NoteG, TransAction.NoteD, TransAction.Fees, TransAction.Paid, TransAction.FeesAmount, TransAction.Procedure
+FROM Assets INNER JOIN [TransAction] ON Assets.Comments = TransAction.GrocerName;
+
+--------------------------------------------------
+QUERY: query_transAction_supply
+SQL: SELECT Assets.SupplyOffice, Assets.bkcode, TransAction.GrocerName, TransAction.POSN, TransAction.Place, TransAction.ActionType, TransAction.IssueDate, TransAction.ActionDate, TransAction.NoteG, TransAction.NoteD, TransAction.Procedure, Year([IssueDate]) AS Expr1, Month([IssueDate]) AS Expr2
+FROM Assets INNER JOIN [TransAction] ON Assets.Comments = TransAction.GrocerName
+WHERE (((TransAction.ActionType) Not Like "صيانة أولية") AND ((Year([IssueDate]))=2021));
+
+--------------------------------------------------
+QUERY: ready for maintenance
+SQL: SELECT Store_POS.faulty, Store_POS.Serial, Store_POS.faulty_detils, Store_POS.faulty_detils.Value AS Expr1, Store_POS.notes
+FROM Store_POS
+GROUP BY Store_POS.faulty, Store_POS.Serial, Store_POS.faulty_detils.Value, Store_POS.notes
+HAVING (((Store_POS.faulty)=True))
+ORDER BY Store_POS.faulty;
+
+--------------------------------------------------
+QUERY: sim1_2_3_4
+SQL: SELECT Assets.cell_serial, Assets.cell_type,Assets.bkcode,Assets.comments FROM Assets;
+UNION ALL
+ SELECT Assets.[cell_2-ser], Assets.[cell_type-2],Assets.bkcode,Assets.comments FROM Assets;
+union allSELECT Assets.cell_serial3, Assets.cell_type3,Assets.bkcode,Assets.comments FROM Assets;
+UNION ALL SELECT Assets.cell_serial4, Assets.cell_type4,Assets.bkcode,Assets.comments FROM Assets;
+
+--------------------------------------------------
+QUERY: sort by delegate
+SQL: SELECT *
+FROM Assets
+ORDER BY Assets.[مندوب خدمات التجار];
+
+--------------------------------------------------
+QUERY: sort_sup-name
+SQL: SELECT *
+FROM [By Grocer Name]
+ORDER BY [By Grocer Name].[Supply Office], [By Grocer Name].[First Name];
+
+--------------------------------------------------
+QUERY: SORT_supply+owner
+SQL: SELECT *
+FROM (SELECT Assets.*, [Copy Of Assets].Owner AS [Owner_Copy Of Assets] FROM Assets INNER JOIN [Copy Of Assets] ON Assets.ID=[Copy Of Assets].ID)  AS [Etisalat-Replacement+Signal]
+ORDER BY [Etisalat-Replacement+Signal].[Supply Office], [Etisalat-Replacement+Signal].Owner;
+
+--------------------------------------------------
+QUERY: transreport
+SQL: SELECT TransAction.GrocerName, TransAction.POSN, TransAction.IssueDate, TransAction.ActionType, TransAction.NoteG, Assets.bkcode
+FROM Assets INNER JOIN [TransAction] ON Assets.Comments = TransAction.GrocerName
+WHERE (((TransAction.ActionType)="اصلاح عطل"));
+UNION ALL SELECT Temp_transfer.POSCode, Temp_transfer.OldPOS, Maintenance.[Checked Out Date], Maintenance.[Unit Type], Maintenance.Notes, Assets.bkcode
+FROM Assets INNER JOIN (Temp_transfer INNER JOIN Maintenance ON Temp_transfer.OldPOS = Maintenance.[Unit Serial]) ON Assets.Comments = Temp_transfer.POSCode;
+
+--------------------------------------------------
+QUERY: UnifiedAssets
+SQL: SELECT supplyoffice, bkcode, bk_type, dep, nationalD, address, telephone_1, contact_person, owner, pos AS POS_Serial
+FROM Assets
+UNION ALL
+SELECT supplyoffice, bkcode, bk_type, dep, nationalD, address, telephone_1, contact_person, owner, pos_2 AS POS_Serial
+FROM Assets
+UNION ALL SELECT supplyoffice, bkcode, bk_type, dep, nationalD, address, telephone_1, contact_person, owner, pos_3 AS POS_Serial
+FROM Assets;
+
+--------------------------------------------------
+QUERY: union1
+SQL: SELECT TransAction.GrocerName, TransAction.POSN, TransAction.IssueDate, TransAction.ActionType, TransAction.NoteG
+FROM [TransAction]
+WHERE (((TransAction.ActionType)="اصلاح عطل"))
+UNION ALL SELECT Temp_transfer.POSCode, Temp_transfer.OldPOS, Maintenance.[Checked Out Date], Maintenance.[Unit Type], Maintenance.Notes
+FROM Temp_transfer INNER JOIN Maintenance ON Temp_transfer.OldPOS = Maintenance.[Unit Serial];
+
+--------------------------------------------------
+QUERY: who is on
+SQL: SELECT Log.UserName AS Expr1, Log.startdate AS Expr2
+FROM Log;
+

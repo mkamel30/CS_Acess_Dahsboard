@@ -1,0 +1,173 @@
+﻿=== REPORTS IN Bread_DB.accdb ===
+REPORT: ~TMPCLP437721 | Created: 11-May-25 3:15:19 PM | Updated: 11-May-25 3:15:19 PM
+REPORT: Copy Of QrySpareParts_out1 | Created: 22-May-25 11:14:38 AM | Updated: 22-May-25 11:14:38 AM
+REPORT: deliverymemo_bk | Created: 06-Nov-23 10:15:05 AM | Updated: 25-Feb-24 10:10:34 AM
+REPORT: Gatedeliverymemo | Created: 06-Nov-23 10:14:34 AM | Updated: 06-Nov-23 10:14:37 AM
+REPORT: Maintenance | Created: 21-May-25 10:37:01 AM | Updated: 21-May-25 10:37:01 AM
+REPORT: Maintenance_filtered | Created: 06-Nov-23 10:14:40 AM | Updated: 06-Nov-23 10:14:41 AM
+REPORT: Maintenance_filtered_V2 | Created: 06-Nov-23 10:14:41 AM | Updated: 06-Nov-23 10:14:42 AM
+REPORT: POS_in_maintenance | Created: 06-Nov-23 10:14:42 AM | Updated: 06-Nov-23 10:14:43 AM
+REPORT: qry_pos_search-assets subreport | Created: 06-Nov-23 10:14:44 AM | Updated: 06-Nov-23 10:14:45 AM
+REPORT: qry_pos_search-maintenance subreport | Created: 06-Nov-23 10:14:45 AM | Updated: 06-Nov-23 10:14:46 AM
+REPORT: qry_pos_search-store subreport | Created: 06-Nov-23 10:14:47 AM | Updated: 06-Nov-23 10:14:47 AM
+REPORT: qry_pos_search-temptrans subreport | Created: 06-Nov-23 10:14:48 AM | Updated: 06-Nov-23 10:14:49 AM
+REPORT: ready for maintenance | Created: 06-Nov-23 10:14:49 AM | Updated: 06-Nov-23 10:14:50 AM
+REPORT: rep_bakeries_internal_maintenance | Created: 06-Nov-23 10:14:50 AM | Updated: 06-Nov-23 10:14:51 AM
+REPORT: rep_bakeries_replacements | Created: 06-Nov-23 10:14:52 AM | Updated: 13-Dec-23 11:41:48 AM
+REPORT: rep_pos_data | Created: 06-Nov-23 10:14:53 AM | Updated: 06-Nov-23 10:14:53 AM
+REPORT: return_bk | Created: 06-Nov-23 10:14:54 AM | Updated: 10-Mar-25 12:00:42 PM
+REPORT: rptInstallments | Created: 20-May-25 9:55:55 AM | Updated: 20-May-25 9:55:55 AM
+REPORT: rptpayments | Created: 20-May-25 9:55:51 AM | Updated: 20-May-25 9:55:51 AM
+REPORT: rptreceipt | Created: 27-May-25 2:46:26 PM | Updated: 27-May-25 2:46:26 PM
+REPORT: RptSpareParts_out_MONTH | Created: 20-May-25 9:55:43 AM | Updated: 20-May-25 9:55:43 AM
+REPORT: Temp_transfer | Created: 06-Nov-23 10:14:55 AM | Updated: 01-Jan-24 10:52:42 AM
+REPORT: Temp_transfer_Filtered | Created: 06-Nov-23 10:14:56 AM | Updated: 28-Dec-23 2:00:08 PM
+REPORT: Temp_transferARG | Created: 31-Jul-25 3:53:09 PM | Updated: 31-Jul-25 3:53:09 PM
+REPORT: Totals_New | Created: 08-Jul-25 8:31:40 AM | Updated: 08-Jul-25 8:31:40 AM
+REPORT: TransactionReport | Created: 06-Nov-23 10:14:57 AM | Updated: 06-Nov-23 10:14:58 AM
+
+=== FORMS IN Bread_DB.accdb ===
+FORM: Assets Form | Created: 24-Sep-25 12:26:41 PM | Updated: 24-Sep-25 12:26:41 PM
+FORM: Assets Form_10082025 | Created: 01-Jun-25 8:33:47 AM | Updated: 01-Jun-25 8:33:47 AM
+FORM: Contact Details | Created: 06-Nov-23 10:02:02 AM | Updated: 06-Nov-23 10:02:02 AM
+FORM: Contact List | Created: 06-Nov-23 10:02:07 AM | Updated: 06-Nov-23 10:02:07 AM
+FORM: convert_request | Created: 06-Nov-23 10:02:10 AM | Updated: 06-Nov-23 10:02:11 AM
+FORM: frm_card_loss | Created: 06-Nov-23 10:02:14 AM | Updated: 06-Nov-23 10:02:15 AM
+FORM: frm_card_payment_entry | Created: 06-Nov-23 10:02:18 AM | Updated: 06-Nov-23 10:02:18 AM
+FORM: frm_EOD | Created: 06-Nov-23 10:02:21 AM | Updated: 06-Nov-23 10:02:21 AM
+FORM: frm_Fleet | Created: 19-Dec-24 11:17:09 AM | Updated: 19-Dec-24 11:18:09 AM
+FORM: frm_FLEET_MAKER | Created: 29-Oct-24 12:14:53 PM | Updated: 29-Oct-24 12:14:53 PM
+FORM: frm_lostSIM_payment_entry | Created: 23-Jun-25 1:01:42 PM | Updated: 23-Jun-25 1:01:42 PM
+FORM: frm_maintenance_prepayment | Created: 27-Dec-23 3:38:28 PM | Updated: 27-Dec-23 3:38:29 PM
+FORM: frm_MaintenanceSpareParts_entry | Created: 08-Apr-25 11:54:56 AM | Updated: 08-Apr-25 11:54:56 AM
+FORM: frm_newbakery_inject | Created: 06-Nov-23 10:02:32 AM | Updated: 06-Nov-23 10:02:33 AM
+FORM: frm_payment_entry | Created: 26-Feb-25 11:34:00 AM | Updated: 26-Feb-25 11:34:03 AM
+FORM: frm_pos_serach_result | Created: 06-Nov-23 10:02:38 AM | Updated: 26-Nov-23 1:59:53 PM
+FORM: frm_query_after_maintenance_delivery | Created: 06-Nov-23 10:02:40 AM | Updated: 06-Nov-23 10:02:40 AM
+FORM: frm_query_issues | Created: 06-Nov-23 10:02:42 AM | Updated: 06-Nov-23 10:02:42 AM
+FORM: frm_query_maintenance | Created: 20-May-25 10:04:35 AM | Updated: 20-May-25 10:04:35 AM
+FORM: frm_query_SP | Created: 20-May-25 10:04:32 AM | Updated: 20-May-25 10:04:32 AM
+FORM: frm_sim_serach_result | Created: 19-Feb-24 3:56:28 PM | Updated: 19-May-24 2:22:24 PM
+FORM: frm_SpareParts_calc | Created: 20-May-25 10:04:31 AM | Updated: 20-May-25 10:04:31 AM
+FORM: frm_SpareParts_payment_entry | Created: 23-Jun-25 12:27:20 PM | Updated: 23-Jun-25 12:27:20 PM
+FORM: frm_SpareParts_payment_entry_Manual | Created: 06-Nov-23 10:02:51 AM | Updated: 16-Nov-23 11:37:30 AM
+FORM: frm_SpareParts_payment_entry_store | Created: 16-Sep-25 8:32:09 AM | Updated: 16-Sep-25 8:32:09 AM
+FORM: frm_store_pos_inject | Created: 20-May-25 10:04:30 AM | Updated: 20-May-25 10:04:30 AM
+FORM: frm_trade_insert | Created: 20-May-25 10:04:24 AM | Updated: 20-May-25 10:04:24 AM
+FORM: frmBackupRestore | Created: 01-Jul-26 1:49:27 PM | Updated: 01-Jul-26 1:49:27 PM
+FORM: frmBridgeSelection | Created: 04-Nov-24 3:42:20 PM | Updated: 04-Nov-24 3:42:20 PM
+FORM: frmHidden | Created: 06-Nov-23 10:02:56 AM | Updated: 06-Nov-23 10:02:56 AM
+FORM: frmIdentifier | Created: 06-Nov-23 10:02:58 AM | Updated: 08-May-25 10:26:49 AM
+FORM: frmMaintenanceManagement | Created: 08-Apr-25 11:54:58 AM | Updated: 08-Apr-25 11:55:00 AM
+FORM: frmMoveToTrash | Created: 26-Nov-25 3:07:47 PM | Updated: 26-Nov-25 3:07:47 PM
+FORM: frmMoveToTrash_old | Created: 28-May-25 12:16:45 PM | Updated: 28-May-25 12:16:45 PM
+FORM: frmNewPosRequest | Created: 20-May-25 10:04:23 AM | Updated: 20-May-25 10:04:23 AM
+FORM: frmPaperRolls | Created: 20-May-25 10:04:21 AM | Updated: 20-May-25 10:04:21 AM
+FORM: frmPayment | Created: 06-Nov-23 10:03:03 AM | Updated: 13-Dec-23 11:27:13 AM
+FORM: frmPOS_Search | Created: 06-Nov-23 10:03:05 AM | Updated: 06-Nov-23 10:03:05 AM
+FORM: frmPSAM | Created: 06-Nov-23 10:03:06 AM | Updated: 06-Nov-23 10:03:06 AM
+FORM: frmPSearch | Created: 06-Nov-23 10:03:08 AM | Updated: 28-Dec-23 8:59:06 AM
+FORM: frmSIM_Search | Created: 06-Nov-23 10:03:10 AM | Updated: 06-Nov-23 10:03:10 AM
+FORM: frmSP_Prices | Created: 28-Dec-23 2:05:17 PM | Updated: 28-Dec-23 2:19:31 PM
+FORM: frmStore_PR | Created: 20-May-25 10:04:17 AM | Updated: 20-May-25 10:04:17 AM
+FORM: frmTMS_request | Created: 06-Nov-23 10:03:11 AM | Updated: 11-Nov-24 11:39:09 AM
+FORM: frmTradeUpload | Created: 20-May-25 10:04:16 AM | Updated: 20-May-25 10:04:16 AM
+FORM: Gates | Created: 06-Nov-23 10:03:13 AM | Updated: 06-Nov-23 10:03:13 AM
+FORM: INFOS | Created: 26-Dec-23 1:48:54 PM | Updated: 04-Aug-24 11:13:38 AM
+FORM: internal_transfer | Created: 06-Nov-23 10:03:23 AM | Updated: 06-Nov-23 10:03:24 AM
+FORM: maintainance_return_user | Created: 06-Nov-23 10:03:28 AM | Updated: 06-Nov-23 10:03:28 AM
+FORM: MoveToMaintance | Created: 26-Oct-25 1:53:18 PM | Updated: 26-Oct-25 1:53:18 PM
+FORM: MoveToStock | Created: 06-Nov-23 10:03:33 AM | Updated: 06-Nov-23 10:03:33 AM
+FORM: Note_bk | Created: 06-Nov-23 10:03:34 AM | Updated: 06-Nov-23 10:03:35 AM
+FORM: out_contacts | Created: 06-Nov-23 10:03:38 AM | Updated: 06-Nov-23 10:03:38 AM
+FORM: pop_frm_tmp | Created: 06-Nov-23 10:03:40 AM | Updated: 06-Nov-23 10:21:26 AM
+FORM: pop_transfer | Created: 06-Nov-23 10:03:45 AM | Updated: 11-Nov-24 3:25:32 PM
+FORM: pop_transfer_3rdPOS | Created: 11-Nov-24 10:59:08 AM | Updated: 27-Nov-24 11:36:41 AM
+FORM: pop_transfer_POS | Created: 17-Jun-25 2:39:53 PM | Updated: 17-Jun-25 2:39:53 PM
+FORM: pop_transfer_sim | Created: 11-Nov-24 10:59:19 AM | Updated: 11-Nov-24 10:59:22 AM
+FORM: qry_pos_search_inttranssf | Created: 06-Nov-23 10:03:56 AM | Updated: 26-Nov-23 1:55:08 PM
+FORM: qry_pos_search_paymentssf | Created: 06-Nov-23 10:03:58 AM | Updated: 26-Nov-23 1:55:08 PM
+FORM: qry_pos_search_recycledsf | Created: 06-Nov-23 10:04:00 AM | Updated: 26-Nov-23 1:55:09 PM
+FORM: qry_pos_search_storesf | Created: 06-Nov-23 10:04:02 AM | Updated: 06-Nov-23 10:04:02 AM
+FORM: qry_pos_search_tradesf | Created: 06-Nov-23 10:04:04 AM | Updated: 26-Nov-23 1:55:09 PM
+FORM: qry_pos_search-assets subform | Created: 06-Nov-23 10:04:06 AM | Updated: 06-Nov-23 10:04:07 AM
+FORM: qry_pos_search-assets subform1 | Created: 06-Nov-23 10:04:08 AM | Updated: 06-Nov-23 10:04:08 AM
+FORM: qry_pos_search-assets subform2 | Created: 06-Nov-23 10:04:10 AM | Updated: 26-Nov-23 1:59:55 PM
+FORM: qry_pos_search-storesf | Created: 06-Nov-23 10:04:12 AM | Updated: 06-Nov-23 10:04:12 AM
+FORM: qry_pos_search-temptrans subform | Created: 06-Nov-23 10:04:13 AM | Updated: 06-Nov-23 10:04:13 AM
+FORM: qry_pos_search-temptrans subform1 | Created: 06-Nov-23 10:04:15 AM | Updated: 26-Nov-23 1:59:15 PM
+FORM: qry_sim_search_assetssf | Created: 19-Feb-24 3:59:27 PM | Updated: 19-May-24 2:22:24 PM
+FORM: qry_sim_search_storesf | Created: 06-Nov-23 10:04:18 AM | Updated: 19-May-24 2:22:24 PM
+FORM: qry_sim_search_tradesf | Created: 06-Nov-23 10:04:20 AM | Updated: 19-May-24 2:22:24 PM
+FORM: qry_sim_search-temptranssf | Created: 19-Feb-24 3:56:30 PM | Updated: 19-May-24 2:22:30 PM
+FORM: query_link maintenance with temp2 | Created: 06-Nov-23 10:04:23 AM | Updated: 06-Nov-23 10:04:24 AM
+FORM: query_on_the_GO | Created: 06-Nov-23 10:04:26 AM | Updated: 20-Dec-23 9:46:41 AM
+FORM: Reset_Stock_request | Created: 06-Nov-23 10:04:27 AM | Updated: 06-Nov-23 10:04:27 AM
+FORM: rptpayment_loader | Created: 25-Nov-25 10:58:46 AM | Updated: 25-Nov-25 10:58:46 AM
+FORM: rptpayments | Created: 25-Nov-25 10:58:48 AM | Updated: 25-Nov-25 10:58:48 AM
+FORM: start | Created: 27-May-25 11:05:49 AM | Updated: 27-May-25 11:05:49 AM
+FORM: stock_addition_request | Created: 06-Nov-23 10:04:32 AM | Updated: 06-Nov-23 10:04:32 AM
+FORM: stock_refund_request | Created: 06-Nov-23 10:04:35 AM | Updated: 06-Nov-23 10:04:35 AM
+FORM: stock_refund_request-back | Created: 06-Nov-23 10:04:36 AM | Updated: 06-Nov-23 10:04:37 AM
+FORM: STORE | Created: 06-Nov-23 10:04:38 AM | Updated: 08-May-25 10:36:31 AM
+FORM: Store_POS | Created: 06-Nov-23 10:04:40 AM | Updated: 08-May-25 10:36:31 AM
+FORM: Store_Power Adapter | Created: 06-Nov-23 10:04:42 AM | Updated: 06-Nov-23 10:04:42 AM
+FORM: Store_Sim | Created: 06-Nov-23 10:04:43 AM | Updated: 08-May-25 10:36:35 AM
+FORM: Totals_POS count | Created: 06-Nov-23 10:04:47 AM | Updated: 06-Nov-23 10:04:47 AM
+FORM: Transaction | Created: 20-Mar-25 1:33:50 PM | Updated: 06-Apr-25 10:35:20 AM
+FORM: TransactionReportForm | Created: 06-Nov-23 10:04:51 AM | Updated: 06-Nov-23 10:04:51 AM
+
+=== MODULES IN Bread_DB.accdb ===
+MODULE: BackupDB
+MODULE: BackupDB_cls
+MODULE: basJStreetAccessRelinker
+MODULE: compareandinsert
+MODULE: Converted Macro- about
+MODULE: functions
+MODULE: modSpareParts
+MODULE: Module_BackupRestore
+MODULE: Module1
+MODULE: rptopened
+MODULE: SetTimer
+MODULE: ShowUsers
+MODULE: SPcounter
+MODULE: strFormName
+MODULE: User Log
+
+=== LINKED TABLES AND PATHS ===
+LINKED TABLE: Assets -> Assets (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: AuthorizedUsers -> AuthorizedUsers (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: closed_history -> closed_history (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: Contacts -> Contacts (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: Copy Of Contacts -> Copy Of Contacts (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: failure_points -> failure_points (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: Filters -> Filters (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: Gates -> Gates (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: InOutLog -> InOutLog (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: Maintenance -> Maintenance (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: Mfailure_points -> Mfailure_points (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: note_bk -> note_bk (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: payments -> payments (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: refund -> refund (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: reset -> reset (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: Settings -> Settings (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: Store_POS -> Store_POS (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: Store_Sim -> Store_Sim (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: Store_SP -> Store_SP (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: Store_SP_maintenance -> Store_SP_maintenance (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: tblClient_type -> tblClient_type (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: tblEOD -> tblEOD (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: tblFaults -> tblFaults (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: tblFixes -> tblFixes (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: tblFleet -> tblFleet (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: tblflm -> tblflm (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: tblFuel_type -> tblFuel_type (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: tblInstallments -> tblInstallments (;DATABASE=\\SHARE\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LOCAL TABLE: tblVersion
+LINKED TABLE: tblVersionX -> tblVersion (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: Temp_transfer -> Temp_transfer (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LOCAL TABLE: TempTable
+LINKED TABLE: Trade -> Trade (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: Trade_BR -> Trade (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: TransAction -> TransAction (;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)
+LINKED TABLE: معدات تم إحلالها -> معدات تم إحلالها (;DATABASE=\\SHARE\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb)

@@ -1,0 +1,37 @@
+﻿=== TABLEDEFS IN Bread_DB.accdb (48 Total) ===
+TABLE: Assets | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: Assets
+TABLE: AuthorizedUsers | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: AuthorizedUsers
+TABLE: closed_history | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: closed_history
+TABLE: Contacts | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: Contacts
+TABLE: Copy Of Contacts | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: Copy Of Contacts
+TABLE: failure_points | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: failure_points
+TABLE: Filters | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: Filters
+TABLE: Gates | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: Gates
+TABLE: InOutLog | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: InOutLog
+TABLE: Maintenance | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: Maintenance
+TABLE: Mfailure_points | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: Mfailure_points
+TABLE: note_bk | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: note_bk
+TABLE: payments | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: payments
+TABLE: refund | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: refund
+TABLE: reset | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: reset
+TABLE: Settings | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: Settings
+TABLE: Store_POS | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: Store_POS
+TABLE: Store_Sim | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: Store_Sim
+TABLE: Store_SP | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: Store_SP
+TABLE: Store_SP_maintenance | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: Store_SP_maintenance
+TABLE: tblClient_type | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: tblClient_type
+TABLE: tblEOD | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: tblEOD
+TABLE: tblFaults | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: tblFaults
+TABLE: tblFixes | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: tblFixes
+TABLE: tblFleet | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: tblFleet
+TABLE: tblflm | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: tblflm
+TABLE: tblFuel_type | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: tblFuel_type
+TABLE: tblInstallments | Connect: ;DATABASE=\\SHARE\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: tblInstallments
+TABLE: tblVersion | Connect:  | Source: 
+TABLE: tblVersionX | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: tblVersion
+TABLE: Temp_transfer | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: Temp_transfer
+TABLE: TempTable | Connect:  | Source: 
+TABLE: Trade | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: Trade
+TABLE: Trade_BR | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: Trade
+TABLE: TransAction | Connect: ;DATABASE=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: TransAction
+TABLE: معدات تم إحلالها | Connect: ;DATABASE=\\SHARE\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb | Source: معدات تم إحلالها

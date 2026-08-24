@@ -1,0 +1,12 @@
+﻿[
+  {"faultid": "1", "FaultName": "الاتصال والشبكة"},
+  {"faultid": "2", "FaultName": "مدخل البيانات"},
+  {"faultid": "3", "FaultName": "السوفت وير"},
+  {"faultid": "4", "FaultName": "الشاشة"},
+  {"faultid": "5", "FaultName": "الشحن"},
+  {"faultid": "6", "FaultName": "الطابعة"},
+  {"faultid": "7", "FaultName": "جسم الماكينة"},
+  {"faultid": "8", "FaultName": "قارئ البطاقات"},
+  {"faultid": "9", "FaultName": "لوحة مفاتيح"},
+  {"faultid": "10", "FaultName": "مدخل الطاقة"}
+]

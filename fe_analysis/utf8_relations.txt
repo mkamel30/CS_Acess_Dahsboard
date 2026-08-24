@@ -1,0 +1,7 @@
+﻿=== RELATIONS IN Bread_DB.accdb (2 Total) ===
+--------------------------------------------------
+RELATION: MSysNavPaneGroupCategoriesMSysNavPaneGroups | Primary: MSysNavPaneGroupCategories -> Foreign: MSysNavPaneGroups
+   Field: Id ===> GroupCategoryID
+--------------------------------------------------
+RELATION: MSysNavPaneGroupsMSysNavPaneGroupToObjects | Primary: MSysNavPaneGroups -> Foreign: MSysNavPaneGroupToObjects
+   Field: Id ===> GroupID

@@ -1,0 +1,7 @@
+node_modules/
+*.log
+cloudflared.exe
+branch_database.db-shm
+branch_database.db-wal
+.DS_Store
+Thumbs.db
