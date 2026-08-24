@@ -2867,6 +2867,8 @@ app.post('/api/sync/delta', express.json({ limit: '50mb' }), async (req, res) =>
             type: 'cloud_delta_applied',
             changesCount: appliedCount,
             timestamp: new Date().toISOString()
+        });
+
         // Log to sync_history for cloud telemetry
         try {
             await runQuery(`
