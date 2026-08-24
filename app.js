@@ -338,6 +338,38 @@ function initClock() {
 // ==========================================
 // 3. NAVIGATION & GLOBAL SEARCH
 // ==========================================
+// 4. NAVIGATION & TAB SWITCHING
+// ==========================================
+function switchTab(tabName) {
+    if (!tabName) return;
+    const navItem = document.querySelector(`.nav-item[data-tab="${tabName}"]`);
+    if (navItem) {
+        navItem.click();
+    } else {
+        const navItems = document.querySelectorAll('.nav-item');
+        const tabContents = document.querySelectorAll('.tab-content');
+        navItems.forEach(n => {
+            if (n.getAttribute('data-tab') === tabName) n.classList.add('active');
+            else n.classList.remove('active');
+        });
+        tabContents.forEach(c => c.classList.remove('active'));
+        const target = document.getElementById(`tab-${tabName}`);
+        if (target) target.classList.add('active');
+        AppState.currentTab = tabName;
+        
+        if (tabName === 'dashboard') loadDashboard();
+        else if (tabName === 'branch-warehouse') loadWarehouseInventory();
+        else if (tabName === 'sim-warehouse') loadSimsInventory();
+        else if (tabName === 'hq-maintenance') loadHqMaintenanceInventory();
+        else if (tabName === 'installments') loadInstallmentsDashboard();
+        else if (tabName === 'spare-parts-inventory') loadSparePartsInventory();
+        else if (tabName === 'sync-monitor') loadSyncMonitor();
+        else if (tabName === 'data-explorer') loadDataExplorer();
+        else if (tabName === 'settings') loadSettings();
+    }
+}
+window.switchTab = switchTab;
+
 function initNavigation() {
     const navItems = document.querySelectorAll('.nav-item');
     const tabContents = document.querySelectorAll('.tab-content');

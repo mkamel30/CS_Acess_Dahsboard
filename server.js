@@ -524,6 +524,9 @@ app.post('/api/sync/run', async (req, res) => {
         const result = await syncEngine.syncFromAccessDatabase(db);
         res.json(result);
     } catch (err) {
+        if (err.message && err.message.includes('قيد التنفيذ')) {
+            return res.json({ success: true, inProgress: true, message: err.message });
+        }
         res.status(500).json({ success: false, error: err.message });
     }
 });
