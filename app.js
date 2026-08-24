@@ -53,17 +53,17 @@ const MONTH_MAP = {
     jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
 };
 
-function formatDateDDMMYYYY(val, includeTime = false) {
+function formatDateDDMMYYYY(val, includeTime = false, asHtml = false) {
     if (!val || val === '-' || val === 'null' || val === 'undefined') return '-';
     let str = String(val).trim();
     if (!str) return '-';
 
     let day = '', month = '', year = '', timeStr = '';
 
-    // Match time if present (e.g. "1:05:40 PM" or "10:00:00 AM" or "14:30:00")
+    // Match time if present (e.g. "1:05:40 PM" or "10:00:00 AM" or "14:30:00" or "10:18:00 ص")
     const timeMatch = str.match(/(\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:AM|PM|am|pm|ص|م))?)/i);
     if (timeMatch) {
-        timeStr = timeMatch[1].replace(/AM/i, 'ص').replace(/PM/i, 'م');
+        timeStr = timeMatch[1].replace(/AM/i, 'ص').replace(/PM/i, 'م').trim();
         str = str.replace(timeMatch[0], '').trim();
     }
 
@@ -117,7 +117,13 @@ function formatDateDDMMYYYY(val, includeTime = false) {
     if (day && month && year) {
         const formattedDate = `${day}-${month}-${year}`;
         if (includeTime && timeStr) {
-            return `\u200E${formattedDate}  \u200E${timeStr}`;
+            if (asHtml) {
+                return `<span class="dt-badge"><bdi class="dt-date">${formattedDate}</bdi><span class="dt-sep">•</span><bdi class="dt-time"><i data-lucide="clock" style="width:10px;height:10px;vertical-align:middle;margin-left:2px;color:var(--color-primary);"></i>${timeStr}</bdi></span>`;
+            }
+            return `\u200F${formattedDate} \u200E${timeStr}`;
+        }
+        if (asHtml) {
+            return `<bdi class="dt-date">${formattedDate}</bdi>`;
         }
         return formattedDate;
     }
@@ -131,71 +137,7 @@ function formatDateTimeCell(val) {
     let str = String(val).trim();
     if (!str) return '<span style="color:var(--text-muted);">-</span>';
 
-    let day = '', month = '', year = '', timeStr = '';
-
-    // Match time if present
-    const timeMatch = str.match(/(\d{1,2}:\d{2}(?::\d{2})?(?:\s*(?:AM|PM|am|pm|ص|م))?)/i);
-    if (timeMatch) {
-        timeStr = timeMatch[1].replace(/AM/i, 'ص').replace(/PM/i, 'م').trim();
-        str = str.replace(timeMatch[0], '').trim();
-    }
-
-    // Pattern 1: "DD-Mon-YY" or "DD-Mon-YYYY"
-    const dMonYMatch = str.match(/^(\d{1,2})[-/]([a-zA-Z]{3,})[-/](\d{2,4})/);
-    if (dMonYMatch) {
-        day = dMonYMatch[1].padStart(2, '0');
-        const mKey = dMonYMatch[2].toLowerCase().substring(0, 3);
-        month = MONTH_MAP[mKey] || '01';
-        let y = dMonYMatch[3];
-        if (y.length === 2) y = (parseInt(y) > 50 ? '19' : '20') + y;
-        year = y;
-    } 
-    // Pattern 2: "Mon-YY-DD"
-    else if (/^[a-zA-Z]{3,}[-/]\d{2,4}[-/]\d{1,2}/.test(str)) {
-        const parts = str.split(/[-/]/);
-        const mKey = parts[0].toLowerCase().substring(0, 3);
-        month = MONTH_MAP[mKey] || '01';
-        let y = parts[1];
-        if (y.length === 2) y = (parseInt(y) > 50 ? '19' : '20') + y;
-        year = y;
-        day = parts[2].padStart(2, '0');
-    } 
-    // Pattern 3: "YYYY-MM-DD"
-    else if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(str)) {
-        const parts = str.split(/[-/]/);
-        year = parts[0];
-        month = parts[1].padStart(2, '0');
-        day = parts[2].substring(0, 2).padStart(2, '0');
-    } 
-    // Pattern 4: "DD-MM-YYYY"
-    else if (/^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}/.test(str)) {
-        const parts = str.split(/[-/]/);
-        day = parts[0].padStart(2, '0');
-        month = parts[1].padStart(2, '0');
-        let y = parts[2];
-        if (y.length === 2) y = (parseInt(y) > 50 ? '19' : '20') + y;
-        year = y;
-    } else {
-        const rawTs = str.includes('Z') || str.includes('T') ? str : str.replace(' ', 'T') + 'Z';
-        const dObj = new Date(rawTs);
-        if (!isNaN(dObj.getTime())) {
-            day = String(dObj.getUTCDate()).padStart(2, '0');
-            month = String(dObj.getUTCMonth() + 1).padStart(2, '0');
-            year = String(dObj.getUTCFullYear());
-        }
-    }
-
-    if (day && month && year) {
-        const formattedDate = `${day}-${month}-${year}`;
-        return `
-            <div style="display:inline-flex; flex-direction:column; gap:2px; font-family:var(--font-en); white-space:nowrap; direction:ltr; text-align:right;">
-                <span style="font-weight:700; color:var(--md-sys-color-on-surface); font-size:12px; letter-spacing:0.3px;">${formattedDate}</span>
-                ${timeStr ? `<span style="font-size:11px; color:var(--text-muted); font-weight:600;"><i data-lucide="clock" style="width:10px;height:10px;vertical-align:middle;margin-right:2px;color:var(--color-primary);"></i> ${timeStr}</span>` : ''}
-            </div>
-        `;
-    }
-
-    return `<span style="font-family:var(--font-en); font-size:12px;">${val}</span>`;
+    return formatDateDDMMYYYY(val, true, true);
 }
 window.formatDateTimeCell = formatDateTimeCell;
 
@@ -340,7 +282,7 @@ function initTheme() {
     });
 }
 
-function formatCairoDateTime(dateInput) {
+function formatCairoDateTime(dateInput, asHtml = true) {
     if (!dateInput) return '-';
     try {
         let d;
@@ -350,20 +292,30 @@ function formatCairoDateTime(dateInput) {
         } else {
             d = new Date(dateInput);
         }
-        if (isNaN(d.getTime())) return String(dateInput);
+        if (isNaN(d.getTime())) return formatDateDDMMYYYY(dateInput, true, asHtml);
 
-        return d.toLocaleString('ar-EG', {
-            timeZone: 'Africa/Cairo',
-            year: 'numeric',
-            month: 'numeric',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true
-        });
+        const options = { timeZone: 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true };
+        const parts = new Intl.DateTimeFormat('en-US', options).formatToParts(d);
+        const map = {};
+        parts.forEach(p => map[p.type] = p.value);
+
+        const day = map.day;
+        const month = map.month;
+        const year = map.year;
+        const hour = map.hour;
+        const min = map.minute;
+        const sec = map.second;
+        const ampm = map.dayPeriod ? (map.dayPeriod.toLowerCase() === 'pm' ? 'م' : 'ص') : '';
+
+        const formattedDate = `${day}-${month}-${year}`;
+        const timeStr = `${hour}:${min}:${sec} ${ampm}`.trim();
+
+        if (asHtml) {
+            return `<span class="dt-badge"><bdi class="dt-date">${formattedDate}</bdi><span class="dt-sep">•</span><bdi class="dt-time"><i data-lucide="clock" style="width:10px;height:10px;vertical-align:middle;margin-left:2px;color:var(--color-primary);"></i>${timeStr}</bdi></span>`;
+        }
+        return `\u200F${formattedDate} \u200E${timeStr}`;
     } catch (e) {
-        return String(dateInput);
+        return formatDateDDMMYYYY(dateInput, true, asHtml);
     }
 }
 window.formatCairoDateTime = formatCairoDateTime;
@@ -3306,7 +3258,7 @@ function renderExplorerTableRows() {
                 let val = row[c];
                 if (val !== null && val !== undefined) {
                     if (/date|time/i.test(c)) {
-                        val = `<span style="font-family:var(--font-en); font-weight:600;">${formatDateDDMMYYYY(val, true)}</span>`;
+                        val = formatDateDDMMYYYY(val, true, true);
                     } else {
                         val = String(val);
                     }
@@ -3520,7 +3472,7 @@ async function searchAssetTimeline(query) {
                                 ${isBoardTrace ? '<span class="badge" style="background:rgba(168,85,247,0.15); color:#a855f7; border:1px solid rgba(168,85,247,0.3); font-size:10px; margin-left:6px;"><i data-lucide="cpu" style="width:10px;height:10px;"></i> مسارات بوردة</span>' : ''}
                                 <span>${ev.title}</span>
                             </div>
-                            <span class="timeline-item-date">${formatDateDDMMYYYY(ev.date, true)}</span>
+                            <span class="timeline-item-date">${formatDateDDMMYYYY(ev.date, true, true)}</span>
                         </div>
                         <div class="timeline-item-detail">${ev.detail}</div>
                         <div class="timeline-item-meta">

@@ -1351,16 +1351,58 @@ body.light-theme .timeline-item {
     font-size: 11px;
     font-family: var(--font-en);
     font-weight: 600;
-    padding: 3px 8px;
+    padding: 4px 10px;
     border-radius: var(--md-shape-corner-small);
     background: var(--md-sys-color-surface-container-high);
     color: var(--md-sys-color-on-surface-variant);
+    display: inline-flex;
+    align-items: center;
+    direction: rtl;
+    unicode-bidi: isolate;
 }
 
 body.light-theme .timeline-item-date {
     background: #f1f5f9;
     color: #475569;
     border: 1px solid #e2e8f0;
+}
+
+.dt-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    direction: rtl;
+    unicode-bidi: isolate;
+    vertical-align: middle;
+}
+
+.dt-date {
+    font-family: var(--font-en);
+    font-weight: 700;
+    direction: ltr;
+    unicode-bidi: isolate;
+    color: inherit;
+    letter-spacing: 0.2px;
+}
+
+.dt-time {
+    font-family: var(--font-en);
+    font-size: 0.95em;
+    font-weight: 600;
+    direction: ltr;
+    unicode-bidi: isolate;
+    color: inherit;
+    opacity: 0.9;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.dt-sep {
+    opacity: 0.45;
+    font-size: 10px;
+    user-select: none;
+    margin: 0 1px;
 }
 
 .timeline-item-detail {
