@@ -627,7 +627,7 @@ async function loadDashboard() {
         if (syncRes.ok) {
             const s = await syncRes.json();
             const timeEl = document.getElementById('dash-last-sync-time');
-            if (timeEl) timeEl.textContent = s.lastSyncTime ? formatCairoDateTime(s.lastSyncTime) : 'لم تتم بعد';
+            if (timeEl) timeEl.innerHTML = s.lastSyncTime ? formatCairoDateTime(s.lastSyncTime, true) : 'لم تتم بعد';
             
             const tblEl = document.getElementById('dash-synced-tables');
             if (tblEl && s.tablesSynced) tblEl.textContent = s.tablesSynced;
@@ -3051,7 +3051,7 @@ async function loadSyncMonitor() {
             }
 
             const timeEl = document.getElementById('monitor-last-sync-time');
-            if (timeEl) timeEl.textContent = lastSync;
+            if (timeEl) timeEl.innerHTML = lastSync;
 
             const recEl = document.getElementById('monitor-total-records-count');
             if (recEl && data.totalRecords) recEl.textContent = Number(data.totalRecords).toLocaleString('ar-EG') + ' سجل';
