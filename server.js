@@ -2881,6 +2881,14 @@ app.post('/api/sync/delta', express.json({ limit: '50mb' }), async (req, res) =>
                     await runQuery(`DELETE FROM "${change.table_name}" WHERE ID = ? OR Serial = ? OR sim_serial = ?`, [change.record_id, change.record_id, change.record_id]);
                     appliedCount++;
                 }
+
+                // Also persist in cloud audit_change_logs
+                try {
+                    await runQuery(`
+                        INSERT INTO audit_change_logs (table_name, record_id, change_type, summary, old_data, new_data, source)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    `, [change.table_name, change.record_id, change.change_type || 'UPDATE', change.summary || '', change.old_data || null, change.new_data || null, change.source || 'MS_ACCESS_SYNC']);
+                } catch(e) {}
             }
         }
 
