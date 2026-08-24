@@ -485,5 +485,7 @@
   {"Serial": "3C785851", "type": "Main Board S90(البوردة الرئيسية)", "faulty": "False", "faulty_detils": "Main Board S90(البوردة الرئيسية) - HQ maintenance - 12061", "formNo": "12061", "Model": null, "count_out": "1", "out_date": "06-Aug-26 10:59:48 AM", "notes": "صيانة بتكلفة"},
   {"Serial": "2331948224", "type": "قارئ بطاقات", "faulty": "False", "faulty_detils": "قارئ بطاقات - HQ maintenance - 12061", "formNo": "12061", "Model": null, "count_out": "1", "out_date": "06-Aug-26 11:32:35 AM", "notes": "صيانة بتكلفة"},
   {"Serial": "2331947897", "type": "قارئ بطاقات", "faulty": "False", "faulty_detils": "قارئ بطاقات - HQ maintenance - 12061", "formNo": "12061", "Model": null, "count_out": "1", "out_date": "06-Aug-26 11:34:43 AM", "notes": "صيانة بتكلفة"},
-  {"Serial": "2331948548", "type": "قارئ بطاقات", "faulty": "False", "faulty_detils": "قارئ بطاقات - HQ maintenance - 12061", "formNo": "12061", "Model": null, "count_out": "1", "out_date": "06-Aug-26 11:36:06 AM", "notes": "صيانة بتكلفة"}
+  {"Serial": "2331948548", "type": "قارئ بطاقات", "faulty": "False", "faulty_detils": "قارئ بطاقات - HQ maintenance - 12061", "formNo": "12061", "Model": null, "count_out": "1", "out_date": "06-Aug-26 11:36:06 AM", "notes": "صيانة بتكلفة"},
+  {"Serial": "2330123400", "type": "جسم ماكينة امامى ", "faulty": "False", "faulty_detils": "جسم ماكينة امامى  - HQ maintenance - 12101", "formNo": "12101", "Model": null, "count_out": "1", "out_date": "24-Aug-26 10:32:05 AM", "notes": "صيانة بتكلفة"},
+  {"Serial": "2330123400", "type": "جسم ماكينة خلفى", "faulty": "False", "faulty_detils": "جسم ماكينة خلفى - HQ maintenance - 12101", "formNo": "12101", "Model": null, "count_out": "1", "out_date": "24-Aug-26 10:32:05 AM", "notes": "صيانة بتكلفة"}
 ]
