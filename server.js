@@ -2706,6 +2706,31 @@ app.post('/api/tunnel/stop', (req, res) => {
     res.json({ success: true, ...status });
 });
 
+// ==========================================
+// 5. GITHUB WEBHOOK AUTO-DEPLOY ENDPOINT
+// ==========================================
+const { exec } = require('child_process');
+
+app.post('/api/webhook/github', (req, res) => {
+    const event = req.headers['x-github-event'] || 'push';
+    console.log(`[GITHUB WEBHOOK] Received event: ${event}`);
+    
+    if (event === 'ping') {
+        return res.json({ success: true, message: 'Pong! Webhook connected successfully.' });
+    }
+    
+    res.json({ success: true, message: 'Auto-deploy triggered!' });
+    
+    const deployCmd = 'cd /var/www/smartcs && git fetch origin main && git reset --hard origin/main && npm install --production && sudo systemctl restart smartcs';
+    exec(deployCmd, (err, stdout, stderr) => {
+        if (err) {
+            console.error('[GITHUB WEBHOOK ERROR]', err.message);
+        } else {
+            console.log('[GITHUB WEBHOOK SUCCESS] Auto-deployed from GitHub:\n', stdout);
+        }
+    });
+});
+
 // Start Server (Listen on 0.0.0.0 for LAN / Network Sharing)
 app.listen(PORT, '0.0.0.0', () => {
     const localIp = getLocalIpAddress();
