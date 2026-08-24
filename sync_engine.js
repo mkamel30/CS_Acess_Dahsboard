@@ -95,10 +95,16 @@ function startFileWatcher(db) {
     const fileName = path.basename(accessPath);
     const baseTarget = fileName.toLowerCase().replace(/\.(accdb|mdb)$/, '');
 
+    let pendingResync = false;
+
     const triggerAutoSync = (reason) => {
         clearTimeout(watcherDebounceTimer);
         watcherDebounceTimer = setTimeout(async () => {
-            if (isSyncInProgress) return;
+            if (isSyncInProgress) {
+                pendingResync = true; // Don't lose this event - resync when current sync finishes
+                console.log(`[FILE WATCHER] Sync in progress, deferring resync for: ${reason}`);
+                return;
+            }
             try {
                 if (fs.existsSync(accessPath)) {
                     const curMtime = fs.statSync(accessPath).mtimeMs;
@@ -107,6 +113,12 @@ function startFileWatcher(db) {
                     const result = await performFullSync(db);
                     if (onSyncCompleteCallback && typeof onSyncCompleteCallback === 'function') {
                         onSyncCompleteCallback(result);
+                    }
+                    // If events arrived while we were syncing, run one more sync
+                    if (pendingResync) {
+                        pendingResync = false;
+                        console.log('[FILE WATCHER] Running deferred resync...');
+                        triggerAutoSync('deferred-resync');
                     }
                 }
             } catch (err) {
@@ -382,7 +394,7 @@ function runAccessExporter() {
         console.log(`[SYNC ENGINE] Starting Access Database Export from: ${activePath}`);
         const startTime = Date.now();
         
-        exec(cmd, { maxBuffer: 1024 * 1024 * 100 }, (error, stdout, stderr) => {
+        exec(cmd, { maxBuffer: 1024 * 1024 * 100, timeout: 60000 }, (error, stdout, stderr) => {
             const duration = Date.now() - startTime;
             if (error) {
                 console.error('[SYNC ENGINE] Export Error:', error.message);
@@ -481,7 +493,9 @@ async function syncTableWithDiff(db, tableName, primaryKey, jsonRecords) {
             for (const prop of Object.keys(item)) {
                 const oldVal = oldRow[prop];
                 const newVal = item[prop];
-                if (newVal !== undefined && newVal !== null && String(oldVal !== null && oldVal !== undefined ? oldVal : '') !== String(newVal)) {
+                const oldStr = (oldVal !== null && oldVal !== undefined) ? String(oldVal) : '';
+                const newStr = (newVal !== null && newVal !== undefined) ? String(newVal) : '';
+                if (oldStr !== newStr) {
                     diffFields.push({ field: prop, old: oldVal, new: newVal });
                 }
             }
@@ -1181,8 +1195,8 @@ async function pushDeltaToCloud(db, deltaChanges) {
     const config = readConfigSafely();
     if (config.isCloudServer) return; // Skip if already on cloud
 
-    const cloudEndpoint = 'http://141.147.136.170/api/sync/delta';
-    const secret = 'smartcs-cloud-secret-2026';
+    const cloudEndpoint = config.cloudEndpoint || 'https://smartcs.m-kamel.workers.dev/api/sync/delta';
+    const secret = config.syncSecret || 'smartcs-cloud-secret-2026';
     const startTime = Date.now();
 
     console.log(`[CLOUD DELTA SYNC] Pushing ${deltaChanges.length} incremental change(s) to Oracle Cloud VPS...`);

@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
 const XLSX = require('xlsx');
@@ -51,6 +52,26 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(__dirname)));
 
 app.get('/favicon.ico', (req, res) => res.status(204).end());
+
+// ==========================================
+// SECURITY: Config-driven secrets & admin guard
+// ==========================================
+function readAppConfig() {
+    try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch (e) { return {}; }
+}
+const appCfg = readAppConfig();
+const SYNC_SECRET   = appCfg.syncSecret   || process.env.SYNC_SECRET   || 'smartcs-cloud-secret-2026';
+const WEBHOOK_SECRET = appCfg.webhookSecret || process.env.WEBHOOK_SECRET || '';
+const ADMIN_SECRET   = appCfg.adminSecret   || process.env.ADMIN_SECRET   || '';
+
+// Admin-guard middleware: protects destructive endpoints
+// If ADMIN_SECRET is configured, require x-admin-secret header; otherwise allow (backward-compat)
+function requireAdmin(req, res, next) {
+    if (!ADMIN_SECRET) return next(); // No secret configured = legacy open mode
+    const provided = req.headers['x-admin-secret'] || req.query.admin_secret;
+    if (provided === ADMIN_SECRET) return next();
+    return res.status(403).json({ success: false, error: 'Forbidden: Admin authentication required' });
+}
 
 // SQLite connection
 const dbPath = path.join(__dirname, 'branch_database.db');
@@ -401,6 +422,13 @@ app.get('/api/sync/events', (req, res) => {
     });
 });
 
+// SSE Keep-Alive Heartbeat (prevents Nginx/Cloudflare from dropping idle connections)
+setInterval(() => {
+    for (const client of sseClients) {
+        try { client.write(': ping\n\n'); } catch (e) { sseClients.delete(client); }
+    }
+}, 30000);
+
 // Get current Access DB path and status
 app.get('/api/settings/db-path', (req, res) => {
     try {
@@ -457,7 +485,7 @@ app.post('/api/settings/db-path', (req, res) => {
 
 
 // Toggle Real-Time Auto-Sync
-app.post('/api/settings/auto-sync', (req, res) => {
+app.post('/api/settings/auto-sync', requireAdmin, (req, res) => {
     try {
         const { enabled } = req.body;
         const isEnabled = syncEngine.setAutoSyncEnabled(enabled, db);
@@ -472,7 +500,7 @@ app.post('/api/settings/auto-sync', (req, res) => {
 });
 
 // Factory Reset / Wipe Web Database Completely
-app.post('/api/settings/reset-database', async (req, res) => {
+app.post('/api/settings/reset-database', requireAdmin, async (req, res) => {
     try {
         const result = await syncEngine.wipeDatabase(db);
         broadcastSseEvent('sync_completed', {
@@ -2773,7 +2801,7 @@ app.get('/api/tunnel/status', (req, res) => {
     res.json({ success: true, ...tunnelMgr.getStatus() });
 });
 
-app.post('/api/tunnel/start', async (req, res) => {
+app.post('/api/tunnel/start', requireAdmin, async (req, res) => {
     try {
         const { token } = req.body || {};
         const status = await tunnelMgr.start(token);
@@ -2783,7 +2811,7 @@ app.post('/api/tunnel/start', async (req, res) => {
     }
 });
 
-app.post('/api/tunnel/stop', (req, res) => {
+app.post('/api/tunnel/stop', requireAdmin, (req, res) => {
     const status = tunnelMgr.stop();
     res.json({ success: true, ...status });
 });
@@ -2793,9 +2821,24 @@ app.post('/api/tunnel/stop', (req, res) => {
 // ==========================================
 const { exec } = require('child_process');
 
-app.post('/api/webhook/github', (req, res) => {
+app.post('/api/webhook/github', express.raw({ type: 'application/json' }), (req, res) => {
+    // HMAC-SHA256 signature verification
+    if (WEBHOOK_SECRET) {
+        const signature = req.headers['x-hub-signature-256'];
+        if (!signature) {
+            console.warn('[GITHUB WEBHOOK] Rejected: Missing signature header');
+            return res.status(401).json({ error: 'Missing signature' });
+        }
+        const body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+        const expected = 'sha256=' + crypto.createHmac('sha256', WEBHOOK_SECRET).update(body).digest('hex');
+        if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
+            console.warn('[GITHUB WEBHOOK] Rejected: Invalid signature');
+            return res.status(401).json({ error: 'Invalid signature' });
+        }
+    }
+
     const event = req.headers['x-github-event'] || 'push';
-    console.log(`[GITHUB WEBHOOK] Received event: ${event}`);
+    console.log(`[GITHUB WEBHOOK] Verified event: ${event}`);
     
     if (event === 'ping') {
         return res.json({ success: true, message: 'Pong! Webhook connected successfully.' });
@@ -2804,7 +2847,7 @@ app.post('/api/webhook/github', (req, res) => {
     res.json({ success: true, message: 'Auto-deploy triggered!' });
     
     const deployCmd = 'cd /var/www/smartcs && git fetch origin main && git reset --hard origin/main && npm install --production && sudo systemctl restart smartcs';
-    exec(deployCmd, (err, stdout, stderr) => {
+    exec(deployCmd, { timeout: 120000 }, (err, stdout, stderr) => {
         if (err) {
             console.error('[GITHUB WEBHOOK ERROR]', err.message);
         } else {
@@ -2816,7 +2859,6 @@ app.post('/api/webhook/github', (req, res) => {
 // ==========================================
 // 6. CLOUD INCREMENTAL DELTA SYNC RECEIVER
 // ==========================================
-const SYNC_SECRET = 'smartcs-cloud-secret-2026';
 
 app.post('/api/sync/delta', express.json({ limit: '50mb' }), async (req, res) => {
     const secret = req.headers['x-sync-secret'] || req.query.secret;

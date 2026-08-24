@@ -4100,6 +4100,7 @@ function initSettingsListeners() {
 function initLiveSyncStream() {
     if (!window.EventSource) return;
 
+    let reconnectDelay = 3000;
     let sse = null;
     function connect() {
         sse = new EventSource('/api/sync/events');
@@ -4108,6 +4109,7 @@ function initLiveSyncStream() {
             console.log('[LIVE SSE] Connected to server auto-sync stream.');
             const sseState = document.getElementById('settings-sse-state');
             if (sseState) sseState.textContent = 'متصل ومستعد (Live Connected)';
+            reconnectDelay = 3000;
         });
 
         sse.addEventListener('sync_completed', (e) => {
@@ -4120,6 +4122,7 @@ function initLiveSyncStream() {
                 simsDataCache = null;
                 hqMaintenanceDataCache = null;
                 installmentsDataCache = null;
+                sparePartsDataCache = null;
 
                 // 2. Show Live Toast Notification
                 showLiveSyncToast(data);
@@ -4138,7 +4141,8 @@ function initLiveSyncStream() {
             const sseState = document.getElementById('settings-sse-state');
             if (sseState) sseState.textContent = 'جاري إعادة الاتصال...';
             sse.close();
-            setTimeout(connect, 6000);
+            setTimeout(connect, reconnectDelay);
+            reconnectDelay = Math.min(reconnectDelay * 2, 30000);
         };
     }
 
@@ -5003,6 +5007,7 @@ function updateHeaderDatabaseStatus(isOnline, dbName, errorMessage) {
 window.updateHeaderDatabaseStatus = updateHeaderDatabaseStatus;
 
 async function checkSyncHealth() {
+    if (document.hidden) return; // Skip polling when tab is in background
     try {
         const res = await fetch('/api/sync/status');
         if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
