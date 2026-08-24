@@ -411,6 +411,27 @@ function readJsonSafely(filePath) {
 }
 
 /**
+ * Generate unique record identifier supporting single PK and composite signatures
+ */
+function getRowIdentifier(tableName, primaryKey, row) {
+    if (!row) return '';
+    if (tableName === 'store_sp_raw') {
+        return [row.Serial, row.type, row.in_date, row.out_date, row.notes, row.count_in, row.count_out, row.faulty_detils].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
+    }
+    if (tableName === 'store_sp_maintenance_raw') {
+        return [row.Serial, row.formNo, row.type, row.out_date, row.notes, row.faulty_detils].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
+    }
+    if (tableName === 'failure_points_raw') {
+        return [row.type, row.model].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
+    }
+    const val = row[primaryKey];
+    if (val !== undefined && val !== null && String(val).trim() !== '') {
+        return String(val).trim();
+    }
+    return String(row.id || row.ID || row.Serial || row.bkCode || row.bkcode || row.merchant_code || '');
+}
+
+/**
  * Generic Table Diff & Sync Function
  */
 async function syncTableWithDiff(db, tableName, primaryKey, jsonRecords) {
@@ -425,7 +446,7 @@ async function syncTableWithDiff(db, tableName, primaryKey, jsonRecords) {
 
     const existingMap = new Map();
     existingRows.forEach(row => {
-        const key = String(row[primaryKey] || row.id || row.ID || row.Serial || row.bkCode || row.bkcode || row.merchant_code || '');
+        const key = getRowIdentifier(tableName, primaryKey, row);
         if (key) existingMap.set(key, row);
     });
 
@@ -437,7 +458,7 @@ async function syncTableWithDiff(db, tableName, primaryKey, jsonRecords) {
     const changeLogs = [];
 
     for (const item of jsonRecords) {
-        const key = String(item[primaryKey] || item.id || item.ID || item.Serial || item.bkCode || item.bkcode || item.merchant_code || '');
+        const key = getRowIdentifier(tableName, primaryKey, item);
         if (!key) continue;
         currentMap.set(key, item);
 
@@ -1002,13 +1023,13 @@ async function performFullSync(db) {
             { file: 'payments.json', table: 'payments_raw', pk: 'ID', arabicName: 'المدفوعات والتحصيلات (Payments)' },
             { file: 'Store_POS.json', table: 'store_pos_raw', pk: 'Serial', arabicName: 'مخزن ماكينات الـ POS (Store_POS)' },
             { file: 'Store_Sim.json', table: 'store_sim_raw', pk: 'sim_serial', arabicName: 'مخزن شرائح الاتصال (Store_Sim)' },
-            { file: 'Store_SP.json', table: 'store_sp_raw', pk: 'Serial', arabicName: 'مخزن قطع الغيار (Store_SP)' },
-            { file: 'Store_SP_maintenance.json', table: 'store_sp_maintenance_raw', pk: 'faulty_detils', arabicName: 'قطع غيار الصيانة المركزية (Store_SP_maintenance)' },
+            { file: 'Store_SP.json', table: 'store_sp_raw', pk: 'COMPOSITE', arabicName: 'مخزن قطع الغيار (Store_SP)' },
+            { file: 'Store_SP_maintenance.json', table: 'store_sp_maintenance_raw', pk: 'COMPOSITE', arabicName: 'قطع غيار الصيانة المركزية (Store_SP_maintenance)' },
             { file: 'tblInstallments.json', table: 'installments_raw', pk: 'ID', arabicName: 'عقود وأقساط الماكينات (tblInstallments)' },
             { file: 'tblFaults.json', table: 'tblfaults_raw', pk: 'faultid', arabicName: 'قائمة الأعطال (tblFaults)' },
             { file: 'AuthorizedUsers.json', table: 'tblstaff_raw', pk: 'id', arabicName: 'طاقم العمل والفنيين (AuthorizedUsers)' },
             { file: 'tblFixes.json', table: 'tblfixes_raw', pk: 'FixID', arabicName: 'أنواع الإصلاحات (tblFixes)' },
-            { file: 'failure_points.json', table: 'failure_points_raw', pk: 'FailurePointID', arabicName: 'نقاط الأعطال (failure_points)' }
+            { file: 'failure_points.json', table: 'failure_points_raw', pk: 'COMPOSITE', arabicName: 'نقاط الأعطال (failure_points)' }
         ];
 
         setProgress(30, 'مقارنة وفحص التغييرات', 'بدء فحص وتتبع التغييرات ومقارنة الفروقات...', '', 3);
