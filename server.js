@@ -2731,6 +2731,73 @@ app.post('/api/webhook/github', (req, res) => {
     });
 });
 
+// ==========================================
+// 6. CLOUD INCREMENTAL DELTA SYNC RECEIVER
+// ==========================================
+const SYNC_SECRET = 'smartcs-cloud-secret-2026';
+
+app.post('/api/sync/delta', express.json({ limit: '50mb' }), async (req, res) => {
+    const secret = req.headers['x-sync-secret'] || req.query.secret;
+    if (secret !== SYNC_SECRET) {
+        return res.status(401).json({ success: false, error: 'Unauthorized: Invalid sync secret' });
+    }
+
+    const { changes, tablesData } = req.body || {};
+    let appliedCount = 0;
+
+    try {
+        if (tablesData && typeof tablesData === 'object') {
+            for (const [tbl, rows] of Object.entries(tablesData)) {
+                if (Array.isArray(rows) && rows.length > 0) {
+                    for (const row of rows) {
+                        const keys = Object.keys(row);
+                        const placeholders = keys.map(() => '?').join(', ');
+                        const quotedCols = keys.map(k => `"${k}"`).join(', ');
+                        await runQuery(`INSERT OR REPLACE INTO "${tbl}" (${quotedCols}) VALUES (${placeholders})`, Object.values(row));
+                        appliedCount++;
+                    }
+                }
+            }
+        }
+
+        if (changes && Array.isArray(changes) && changes.length > 0) {
+            for (const change of changes) {
+                if (change.table_name && change.new_data) {
+                    try {
+                        const parsed = JSON.parse(change.new_data);
+                        const keys = Object.keys(parsed);
+                        const placeholders = keys.map(() => '?').join(', ');
+                        const quotedCols = keys.map(k => `"${k}"`).join(', ');
+                        await runQuery(`INSERT OR REPLACE INTO "${change.table_name}" (${quotedCols}) VALUES (${placeholders})`, Object.values(parsed));
+                        appliedCount++;
+                    } catch(e) {}
+                } else if (change.table_name && change.change_type === 'DELETE' && change.record_id) {
+                    await runQuery(`DELETE FROM "${change.table_name}" WHERE ID = ? OR Serial = ? OR sim_serial = ?`, [change.record_id, change.record_id, change.record_id]);
+                    appliedCount++;
+                }
+            }
+        }
+
+        // Re-align high level domain entities
+        if (syncEngine && typeof syncEngine.syncHighLevelDomainEntities === 'function') {
+            await syncEngine.syncHighLevelDomainEntities(db);
+        }
+
+        // Broadcast real-time event to connected browsers
+        sendRealtimeSyncEvent('sync_completed', {
+            type: 'cloud_delta_applied',
+            changesCount: appliedCount,
+            timestamp: new Date().toISOString()
+        });
+
+        console.log(`[CLOUD DELTA SYNC] Successfully applied ${appliedCount} delta record(s) to cloud database!`);
+        res.json({ success: true, applied: appliedCount, timestamp: new Date().toISOString() });
+    } catch (err) {
+        console.error('[CLOUD DELTA SYNC ERROR]', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // Start Server (Listen on 0.0.0.0 for LAN / Network Sharing)
 app.listen(PORT, '0.0.0.0', () => {
     const localIp = getLocalIpAddress();

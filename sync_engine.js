@@ -517,7 +517,8 @@ async function syncTableWithDiff(db, tableName, primaryKey, jsonRecords) {
         inserted: insertedCount,
         updated: updatedCount,
         deleted: deletedCount,
-        total: jsonRecords.length
+        total: jsonRecords.length,
+        deltaList: changeLogs
     };
 }
 
@@ -1002,6 +1003,8 @@ async function performFullSync(db) {
 
         setProgress(30, 'مقارنة وفحص التغييرات', 'بدء فحص وتتبع التغييرات ومقارنة الفروقات...', '', 3);
 
+        let allDeltaChanges = [];
+
         for (let i = 0; i < tableConfigs.length; i++) {
             const cfg = tableConfigs[i];
             const currentPct = 30 + Math.round(((i + 1) / tableConfigs.length) * 45); // 30% to 75%
@@ -1017,6 +1020,10 @@ async function performFullSync(db) {
                     tablesCount++;
                     totalRecords += records.length;
 
+                    if (diffResult.deltaList && diffResult.deltaList.length > 0) {
+                        allDeltaChanges.push(...diffResult.deltaList);
+                    }
+
                     console.log(`[SYNC] ${cfg.table}: +${diffResult.inserted} ~${diffResult.updated} -${diffResult.deleted} (Total: ${diffResult.total})`);
 
                     if (records.length > 0) {
@@ -1031,6 +1038,12 @@ async function performFullSync(db) {
         // Step 3: Populate high-level business domain tables
         setProgress(85, 'إعادة بناء ومطابقة الكيانات', 'تحديث وتوزيع المخابز، الماكينات، والشرائح، وبلاغات الصيانة...', 'merchants & devices', 4);
         await syncHighLevelDomainEntities(db);
+
+        // Step 4: Incremental Cloud Delta Sync (Push delta directly to Cloud VPS in milliseconds)
+        if (allDeltaChanges.length > 0) {
+            setProgress(90, 'مزامنة السحابة التلقائية', `إرسال ${allDeltaChanges.length} تعديلاً فورياً إلى السيرفر السحابي...`, 'cloud_delta_sync', 4);
+            await pushDeltaToCloud(allDeltaChanges);
+        }
 
         setProgress(95, 'تحديث الإحصائيات والمؤشرات', 'إعادة حساب إحصائيات لوحة القيادة والتقارير...', 'dashboard_kpis', 5);
 
@@ -1129,11 +1142,49 @@ async function wipeDatabase(db) {
     return { success: true, message: 'تم تفريغ وتصفير قاعدة بيانات الويب بالكامل بنجاح' };
 }
 
+/**
+ * Push Incremental Delta Changes to Oracle Cloud VPS in milliseconds
+ */
+async function pushDeltaToCloud(deltaChanges) {
+    if (!deltaChanges || deltaChanges.length === 0) return;
+    const config = readConfigSafely();
+    if (config.isCloudServer) return; // Skip if already on cloud
+
+    const cloudEndpoint = 'http://141.147.136.170/api/sync/delta';
+    const secret = 'smartcs-cloud-secret-2026';
+
+    console.log(`[CLOUD DELTA SYNC] Pushing ${deltaChanges.length} incremental change(s) to Oracle Cloud VPS...`);
+    try {
+        const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
+        const response = await fetchFn(cloudEndpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-sync-secret': secret
+            },
+            body: JSON.stringify({
+                changes: deltaChanges,
+                timestamp: new Date().toISOString()
+            })
+        });
+        const data = await response.json();
+        if (data.success) {
+            console.log(`[CLOUD DELTA SYNC SUCCESS] Applied ${data.applied} change(s) in cloud database! ⚡`);
+        } else {
+            console.warn(`[CLOUD DELTA SYNC WARNING] Cloud response:`, data.error);
+        }
+    } catch (err) {
+        console.warn(`[CLOUD DELTA SYNC NOTICE] Cloud sync offline/delayed: ${err.message}`);
+    }
+}
+
 module.exports = {
     performFullSync,
     syncFromAccessDatabase: performFullSync,
     getSyncStatus: () => ({ ...lastSyncResult, isSyncInProgress, progress: syncProgress }),
     initSyncDatabase,
+    syncHighLevelDomainEntities,
+    pushDeltaToCloud,
     getAccessFilePath,
     setAccessFilePath,
     startFileWatcher,
