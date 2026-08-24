@@ -2298,6 +2298,17 @@ app.get('/api/assets/timeline', async (req, res) => {
         const placeholders = allPossibleCodes.map(() => '?').join(',');
         const timelineEvents = [];
 
+        // 0. Pre-fetch branch spare parts records to correlate with maintenance tickets
+        let allSpForAsset = [];
+        if (allPossibleCodes.length > 0) {
+            allSpForAsset = await allQuery(`
+                SELECT s.rowid as id, s.type, s.count_in, s.Serial as serial_raw, s.notes, s.out_date
+                FROM store_sp_raw s
+                WHERE s.count_in LIKE '-%' OR CAST(s.count_in AS INTEGER) < 0
+                ORDER BY s.rowid DESC
+            `);
+        }
+
         // 1. Events from transactions_raw (Complete Service History)
         if (allPossibleCodes.length > 0) {
             const transParams = [...allPossibleCodes, ...allPossibleCodes];
@@ -2318,6 +2329,51 @@ app.get('/api/assets/timeline', async (req, res) => {
 
                 const evMerchantCode = t.GrocerName || merchant?.merchant_code || '';
                 const evMerchantName = merchant?.name || (evMerchantCode ? `مخبز كود #${evMerchantCode}` : '');
+                const noteD = String(t.NoteD || '').trim();
+                const noteG = String(t.NoteG || '').trim();
+
+                // Find corresponding spare part record from store_sp_raw
+                let matchedSp = allSpForAsset.find(sp => {
+                    const s = String(sp.serial_raw || '');
+                    const n = String(sp.notes || '');
+                    const posMatch = (t.POSN && (n.includes(t.POSN) || s.includes(t.POSN)));
+                    const dateMatch = sp.out_date && t.IssueDate && (sp.out_date.substring(0, 9) === t.IssueDate.substring(0, 9));
+                    return posMatch && (dateMatch || s.includes(t.GrocerName) || (noteD && s.includes(sp.type)));
+                });
+
+                let cost_status = 'FREE';
+                let cost_badge = 'مجاني (ضمان)';
+                let receipt_number = null;
+                let replaced_part = null;
+
+                if (matchedSp) {
+                    replaced_part = matchedSp.type;
+                    const s = String(matchedSp.serial_raw || '');
+                    const rMatch = s.match(/(\d{10,20})/);
+                    if (rMatch) {
+                        receipt_number = rMatch[1];
+                        cost_status = 'PAID';
+                        cost_badge = `مسدد بمقابل (إيصال #${receipt_number})`;
+                    } else if (s.includes('مؤجل')) {
+                        cost_status = 'DEFERRED';
+                        cost_badge = 'تحصيل مؤجل ⚠️';
+                    } else {
+                        cost_status = 'FREE';
+                        cost_badge = 'مجاني (بدون مقابل - ضمان)';
+                    }
+                } else if (noteD.includes('تغير') || noteD.includes('تغيير') || noteD.includes('استبدال') || noteD.includes('تركيب')) {
+                    replaced_part = noteD.replace(/تغير|تغيير|استبدال|تركيب/g, '').trim();
+                    if (t.Fees === 'True' || parseFloat(t.FeesAmount) > 0 || t.Paid === 'True') {
+                        cost_status = 'PAID';
+                        cost_badge = `مسدد بمقابل (${t.FeesAmount || 0} جم)`;
+                    } else {
+                        cost_status = 'FREE';
+                        cost_badge = 'مجاني (بدون مقابل - ضمان)';
+                    }
+                } else if (t.Fees === 'True' || parseFloat(t.FeesAmount) > 0) {
+                    cost_status = 'PAID';
+                    cost_badge = `مسدد بمقابل (${t.FeesAmount || 0} جم)`;
+                }
 
                 timelineEvents.push({
                     type: 'MAINTENANCE',
@@ -2328,7 +2384,14 @@ app.get('/api/assets/timeline', async (req, res) => {
                     merchant_name: evMerchantName,
                     pos_serial: t.POSN || device?.serial || '',
                     merchant: evMerchantName ? `${evMerchantName} (${evMerchantCode})` : evMerchantCode,
-                    detail: `الشكوى: ${t.NoteG || 'عطل ماكينة'} | ما تم إنجازه: ${t.NoteD || 'تم الفحص والإصلاح'} | الماكينة: ${t.POSN || '-'}`,
+                    complaint: noteG || 'عطل ماكينة',
+                    resolution: noteD || 'تم الفحص والإصلاح',
+                    replaced_part: replaced_part || null,
+                    cost_status: cost_status,
+                    cost_badge: cost_badge,
+                    receipt_number: receipt_number || null,
+                    fees_amount: t.FeesAmount || '0',
+                    detail: `الشكوى: ${noteG || 'عطل ماكينة'} | ما تم إنجازه: ${noteD || 'تم الفحص والإصلاح'} | الماكينة: ${t.POSN || '-'}`,
                     icon: 'wrench'
                 });
             });

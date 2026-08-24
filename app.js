@@ -3455,6 +3455,16 @@ async function searchAssetTimeline(query) {
 
                 const nameToShow = ev.merchant_name || mer?.name || '';
 
+                let costBadgeHtml = '';
+                if (ev.cost_status === 'PAID') {
+                    const rNum = ev.receipt_number ? `<strong style="font-family:var(--font-en); font-weight:800; text-decoration:underline; cursor:pointer;" onclick="openPrintMemo('receipt', '${ev.receipt_number}')" title="انقر لطباعة الإيصال الرسمي">#${ev.receipt_number}</strong>` : (parseFloat(ev.fees_amount) > 0 ? `${ev.fees_amount} جم` : 'مسدد');
+                    costBadgeHtml = `<span class="badge inmerchant" style="background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); font-size:10px; font-weight:700; margin-left:6px;"><i data-lucide="receipt" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> مسدد بمقابل (${rNum}) ✅</span>`;
+                } else if (ev.cost_status === 'DEFERRED') {
+                    costBadgeHtml = `<span class="badge" style="background:rgba(239,68,68,0.15); color:#ef4444; border:1px solid rgba(239,68,68,0.3); font-size:10px; font-weight:700; margin-left:6px;"><i data-lucide="clock" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> تحصيل مؤجل ⚠️</span>`;
+                } else if (ev.replaced_part || ev.cost_status === 'FREE') {
+                    costBadgeHtml = `<span class="badge" style="background:rgba(6,182,212,0.15); color:#06b6d4; border:1px solid rgba(6,182,212,0.3); font-size:10px; font-weight:700; margin-left:6px;"><i data-lucide="shield-check" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> مجاني (ضمان) 🛡️</span>`;
+                }
+
                 const item = document.createElement('div');
                 item.className = 'timeline-item';
                 item.innerHTML = `
@@ -3470,11 +3480,27 @@ async function searchAssetTimeline(query) {
                                 ${isTransfer ? '<span class="badge" style="background:rgba(168,85,247,0.15); color:#a855f7; border:1px solid rgba(168,85,247,0.3); font-size:10px; margin-left:6px;"><i data-lucide="truck" style="width:10px;height:10px;"></i> نقل وتبديل</span>' : ''}
                                 ${isPayment ? '<span class="badge" style="background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); font-size:10px; margin-left:6px;"><i data-lucide="receipt" style="width:10px;height:10px;"></i> سداد مالي</span>' : ''}
                                 ${isBoardTrace ? '<span class="badge" style="background:rgba(168,85,247,0.15); color:#a855f7; border:1px solid rgba(168,85,247,0.3); font-size:10px; margin-left:6px;"><i data-lucide="cpu" style="width:10px;height:10px;"></i> مسارات بوردة</span>' : ''}
+                                ${costBadgeHtml}
                                 <span>${ev.title}</span>
                             </div>
                             <span class="timeline-item-date">${formatDateDDMMYYYY(ev.date, true, true)}</span>
                         </div>
-                        <div class="timeline-item-detail">${ev.detail}</div>
+                        <div class="timeline-item-detail">
+                            <div>${ev.detail}</div>
+                            ${ev.replaced_part ? `
+                                <div style="margin-top:6px; padding:6px 12px; background:rgba(6,182,212,0.06); border:1px solid rgba(6,182,212,0.2); border-radius:6px; font-size:11px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">
+                                    <div>
+                                        <strong style="color:#06b6d4;"><i data-lucide="cpu" style="width:12px;height:12px;vertical-align:middle;margin-left:3px;"></i> قطعة الغيار المستبدلة:</strong>
+                                        <span style="font-weight:700; color:var(--text-primary); margin-right:4px;">${ev.replaced_part}</span>
+                                    </div>
+                                    <div>
+                                        ${ev.cost_status === 'PAID' 
+                                            ? `<span style="color:#10b981; font-weight:700;"><i data-lucide="check-circle" style="width:11px;height:11px;vertical-align:middle;"></i> مسدد بمقابل ${ev.receipt_number ? `(إيصال رسمي رقم: <a href="javascript:void(0)" onclick="openPrintMemo('receipt', '${ev.receipt_number}')" style="color:#10b981; font-family:var(--font-en); font-weight:800; text-decoration:underline;">${ev.receipt_number}</a>)` : ''}</span>` 
+                                            : `<span style="color:#06b6d4; font-weight:700;"><i data-lucide="shield-check" style="width:11px;height:11px;vertical-align:middle;"></i> صيانة مجانية شاملة الضمان (بدون مقابل)</span>`}
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
                         <div class="timeline-item-meta">
                             <span><strong style="color:var(--color-primary);">كود العميل:</strong> <code style="font-family:var(--font-en); font-weight:bold; color:var(--color-primary); background:var(--md-sys-color-primary-container); padding:2px 6px; border-radius:4px;">${codeToShow}</code></span>
                             ${nameToShow ? `<span><strong style="color:var(--color-success);">اسم العميل:</strong> <span style="font-weight:600; color:var(--text-primary);">${nameToShow}</span></span>` : ''}
