@@ -2543,33 +2543,35 @@ app.get('/api/assets/timeline', async (req, res) => {
 
         // 4. Events from External Trade Logistics (trade_raw)
         if (allPossibleCodes.length > 0) {
-            const allTrade = await allQuery(`
-                SELECT t.rowid as id, t.ID as trade_id, t."Item Serial" as item_serial, t."Item Type" as item_type, t."Trade Type" as trade_type, t."Trade Location" as trade_location, t."Out Date" as out_date, t."In Date" as in_date, Quantity, "Form Number" as form_number, "IN/OUT BY" as operator, Comments
-                FROM trade_raw t
-                ORDER BY t.rowid DESC
-            `);
+            let allTrade = [];
+            try {
+                allTrade = await allQuery(`SELECT * FROM trade_raw ORDER BY rowid DESC`);
+            } catch (e) {
+                allTrade = [];
+            }
 
             allTrade.forEach(tr => {
-                const s = String(tr.item_serial || '');
-                const comments = String(tr.Comments || '');
+                const s = String(tr['Item Serial'] || tr.item_serial || tr.Serial || '');
+                const comments = String(tr.Comments || tr.notes || '');
                 const isMatch = allPossibleCodes.some(c => c && (s.includes(c) || comments.includes(c)));
                 if (isMatch) {
-                    const direction = (String(tr.trade_type || '').toLowerCase().includes('in')) ? 'وارد للمخزن' : 'صادر لجهة خارجية';
-                    let tech = tr.operator || '';
+                    const tradeType = tr['Trade Type'] || tr.trade_type || '';
+                    const direction = (String(tradeType).toLowerCase().includes('in')) ? 'وارد للمخزن' : 'صادر لجهة خارجية';
+                    let tech = tr['IN/OUT BY'] || tr.operator || '';
                     if (tech.toUpperCase() === 'MESSAM') tech = 'محمد عصام محمود فرغلي';
                     else if (tech.toUpperCase() === 'ELFAKHARANY') tech = 'أحمد فؤاد سيد الفخراني';
                     else if (tech.toUpperCase() === 'AHMEDMAHDY') tech = 'أحمد المهدي محفوظ المهدي';
 
                     timelineEvents.push({
                         type: 'LOGISTICS',
-                        title: `حركة لوجستيات (${direction}): ${tr.trade_location || 'المركز الرئيسي'}`,
-                        date: tr.in_date || tr.out_date || 'تاريخ غير محدد',
+                        title: `حركة لوجستيات (${direction}): ${tr['Trade Location'] || tr.trade_location || 'المركز الرئيسي'}`,
+                        date: tr['In Date'] || tr.in_date || tr['Out Date'] || tr.out_date || 'تاريخ غير محدد',
                         technician: tech || 'لوجستيات ومخازن',
                         merchant_code: merchant?.merchant_code || '',
                         merchant_name: merchant?.name || '',
-                        pos_serial: tr.item_serial || device?.serial || '',
-                        merchant: tr.trade_location || '',
-                        detail: `النوع: ${tr.item_type || 'POS'} | السيريال: ${tr.item_serial} | الاستمارة: ${tr.form_number || '-'} | البيان: ${tr.Comments || '-'}`,
+                        pos_serial: s || device?.serial || '',
+                        merchant: tr['Trade Location'] || tr.trade_location || '',
+                        detail: `النوع: ${tr['Item Type'] || tr.item_type || 'POS'} | السيريال: ${s} | الاستمارة: ${tr['Form Number'] || tr.form_number || '-'} | البيان: ${comments || '-'}`,
                         icon: 'package'
                     });
                 }
