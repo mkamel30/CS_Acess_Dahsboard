@@ -4112,9 +4112,9 @@ function initLiveSyncStream() {
             reconnectDelay = 3000;
         });
 
-        sse.addEventListener('sync_completed', (e) => {
+        const handleSyncEvent = (rawPayload) => {
             try {
-                const data = JSON.parse(e.data);
+                const data = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload;
                 console.log('[LIVE SSE] Real-time sync event received:', data);
 
                 // 1. Invalidate all cached datasets across modules so every tab receives fresh data
@@ -4130,12 +4130,16 @@ function initLiveSyncStream() {
                 // 3. Refresh current active tab view smoothly
                 refreshActiveTab();
 
-                // 4. Update Header Notifications & Alerts
+                // 4. Update Header Notifications & Alerts & Health
+                if (typeof checkSyncHealth === 'function') checkSyncHealth();
                 if (typeof loadNotifications === 'function') loadNotifications();
             } catch (err) {
-                console.error('[LIVE SSE] Error parsing sync_completed event:', err);
+                console.error('[LIVE SSE] Error parsing sync event:', err);
             }
-        });
+        };
+
+        sse.addEventListener('sync_completed', (e) => handleSyncEvent(e.data));
+        sse.onmessage = (e) => handleSyncEvent(e.data);
 
         sse.onerror = () => {
             const sseState = document.getElementById('settings-sse-state');
@@ -4154,7 +4158,7 @@ function showLiveSyncToast(data) {
     const toastMsg = document.getElementById('live-sync-toast-msg');
     if (!toast) return;
 
-    const changes = data.changesDetected || 0;
+    const changes = data?.changesDetected || data?.changesCount || 0;
     if (toastMsg) {
         if (changes > 0) {
             toastMsg.textContent = `تم رصد وتحديث (${changes}) حركة جديدة بالآكسيس وتحديث الشاشة فورياً.`;
@@ -4180,8 +4184,10 @@ function showLiveSyncToast(data) {
 
 function refreshActiveTab() {
     const activeNav = document.querySelector('.nav-item.active');
-    const tabName = activeNav?.getAttribute('data-tab') || 'dashboard';
+    const activePanel = document.querySelector('.tab-content.active');
+    const tabName = activeNav?.getAttribute('data-tab') || (activePanel ? activePanel.id.replace(/^tab-/, '') : 'dashboard');
 
+    console.log(`[REFRESH ACTIVE TAB] Auto-refreshing view for tab: "${tabName}"`);
     if (tabName === 'dashboard') loadDashboard();
     else if (tabName === 'branch-warehouse') loadWarehouseInventory();
     else if (tabName === 'sim-warehouse') loadSimsInventory();
