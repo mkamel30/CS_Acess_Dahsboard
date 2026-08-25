@@ -2660,20 +2660,22 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
         // If not found in assets, lookup temp_transfer_raw
         if (!detectedModel) {
             const transferModel = await getQuery(`
-                SELECT COALESCE(NewType, OldType) as model_type
-                FROM temp_transfer_raw
-                WHERE (NewPOS = ? OR OldPOS = ? OR NewPOS LIKE ? OR OldPOS LIKE ?)
-                  AND (NewType IS NOT NULL OR OldType IS NOT NULL)
+                SELECT t.*
+                FROM temp_transfer_raw t
+                WHERE (t.NewPOS = ? OR t.OldPOS = ? OR t.NewPOS LIKE ? OR t.OldPOS LIKE ?)
                 LIMIT 1
-            `, [s, s, `%${s}%`, `%${s}%`]);
+            `, [s, s, `%${s}%`, `%${s}%`]).catch(() => null);
 
-            if (transferModel && transferModel.model_type) {
-                const parts = transferModel.model_type.split('-');
-                if (parts.length >= 2) {
-                    detectedManuf = parts[0].trim();
-                    detectedModel = parts.slice(1).join('-').trim();
-                } else {
-                    detectedModel = transferModel.model_type.trim();
+            if (transferModel) {
+                const rawModelType = transferModel.NewType || transferModel.new_type || transferModel.OldType || transferModel.old_type;
+                if (rawModelType) {
+                    const parts = String(rawModelType).split('-');
+                    if (parts.length >= 2) {
+                        detectedManuf = parts[0].trim();
+                        detectedModel = parts.slice(1).join('-').trim();
+                    } else {
+                        detectedModel = String(rawModelType).trim();
+                    }
                 }
             }
         }
@@ -2685,7 +2687,7 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
                 FROM maintenance_raw
                 WHERE [Unit Serial] = ? OR [Unit Serial] LIKE ?
                 LIMIT 1
-            `, [s, `%${s}%`]);
+            `, [s, `%${s}%`]).catch(() => null);
 
             if (maintModel && maintModel.Model) {
                 detectedModel = maintModel.Model;
@@ -2732,41 +2734,34 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
 
         // 2. TAB 1: Replacements & Swaps History strictly from temp_transfer_raw (and temp_transfer)
         const transferRows = await allQuery(`
-            SELECT t.rowid as id,
-                   COALESCE(t.Transfer_Date, '-') as transfer_date,
-                   COALESCE(t.bkCode, '-') as merchant_code,
-                   COALESCE(t.bkCode, '-') as merchant_name,
-                   COALESCE(t.OldPOS, '-') as old_serial,
-                   COALESCE(t.NewPOS, '-') as new_serial,
-                   COALESCE(t.OldType, '-') as old_type,
-                   COALESCE(t.NewType, '-') as new_type,
-                   COALESCE(t.procedure, 'فني الصيانة') as technician,
-                   COALESCE(t.Notes, '-') as notes
+            SELECT t.rowid as id, t.*
             FROM temp_transfer_raw t
             WHERE t.OldPOS = ? OR t.NewPOS = ? OR t.OldPOS LIKE ? OR t.NewPOS LIKE ?
             ORDER BY t.rowid DESC
-        `, [s, s, `%${s}%`, `%${s}%`]);
+        `, [s, s, `%${s}%`, `%${s}%`]).catch(() => []);
 
         const replacements = transferRows.map(r => {
+            const oldSerial = r.OldPOS || r.old_serial || '-';
+            const newSerial = r.NewPOS || r.new_serial || '-';
             let role = 'استبدال ماكينة';
-            if (String(r.old_serial).toUpperCase() === s.toUpperCase()) {
+            if (String(oldSerial).toUpperCase() === s.toUpperCase()) {
                 role = 'ماكينة قديمة مستبدلة (تم سحبها)';
-            } else if (String(r.new_serial).toUpperCase() === s.toUpperCase()) {
+            } else if (String(newSerial).toUpperCase() === s.toUpperCase()) {
                 role = 'ماكينة بديلة منصرفة (تم تسليمها)';
             }
 
             return {
-                id: r.id,
-                date: r.transfer_date,
-                merchant_code: r.merchant_code,
-                merchant_name: r.merchant_name,
-                old_serial: r.old_serial,
-                new_serial: r.new_serial,
-                old_type: r.old_type,
-                new_type: r.new_type,
+                id: r.id || r.rowid,
+                date: r.Transfer_Date || r.transfer_date || '-',
+                merchant_code: r.bkCode || r.bkcode || r.POSCode || '-',
+                merchant_name: r.bkCode || r.bkcode || r.POSCode || '-',
+                old_serial: oldSerial,
+                new_serial: newSerial,
+                old_type: r.OldType || r.old_type || '-',
+                new_type: r.NewType || r.new_type || '-',
                 role: role,
-                technician: r.technician,
-                notes: r.notes
+                technician: r.procedure || r.procedure_maker || 'فني الصيانة',
+                notes: r.Notes || r.notes || '-'
             };
         });
 

@@ -395,12 +395,16 @@ async function initSyncDatabase(db) {
     await dbRun(db, `
         CREATE TABLE IF NOT EXISTS temp_transfer_raw (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            POSCode TEXT,
             bkCode TEXT,
             OldPOS TEXT,
             NewPOS TEXT,
             Transfer_Date TEXT,
             procedure TEXT,
+            OldType TEXT,
+            NewType TEXT,
             new_type TEXT,
+            Notes TEXT,
             notes TEXT
         );
     `);
