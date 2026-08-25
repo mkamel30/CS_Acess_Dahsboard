@@ -2588,10 +2588,10 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
         // If not found in assets, lookup temp_transfer_raw
         if (!detectedModel) {
             const transferModel = await getQuery(`
-                SELECT COALESCE(NewType, OldType) as model_type
+                SELECT new_type as model_type
                 FROM temp_transfer_raw
                 WHERE (NewPOS = ? OR OldPOS = ? OR NewPOS LIKE ? OR OldPOS LIKE ?)
-                  AND (NewType IS NOT NULL OR OldType IS NOT NULL)
+                  AND new_type IS NOT NULL
                 LIMIT 1
             `, [s, s, `%${s}%`, `%${s}%`]);
 
@@ -2666,10 +2666,10 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
                    COALESCE(t.bkCode, '-') as merchant_name,
                    COALESCE(t.OldPOS, '-') as old_serial,
                    COALESCE(t.NewPOS, '-') as new_serial,
-                   COALESCE(t.OldType, '-') as old_type,
-                   COALESCE(t.NewType, '-') as new_type,
+                   '-' as old_type,
+                   COALESCE(t.new_type, '-') as new_type,
                    COALESCE(t.procedure, 'فني الصيانة') as technician,
-                   COALESCE(t.Notes, '-') as notes
+                   COALESCE(t.notes, '-') as notes
             FROM temp_transfer_raw t
             WHERE t.OldPOS = ? OR t.NewPOS = ? OR t.OldPOS LIKE ? OR t.NewPOS LIKE ?
             ORDER BY t.rowid DESC
