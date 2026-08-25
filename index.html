@@ -2873,10 +2873,10 @@
     <!-- MODAL: DEVICE 360 DEEP-DIVE (فحص سجل وتاريخ الماكينة)     -->
     <!-- ======================================================== -->
     <div class="modal-overlay" id="modal-device-360-deepdive">
-        <div class="modal-card" style="max-width: 980px; width: 95%; max-height: 92vh;">
-            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <div class="modal-card" style="max-width: 980px; width: 95%; max-height: 90vh; max-height: 90dvh; display: flex; flex-direction: column; overflow: hidden;">
+            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; flex-shrink: 0;">
                 <div style="display:flex; align-items:center; gap:12px;">
-                    <div style="width:42px; height:42px; border-radius:12px; background:rgba(56,189,248,0.15); color:var(--md-sys-color-primary); display:flex; align-items:center; justify-content:center;">
+                    <div style="width:42px; height:42px; border-radius:12px; background:rgba(56,189,248,0.15); color:var(--md-sys-color-primary); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
                         <i data-lucide="boxes" style="width:24px; height:24px;"></i>
                     </div>
                     <div>
@@ -2890,22 +2890,22 @@
                 <button class="close-modal-btn" id="btn-close-device-360-modal"><i data-lucide="x"></i></button>
             </div>
 
-            <div class="modal-body" style="padding: 16px 20px;">
+            <div class="modal-body" style="padding: 16px 20px; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; flex: 1;">
                 <!-- 4 Navigation Sub-Tabs -->
-                <div style="display:flex; gap:8px; overflow-x:auto; border-bottom:1px solid var(--md-sys-color-outline-variant); padding-bottom:10px; margin-bottom:16px; scrollbar-width:none;">
-                    <button type="button" class="btn btn-primary dev-deepdive-tab active" data-subtab="maintenance" id="btn-dev-tab-maint" style="padding:8px 14px; font-size:12px; white-space:nowrap;">
+                <div style="display:flex; gap:8px; overflow-x:auto; border-bottom:1px solid var(--md-sys-color-outline-variant); padding-bottom:10px; margin-bottom:16px; scrollbar-width:none; -webkit-overflow-scrolling: touch;">
+                    <button type="button" class="btn btn-primary dev-deepdive-tab active" data-subtab="maintenance" id="btn-dev-tab-maint" style="padding:8px 14px; font-size:12px; white-space:nowrap; flex-shrink:0;">
                         <i data-lucide="wrench"></i>
                         <span>🛠️ صيانات وبلاغات الفرع (<span id="dev-tab-count-maint">0</span>)</span>
                     </button>
-                    <button type="button" class="btn btn-secondary dev-deepdive-tab" data-subtab="replacements" id="btn-dev-tab-rep" style="padding:8px 14px; font-size:12px; white-space:nowrap;">
+                    <button type="button" class="btn btn-secondary dev-deepdive-tab" data-subtab="replacements" id="btn-dev-tab-rep" style="padding:8px 14px; font-size:12px; white-space:nowrap; flex-shrink:0;">
                         <i data-lucide="repeat"></i>
                         <span>🔄 استبدالات وتغيير الماكينة (<span id="dev-tab-count-rep">0</span>)</span>
                     </button>
-                    <button type="button" class="btn btn-secondary dev-deepdive-tab" data-subtab="spare-parts" id="btn-dev-tab-sp" style="padding:8px 14px; font-size:12px; white-space:nowrap;">
+                    <button type="button" class="btn btn-secondary dev-deepdive-tab" data-subtab="spare-parts" id="btn-dev-tab-sp" style="padding:8px 14px; font-size:12px; white-space:nowrap; flex-shrink:0;">
                         <i data-lucide="layers"></i>
                         <span>⚙️ قطع الغيار المستبدلة (<span id="dev-tab-count-sp">0</span>)</span>
                     </button>
-                    <button type="button" class="btn btn-secondary dev-deepdive-tab" data-subtab="hq-cycles" id="btn-dev-tab-hq" style="padding:8px 14px; font-size:12px; white-space:nowrap;">
+                    <button type="button" class="btn btn-secondary dev-deepdive-tab" data-subtab="hq-cycles" id="btn-dev-tab-hq" style="padding:8px 14px; font-size:12px; white-space:nowrap; flex-shrink:0;">
                         <i data-lucide="building-2"></i>
                         <span>🏢 الصيانة المركزية بالشركة (<span id="dev-tab-count-hq">0</span>)</span>
                     </button>
@@ -2913,8 +2913,8 @@
 
                 <!-- SUB-TAB 1: Maintenance Tickets Pane -->
                 <div class="dev-subtab-pane" id="dev-pane-maintenance" style="display:block;">
-                    <div class="table-responsive" style="max-height:420px; overflow-y:auto;">
-                        <table class="data-table" style="width:100%;">
+                    <div class="table-responsive" style="max-height:420px; overflow-x:auto; overflow-y:auto; -webkit-overflow-scrolling:touch; border-radius:10px; border:1px solid var(--md-sys-color-outline-variant);">
+                        <table class="data-table" style="min-width:680px; width:100%;">
                             <thead>
                                 <tr>
                                     <th style="width:40px;">#</th>
@@ -2935,8 +2935,8 @@
 
                 <!-- SUB-TAB 2: Replacements Pane (from temp_transfer) -->
                 <div class="dev-subtab-pane" id="dev-pane-replacements" style="display:none;">
-                    <div class="table-responsive" style="max-height:420px; overflow-y:auto;">
-                        <table class="data-table" style="width:100%;">
+                    <div class="table-responsive" style="max-height:420px; overflow-x:auto; overflow-y:auto; -webkit-overflow-scrolling:touch; border-radius:10px; border:1px solid var(--md-sys-color-outline-variant);">
+                        <table class="data-table" style="min-width:680px; width:100%;">
                             <thead>
                                 <tr>
                                     <th style="width:40px;">#</th>
@@ -2957,8 +2957,8 @@
 
                 <!-- SUB-TAB 3: Spare Parts Pane -->
                 <div class="dev-subtab-pane" id="dev-pane-spare-parts" style="display:none;">
-                    <div class="table-responsive" style="max-height:420px; overflow-y:auto;">
-                        <table class="data-table" style="width:100%;">
+                    <div class="table-responsive" style="max-height:420px; overflow-x:auto; overflow-y:auto; -webkit-overflow-scrolling:touch; border-radius:10px; border:1px solid var(--md-sys-color-outline-variant);">
+                        <table class="data-table" style="min-width:680px; width:100%;">
                             <thead>
                                 <tr>
                                     <th style="width:40px;">#</th>
@@ -2980,8 +2980,8 @@
 
                 <!-- SUB-TAB 4: HQ Cycles Pane -->
                 <div class="dev-subtab-pane" id="dev-pane-hq-cycles" style="display:none;">
-                    <div class="table-responsive" style="max-height:420px; overflow-y:auto;">
-                        <table class="data-table" style="width:100%;">
+                    <div class="table-responsive" style="max-height:420px; overflow-x:auto; overflow-y:auto; -webkit-overflow-scrolling:touch; border-radius:10px; border:1px solid var(--md-sys-color-outline-variant);">
+                        <table class="data-table" style="min-width:680px; width:100%;">
                             <thead>
                                 <tr>
                                     <th style="width:40px;">#</th>
@@ -3022,6 +3022,6 @@
     </div>
 
     <!-- Main Client Application Script -->
-    <script src="app.js?v=2.8"></script>
+    <script src="app.js?v=2.9"></script>
 </body>
 </html>

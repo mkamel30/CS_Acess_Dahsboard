@@ -2473,29 +2473,109 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
         const s = serial.trim();
         if (!s) return res.status(400).json({ success: false, error: "Serial is required" });
 
-        // 1. Basic Device Info from assets_raw / devices
+        // 1. Basic Device Info from assets_raw / devices / maintenance_raw / temp_transfer_raw
         const rawAsset = await getQuery(`
             SELECT a.*,
                    COALESCE(a.bkcode, a.POSID) as clean_code,
                    COALESCE(a.Owner, a.Contact_person) as clean_owner,
                    COALESCE(a.dep, a.SupplyOffice) as clean_gov
             FROM assets_raw a
-            WHERE a.POS = ? OR a.POS_2 = ? OR a.pos_3 = ?
+            WHERE a.POS = ? OR a.POS_2 = ? OR a.pos_3 = ? OR a.POS LIKE ? OR a.POS_2 LIKE ? OR a.pos_3 LIKE ?
             LIMIT 1
-        `, [s, s, s]);
+        `, [s, s, s, `%${s}%`, `%${s}%`, `%${s}%`]);
 
-        const isSec = rawAsset && String(rawAsset.POS_2).toUpperCase() === s.toUpperCase();
-        const isTert = rawAsset && String(rawAsset.pos_3).toUpperCase() === s.toUpperCase();
+        let detectedModel = '';
+        let detectedManuf = '';
+
+        if (rawAsset) {
+            const cleanS = s.toUpperCase().replace(/^S/i, '').replace(/^M-/i, '');
+            const pos1 = String(rawAsset.POS || '').toUpperCase();
+            const pos2 = String(rawAsset.POS_2 || '').toUpperCase();
+            const pos3 = String(rawAsset.pos_3 || '').toUpperCase();
+
+            if (pos2.includes(cleanS)) {
+                detectedModel = rawAsset.Model2 || 'S90';
+                detectedManuf = rawAsset.Manufacturer2 || 'PAX';
+            } else if (pos3.includes(cleanS)) {
+                detectedModel = rawAsset.Model3 || 'S90';
+                detectedManuf = rawAsset.Manufacturer3 || 'PAX';
+            } else if (pos1.includes(cleanS)) {
+                detectedModel = rawAsset.Model || 'S90';
+                detectedManuf = rawAsset.Manufacturer || 'PAX';
+            }
+        }
+
+        // If not found in assets, lookup temp_transfer_raw
+        if (!detectedModel) {
+            const transferModel = await getQuery(`
+                SELECT COALESCE(NewType, OldType) as model_type
+                FROM temp_transfer_raw
+                WHERE (NewPOS = ? OR OldPOS = ? OR NewPOS LIKE ? OR OldPOS LIKE ?)
+                  AND (NewType IS NOT NULL OR OldType IS NOT NULL)
+                LIMIT 1
+            `, [s, s, `%${s}%`, `%${s}%`]);
+
+            if (transferModel && transferModel.model_type) {
+                const parts = transferModel.model_type.split('-');
+                if (parts.length >= 2) {
+                    detectedManuf = parts[0].trim();
+                    detectedModel = parts.slice(1).join('-').trim();
+                } else {
+                    detectedModel = transferModel.model_type.trim();
+                }
+            }
+        }
+
+        // If not found, lookup maintenance_raw
+        if (!detectedModel) {
+            const maintModel = await getQuery(`
+                SELECT Model, Manufactor
+                FROM maintenance_raw
+                WHERE [Unit Serial] = ? OR [Unit Serial] LIKE ?
+                LIMIT 1
+            `, [s, `%${s}%`]);
+
+            if (maintModel && maintModel.Model) {
+                detectedModel = maintModel.Model;
+                detectedManuf = maintModel.Manufactor || '';
+            }
+        }
+
+        // Accurate heuristic fallback based on serial prefixes in Egypt
+        if (!detectedModel) {
+            const cleanS = s.toUpperCase().replace(/^S/i, '').replace(/^M-/i, '');
+            if (cleanS.startsWith('3C') || cleanS.startsWith('3H') || cleanS.startsWith('3D')) {
+                detectedManuf = 'PAX';
+                detectedModel = 'S90';
+            } else if (cleanS.startsWith('233') || cleanS.startsWith('D230')) {
+                detectedManuf = 'PAX';
+                detectedModel = 'D230';
+            } else if (cleanS.startsWith('160') || cleanS.startsWith('Q80')) {
+                detectedManuf = 'PAX';
+                detectedModel = 'Q80';
+            } else if (cleanS.startsWith('520') || cleanS.startsWith('VX')) {
+                detectedManuf = 'Verifone';
+                detectedModel = 'VX520';
+            } else {
+                detectedManuf = 'PAX';
+                detectedModel = 'S90';
+            }
+        }
+        if (!detectedManuf) {
+            if (detectedModel.includes('S90') || detectedModel.includes('D230') || detectedModel.includes('Q80')) detectedManuf = 'PAX';
+            else if (detectedModel.includes('VX')) detectedManuf = 'Verifone';
+            else detectedManuf = 'PAX';
+        }
 
         const deviceInfo = {
             serial: s,
-            model: isSec ? (rawAsset.Model2 || 'S90') : (isTert ? (rawAsset.Model3 || '-') : (rawAsset?.Model || 'VX520')),
-            manufacturer: isSec ? (rawAsset.Manufacturer2 || 'PAX') : (isTert ? (rawAsset.Manufacturer3 || '-') : (rawAsset?.Manufacturer || 'Verifone')),
+            model: detectedModel,
+            manufacturer: detectedManuf,
             current_owner: rawAsset?.clean_owner || 'غير محدد',
             merchant_code: rawAsset?.clean_code || '-',
             government: rawAsset?.clean_gov || '-',
             acquired_date: rawAsset?.['Acquired Date'] || '-',
-            condition: rawAsset?.Condition || 'سليمة بالميدان'
+            condition: rawAsset?.Condition || 'سليمة'
         };
 
         // 2. TAB 1: Replacements & Swaps History strictly from temp_transfer_raw (and temp_transfer)
