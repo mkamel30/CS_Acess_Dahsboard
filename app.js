@@ -5004,6 +5004,13 @@ window.drilldownInstallments = drilldownInstallments;
 
 // 5. Spare Parts Inventory Drill-Down
 function drilldownSpareParts(opts = {}) {
+    if (opts.showStockModal) {
+        if (typeof openAvailableSparePartsModal === 'function') {
+            openAvailableSparePartsModal();
+        }
+        return;
+    }
+
     const { paymentStatus, movementType, partType, search, cardEl } = opts;
 
     const payFilter = document.getElementById('sp-payment-status-filter');
