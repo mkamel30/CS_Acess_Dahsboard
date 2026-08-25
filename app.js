@@ -5722,7 +5722,9 @@ function renderCustomerProfileView(data) {
     if (devices.length === 0) {
         devList.innerHTML = `<div style="text-align:center; padding:25px; color:var(--text-muted); font-size:12px;">لا توجد ماكينات مسجلة حالياً على هذا العميل</div>`;
     } else {
-        devList.innerHTML = devices.map(d => `
+        devList.innerHTML = devices.map(d => {
+            const isBranch = d.is_branch_backup || /^S[0-9A-Za-z]/i.test(d.serial);
+            return `
             <div style="background:var(--md-sys-color-surface-container-low); border:1px solid var(--md-sys-color-outline-variant); border-radius:12px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; gap:12px; transition:border-color 0.15s ease;" onmouseover="this.style.borderColor='var(--md-sys-color-primary)'" onmouseout="this.style.borderColor='var(--md-sys-color-outline-variant)'">
                 <div style="display:flex; align-items:center; gap:12px; min-width:0;">
                     <div style="width:34px; height:34px; border-radius:10px; background:rgba(56,189,248,0.15); color:var(--md-sys-color-primary); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
@@ -5732,6 +5734,7 @@ function renderCustomerProfileView(data) {
                         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                             <strong style="font-size:14px; font-family:var(--font-en); color:var(--md-sys-color-primary); letter-spacing:0.5px;">${d.serial}</strong>
                             <span class="badge inmerchant" style="font-size:10px; padding:2px 8px;">${d.slot}</span>
+                            ${isBranch ? `<span class="badge" style="background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3); font-size:10px; padding:2px 6px;">ماكينة احتياطية من الفرع (S)</span>` : ''}
                             <span class="badge" style="background:rgba(56,189,248,0.12); color:var(--md-sys-color-primary); font-size:10px; padding:2px 6px;">${d.condition || 'سليمة'}</span>
                         </div>
                         <span style="display:block; font-size:11px; color:var(--text-muted); margin-top:2px;">
@@ -5745,7 +5748,8 @@ function renderCustomerProfileView(data) {
                     <span>فحص الماكينة (360°)</span>
                 </button>
             </div>
-        `).join('');
+        `;
+        }).join('');
     }
 
     // 5. SIM Cards List (All SIMs linked)
@@ -5915,7 +5919,11 @@ function renderDeviceDeepdiveContent(data) {
 
     // Modal Header
     document.getElementById('dev-modal-serial').textContent = device_info.serial;
-    document.getElementById('dev-modal-model').textContent = `${device_info.manufacturer} ${device_info.model}`;
+    const isBranch = device_info.is_branch_backup || /^S[0-9A-Za-z]/i.test(device_info.serial);
+    const modelBadge = document.getElementById('dev-modal-model');
+    if (modelBadge) {
+        modelBadge.innerHTML = `${device_info.manufacturer} ${device_info.model} ${isBranch ? '<span style="background:rgba(245,158,11,0.25); color:#f59e0b; border:1px solid rgba(245,158,11,0.4); font-size:10px; padding:1px 6px; border-radius:6px; margin-right:6px;">ماكينة احتياطية من الفرع (S)</span>' : ''}`;
+    }
     document.getElementById('dev-modal-owner').textContent = `المالك الحالي: ${device_info.current_owner} (#${device_info.merchant_code}) • ${device_info.government}`;
 
     // Subtab counts

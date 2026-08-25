@@ -2264,6 +2264,74 @@ app.get('/api/customers/search', async (req, res) => {
     }
 });
 
+// Helper to accurately resolve POS device specs & identify Branch Buffer (S-prefix) machines
+function resolveDeviceSpecs(serial, rawAsset = null) {
+    if (!serial || serial === '-' || serial === 'null' || serial === 'undefined') {
+        return { serial: '-', model: 'غير محدد', manufacturer: '-', is_branch_backup: false, badge_tag: null };
+    }
+    const cleanRaw = String(serial).trim();
+    const isBranchBackup = /^S[0-9A-Za-z]/i.test(cleanRaw);
+    const stripped = cleanRaw.replace(/^S/i, '').replace(/^M-/i, '');
+
+    let model = '';
+    let manufacturer = '';
+
+    // 1. Check rawAsset if provided
+    if (rawAsset) {
+        const p1 = String(rawAsset.POS || '').toUpperCase();
+        const p2 = String(rawAsset.POS_2 || '').toUpperCase();
+        const p3 = String(rawAsset.pos_3 || '').toUpperCase();
+        const sUpper = stripped.toUpperCase();
+
+        if (p2.includes(sUpper) || String(rawAsset.POS_2 || '').toUpperCase().includes(cleanRaw.toUpperCase())) {
+            model = rawAsset.Model2 || '';
+            manufacturer = rawAsset.Manufacturer2 || '';
+        } else if (p3.includes(sUpper) || String(rawAsset.pos_3 || '').toUpperCase().includes(cleanRaw.toUpperCase())) {
+            model = rawAsset.Model3 || '';
+            manufacturer = rawAsset.Manufacturer3 || '';
+        } else if (p1.includes(sUpper) || String(rawAsset.POS || '').toUpperCase().includes(cleanRaw.toUpperCase())) {
+            model = rawAsset.Model || '';
+            manufacturer = rawAsset.Manufacturer || '';
+        }
+    }
+
+    // 2. Heuristic resolution based on stripped serial (rule: stripping 'S' reveals true model)
+    if (!model) {
+        const sUpper = stripped.toUpperCase();
+        if (sUpper.startsWith('3C') || sUpper.startsWith('3H') || sUpper.startsWith('3D')) {
+            manufacturer = manufacturer || 'PAX';
+            model = 'S90';
+        } else if (sUpper.startsWith('233') || sUpper.startsWith('D230')) {
+            manufacturer = manufacturer || 'PAX';
+            model = 'D230';
+        } else if (sUpper.startsWith('160') || sUpper.startsWith('Q80')) {
+            manufacturer = manufacturer || 'PAX';
+            model = 'Q80';
+        } else if (sUpper.startsWith('520') || sUpper.startsWith('VX')) {
+            manufacturer = manufacturer || 'Verifone';
+            model = 'VX520';
+        } else {
+            manufacturer = manufacturer || 'PAX';
+            model = 'S90';
+        }
+    }
+
+    if (!manufacturer) {
+        if (model.includes('S90') || model.includes('D230') || model.includes('Q80')) manufacturer = 'PAX';
+        else if (model.includes('VX')) manufacturer = 'Verifone';
+        else manufacturer = 'PAX';
+    }
+
+    return {
+        serial: cleanRaw,
+        stripped_serial: stripped,
+        model: model,
+        manufacturer: manufacturer,
+        is_branch_backup: isBranchBackup,
+        badge_tag: isBranchBackup ? 'ماكينة احتياطية من الفرع (S)' : null
+    };
+}
+
 // 2. Customer 360 Full Profile
 app.get('/api/customers/profile/:code', async (req, res) => {
     try {
@@ -2292,33 +2360,42 @@ app.get('/api/customers/profile/:code', async (req, res) => {
         // 2. Resolve all POS devices linked to this customer
         const posSet = new Map();
         if (asset.POS && asset.POS !== '-') {
+            const spec = resolveDeviceSpecs(asset.POS, asset);
             posSet.set(asset.POS, {
                 serial: asset.POS,
                 slot: 'الماكينة الرئيسية (POS 1)',
-                model: asset.Model || 'غير محدد',
-                manufacturer: asset.Manufacturer || 'Verifone',
+                model: spec.model,
+                manufacturer: spec.manufacturer,
+                is_branch_backup: spec.is_branch_backup,
+                badge_tag: spec.badge_tag,
                 condition: asset.Condition || 'سليمة',
                 acquired_date: asset['Acquired Date'] || '-',
                 pinpad: asset.PinpadSerial || '-'
             });
         }
         if (asset.POS_2 && asset.POS_2 !== '-') {
+            const spec = resolveDeviceSpecs(asset.POS_2, asset);
             posSet.set(asset.POS_2, {
                 serial: asset.POS_2,
                 slot: 'الماكينة الإضافية (POS 2)',
-                model: asset.Model2 || 'غير محدد',
-                manufacturer: asset.Manufacturer2 || 'PAX',
+                model: spec.model,
+                manufacturer: spec.manufacturer,
+                is_branch_backup: spec.is_branch_backup,
+                badge_tag: spec.badge_tag,
                 condition: 'سليمة',
                 acquired_date: '-',
                 pinpad: asset.Pinpad_2 || '-'
             });
         }
         if (asset.pos_3 && asset.pos_3 !== '-') {
+            const spec = resolveDeviceSpecs(asset.pos_3, asset);
             posSet.set(asset.pos_3, {
                 serial: asset.pos_3,
                 slot: 'الماكينة الثالثة (POS 3)',
-                model: asset.Model3 || 'غير محدد',
-                manufacturer: asset.Manufacturer3 || '-',
+                model: spec.model,
+                manufacturer: spec.manufacturer,
+                is_branch_backup: spec.is_branch_backup,
+                badge_tag: spec.badge_tag,
                 condition: 'سليمة',
                 acquired_date: '-',
                 pinpad: '-'
@@ -2334,11 +2411,14 @@ app.get('/api/customers/profile/:code', async (req, res) => {
 
         histDevices.forEach(h => {
             if (!posSet.has(h.POSN)) {
+                const spec = resolveDeviceSpecs(h.POSN, asset);
                 posSet.set(h.POSN, {
                     serial: h.POSN,
                     slot: 'ماكينة تاريخية مسجلة بالبلاغات',
-                    model: 'سجل حركات',
-                    manufacturer: '-',
+                    model: spec.model,
+                    manufacturer: spec.manufacturer,
+                    is_branch_backup: spec.is_branch_backup,
+                    badge_tag: spec.badge_tag,
                     condition: 'تاريخية',
                     acquired_date: '-',
                     pinpad: '-'
