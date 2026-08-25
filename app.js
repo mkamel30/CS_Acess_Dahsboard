@@ -832,6 +832,11 @@ async function loadDashboard() {
                     `;
                 });
                 if (alerts.length === 0) {
+                    alertsContainer.innerHTML = `<div style="color:var(--text-muted); font-size:12px; padding:15px; text-align:center;">رصيد كافة قطع الغيار في المستوى الآمن.</div>`;
+                }
+            }
+        }
+
         // 8. Load Branch Technicians Performance & SLA Cards
         if (typeof loadTechniciansPerformance === 'function') {
             loadTechniciansPerformance();
