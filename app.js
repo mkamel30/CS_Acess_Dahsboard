@@ -832,9 +832,9 @@ async function loadDashboard() {
                     `;
                 });
                 if (alerts.length === 0) {
-                    alertsContainer.innerHTML = `<div style="color:var(--text-muted); font-size:12px; padding:15px; text-align:center;">رصيد كافة قطع الغيار في المستوى الآمن.</div>`;
-                }
-            }
+        // 8. Load Branch Technicians Performance & SLA Cards
+        if (typeof loadTechniciansPerformance === 'function') {
+            loadTechniciansPerformance();
         }
 
         refreshIcons();
@@ -1789,7 +1789,6 @@ async function loadHqMaintenanceInventory() {
         if (!data.success) throw new Error(data.error || 'Failed to load HQ maintenance data');
 
         hqMaintenanceDataCache = data;
-        loadTechniciansPerformance();
 
         // 1. Update KPI Summary
         const s = data.summary;
