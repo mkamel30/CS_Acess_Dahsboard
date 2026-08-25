@@ -2870,16 +2870,40 @@ app.post('/api/sync/delta', express.json({ limit: '50mb' }), async (req, res) =>
             for (const change of changes) {
                 if (change.table_name && change.new_data) {
                     try {
-                        const parsed = JSON.parse(change.new_data);
+                        const parsed = typeof change.new_data === 'string' ? JSON.parse(change.new_data) : change.new_data;
                         const keys = Object.keys(parsed);
-                        const placeholders = keys.map(() => '?').join(', ');
-                        const quotedCols = keys.map(k => `"${k}"`).join(', ');
-                        await runQuery(`INSERT OR REPLACE INTO "${change.table_name}" (${quotedCols}) VALUES (${placeholders})`, Object.values(parsed));
-                        appliedCount++;
-                    } catch(e) {}
+                        if (keys.length > 0) {
+                            const createCols = keys.map(k => `"${k}" TEXT`).join(', ');
+                            await runQuery(`CREATE TABLE IF NOT EXISTS "${change.table_name}" (${createCols});`).catch(() => {});
+                            const existingInfo = await allQuery(`PRAGMA table_info("${change.table_name}");`).catch(() => []);
+                            const existingCols = new Set(existingInfo.map(i => i.name));
+                            for (const k of keys) {
+                                if (!existingCols.has(k)) {
+                                    await runQuery(`ALTER TABLE "${change.table_name}" ADD COLUMN "${k}" TEXT;`).catch(() => {});
+                                }
+                            }
+                            const placeholders = keys.map(() => '?').join(', ');
+                            const quotedCols = keys.map(k => `"${k}"`).join(', ');
+                            const values = Object.values(parsed).map(v => v === null || v === undefined ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v)));
+                            await runQuery(`INSERT OR REPLACE INTO "${change.table_name}" (${quotedCols}) VALUES (${placeholders})`, values);
+                            appliedCount++;
+                        }
+                    } catch(e) {
+                        console.error(`[DELTA APPLY ERROR on ${change.table_name}]:`, e.message);
+                    }
                 } else if (change.table_name && change.change_type === 'DELETE' && change.record_id) {
-                    await runQuery(`DELETE FROM "${change.table_name}" WHERE ID = ? OR Serial = ? OR sim_serial = ?`, [change.record_id, change.record_id, change.record_id]);
-                    appliedCount++;
+                    try {
+                        const existingInfo = await allQuery(`PRAGMA table_info("${change.table_name}");`).catch(() => []);
+                        const existingCols = new Set(existingInfo.map(i => i.name));
+                        const pkCandidates = ['ID', 'id', 'Serial', 'sim_serial', 'faultid', 'FixID'];
+                        const matchedPk = pkCandidates.find(c => existingCols.has(c));
+                        if (matchedPk) {
+                            await runQuery(`DELETE FROM "${change.table_name}" WHERE "${matchedPk}" = ?`, [change.record_id]);
+                            appliedCount++;
+                        }
+                    } catch(e) {
+                        console.error(`[DELTA DELETE ERROR on ${change.table_name}]:`, e.message);
+                    }
                 }
 
                 // Also persist in cloud audit_change_logs
@@ -2887,7 +2911,15 @@ app.post('/api/sync/delta', express.json({ limit: '50mb' }), async (req, res) =>
                     await runQuery(`
                         INSERT INTO audit_change_logs (table_name, record_id, change_type, summary, old_data, new_data, source)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
-                    `, [change.table_name, change.record_id, change.change_type || 'UPDATE', change.summary || '', change.old_data || null, change.new_data || null, change.source || 'MS_ACCESS_SYNC']);
+                    `, [
+                        change.table_name,
+                        change.record_id,
+                        change.change_type || 'UPDATE',
+                        change.summary || '',
+                        typeof change.old_data === 'object' ? JSON.stringify(change.old_data) : (change.old_data || null),
+                        typeof change.new_data === 'object' ? JSON.stringify(change.new_data) : (change.new_data || null),
+                        change.source || 'MS_ACCESS_SYNC'
+                    ]);
                 } catch(e) {}
             }
         }
