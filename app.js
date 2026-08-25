@@ -3530,7 +3530,7 @@ async function searchAssetTimeline(query) {
                 } else if (ev.cost_status === 'DEFERRED') {
                     costBadgeHtml = `<span class="badge" style="background:rgba(239,68,68,0.15); color:#ef4444; border:1px solid rgba(239,68,68,0.3); font-size:10px; font-weight:700; margin-left:6px;"><i data-lucide="clock" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> تحصيل مؤجل ⚠️</span>`;
                 } else if (ev.replaced_part || ev.cost_status === 'FREE') {
-                    costBadgeHtml = `<span class="badge" style="background:rgba(6,182,212,0.15); color:#06b6d4; border:1px solid rgba(6,182,212,0.3); font-size:10px; font-weight:700; margin-left:6px;"><i data-lucide="shield-check" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> مجاني (ضمان) 🛡️</span>`;
+                    costBadgeHtml = `<span class="badge" style="background:rgba(6,182,212,0.15); color:#06b6d4; border:1px solid rgba(6,182,212,0.3); font-size:10px; font-weight:700; margin-left:6px;"><i data-lucide="check" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> مجاني (بدون مقابل)</span>`;
                 }
 
                 const item = document.createElement('div');
@@ -3564,7 +3564,7 @@ async function searchAssetTimeline(query) {
                                     <div>
                                         ${ev.cost_status === 'PAID' 
                                             ? `<span style="color:#10b981; font-weight:700;"><i data-lucide="check-circle" style="width:11px;height:11px;vertical-align:middle;"></i> مسدد بمقابل ${ev.receipt_number ? `(إيصال رسمي رقم: <a href="javascript:void(0)" onclick="openPrintMemo('receipt', '${ev.receipt_number}')" style="color:#10b981; font-family:var(--font-en); font-weight:800; text-decoration:underline;">${ev.receipt_number}</a>)` : ''}</span>` 
-                                            : `<span style="color:#06b6d4; font-weight:700;"><i data-lucide="shield-check" style="width:11px;height:11px;vertical-align:middle;"></i> صيانة مجانية شاملة الضمان (بدون مقابل)</span>`}
+                                            : `<span style="color:#06b6d4; font-weight:700;"><i data-lucide="check" style="width:11px;height:11px;vertical-align:middle;"></i> صيانة مجانية (بدون مقابل)</span>`}
                                     </div>
                                 </div>
                             ` : ''}

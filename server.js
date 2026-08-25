@@ -2782,7 +2782,7 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
             }
 
             if (receiptNo === '-' && isFree) {
-                receiptNo = 'صرف مجاني (ضمان/فرع)';
+                receiptNo = 'صرف مجاني (بدون مقابل)';
             }
 
             // Get Official Catalog Price from failure_points_raw
@@ -2806,7 +2806,7 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
                 paidAmount = (!isNaN(fPrice) && fPrice > 0) ? fPrice : catalogPrice;
             }
 
-            let paymentLabel = isFree ? 'مجاني (ضمان/فرع) 🛡️' : (isDeferred ? 'تحصيل مؤجل ⚠️' : 'مسدد بمقابل ✅');
+            let paymentLabel = isFree ? 'مجاني (بدون مقابل)' : (isDeferred ? 'تحصيل مؤجل ⚠️' : 'مسدد بمقابل ✅');
 
             return {
                 id: sp.id,
@@ -3054,7 +3054,7 @@ app.get('/api/assets/timeline', async (req, res) => {
                 }
 
                 let cost_status = 'FREE';
-                let cost_badge = 'مجاني (ضمان)';
+                let cost_badge = 'مجاني (بدون مقابل)';
                 let receipt_number = null;
                 let replaced_part = null;
 
@@ -3071,7 +3071,7 @@ app.get('/api/assets/timeline', async (req, res) => {
                         cost_badge = 'تحصيل مؤجل ⚠️';
                     } else {
                         cost_status = 'FREE';
-                        cost_badge = 'مجاني (بدون مقابل - ضمان)';
+                        cost_badge = 'مجاني (بدون مقابل)';
                     }
                 } else if (isPartReplacement) {
                     replaced_part = noteD.replace(/تغير|تغيير|استبدال|تركيب/g, '').trim();
@@ -3080,7 +3080,7 @@ app.get('/api/assets/timeline', async (req, res) => {
                         cost_badge = `مسدد بمقابل (${t.FeesAmount || 0} جم)`;
                     } else {
                         cost_status = 'FREE';
-                        cost_badge = 'مجاني (بدون مقابل - ضمان)';
+                        cost_badge = 'مجاني (بدون مقابل)';
                     }
                 } else {
                     // Regular maintenance without spare parts (e.g. cleaning, software update)
@@ -3303,11 +3303,11 @@ app.get('/api/assets/timeline', async (req, res) => {
                     const isFree = s.includes('مجاني') || s.includes('ضمان') || notes.includes('مجاني');
                     const isDeferred = s.includes('مؤجل') || s.includes('تحصيلات مؤجلة');
 
-                    let statusLabel = 'صيانة مجانية 🛡️';
+                    let statusLabel = 'صيانة مجانية';
                     let priceText = 'مجاني (بدون مقابل)';
 
                     if (isFree) {
-                        statusLabel = 'مجاني (بدون مقابل - ضمان)';
+                        statusLabel = 'مجاني (بدون مقابل)';
                         priceText = 'مجاني (بدون مقابل)';
                     } else if (isDeferred) {
                         statusLabel = 'تحصيلات مؤجلة ⚠️';
