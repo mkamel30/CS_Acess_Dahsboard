@@ -1,5 +1,5 @@
 // Smart Cards PWA Service Worker
-const CACHE_NAME = 'smartcards-v14';
+const CACHE_NAME = 'smartcards-v15';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',

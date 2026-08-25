@@ -432,11 +432,17 @@ function initNavigation() {
     });
 
     // Quick Navigation Buttons on Dashboard & Warehouse Switchers
+    document.getElementById('btn-goto-customers')?.addEventListener('click', () => {
+        document.getElementById('tab-btn-customers')?.click();
+    });
     document.getElementById('btn-goto-warehouse')?.addEventListener('click', () => {
         document.getElementById('tab-btn-branch-warehouse')?.click();
     });
     document.getElementById('btn-goto-sims')?.addEventListener('click', () => {
         document.getElementById('tab-btn-sim-warehouse')?.click();
+    });
+    document.getElementById('btn-goto-spare-parts')?.addEventListener('click', () => {
+        document.getElementById('tab-btn-spare-parts-inventory')?.click();
     });
     document.getElementById('btn-goto-maintenance')?.addEventListener('click', () => {
         document.getElementById('tab-btn-hq-maintenance')?.click();
@@ -444,8 +450,8 @@ function initNavigation() {
     document.getElementById('btn-goto-installments')?.addEventListener('click', () => {
         document.getElementById('tab-btn-installments')?.click();
     });
-    document.getElementById('btn-goto-spare-parts')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-spare-parts-inventory')?.click();
+    document.getElementById('btn-goto-reports')?.addEventListener('click', () => {
+        document.getElementById('tab-btn-reports')?.click();
     });
 
     document.getElementById('switch-to-pos')?.addEventListener('click', () => {

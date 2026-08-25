@@ -186,23 +186,31 @@
                             </button>
                             
                             <div class="dashboard-quick-actions" style="display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; max-width: 100%; scrollbar-width: none;">
-                                <button class="btn btn-secondary" id="btn-goto-warehouse" style="white-space:nowrap; flex-shrink:0; border-color: rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.08); color: var(--md-sys-color-primary);">
+                                <button class="btn btn-secondary" id="btn-goto-customers" style="white-space:nowrap; flex-shrink:0; border-color: rgba(99, 102, 241, 0.4); background: rgba(99, 102, 241, 0.1); color: #818cf8; border-radius: var(--md-shape-corner-full); padding: 7px 14px; font-size: 12px; font-weight: 700;">
+                                    <i data-lucide="users"></i>
+                                    <span>إدارة وبيانات العملاء</span>
+                                </button>
+                                <button class="btn btn-secondary" id="btn-goto-warehouse" style="white-space:nowrap; flex-shrink:0; border-color: rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.08); color: #38bdf8; border-radius: var(--md-shape-corner-full); padding: 7px 14px; font-size: 12px; font-weight: 700;">
                                     <i data-lucide="boxes"></i>
                                     <span>ماكينات المخزن</span>
                                 </button>
-                                <button class="btn btn-secondary" id="btn-goto-sims" style="white-space:nowrap; flex-shrink:0; border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.08); color: #10b981;">
+                                <button class="btn btn-secondary" id="btn-goto-sims" style="white-space:nowrap; flex-shrink:0; border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.08); color: #10b981; border-radius: var(--md-shape-corner-full); padding: 7px 14px; font-size: 12px; font-weight: 700;">
                                     <i data-lucide="signal"></i>
                                     <span>شرائح الاتصال</span>
                                 </button>
-                                <button class="btn btn-secondary" id="btn-goto-maintenance" style="white-space:nowrap; flex-shrink:0; border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.08); color: #f59e0b;">
+                                <button class="btn btn-secondary" id="btn-goto-spare-parts" style="white-space:nowrap; flex-shrink:0; border-color: rgba(168, 85, 247, 0.4); background: rgba(168, 85, 247, 0.08); color: #c084fc; border-radius: var(--md-shape-corner-full); padding: 7px 14px; font-size: 12px; font-weight: 700;">
+                                    <i data-lucide="layers"></i>
+                                    <span>مخزن قطع الغيار</span>
+                                </button>
+                                <button class="btn btn-secondary" id="btn-goto-maintenance" style="white-space:nowrap; flex-shrink:0; border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.08); color: #f59e0b; border-radius: var(--md-shape-corner-full); padding: 7px 14px; font-size: 12px; font-weight: 700;">
                                     <i data-lucide="wrench"></i>
                                     <span>الصيانة المركزية (HQ)</span>
                                 </button>
-                                <button class="btn btn-secondary" id="btn-goto-installments" style="white-space:nowrap; flex-shrink:0; border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.08); color: #fbbf24;">
+                                <button class="btn btn-secondary" id="btn-goto-installments" style="white-space:nowrap; flex-shrink:0; border-color: rgba(251, 191, 36, 0.4); background: rgba(251, 191, 36, 0.08); color: #fbbf24; border-radius: var(--md-shape-corner-full); padding: 7px 14px; font-size: 12px; font-weight: 700;">
                                     <i data-lucide="calculator"></i>
                                     <span>عقود الأقساط</span>
                                 </button>
-                                <button class="btn btn-secondary" id="btn-goto-reports" style="white-space:nowrap; flex-shrink:0;">
+                                <button class="btn btn-secondary" id="btn-goto-reports" style="white-space:nowrap; flex-shrink:0; border-color: rgba(148, 163, 184, 0.3); background: rgba(148, 163, 184, 0.06); color: #94a3b8; border-radius: var(--md-shape-corner-full); padding: 7px 14px; font-size: 12px; font-weight: 700;">
                                     <i data-lucide="file-spreadsheet"></i>
                                     <span>التقارير</span>
                                 </button>
@@ -3014,6 +3022,6 @@
     </div>
 
     <!-- Main Client Application Script -->
-    <script src="app.js?v=2.6"></script>
+    <script src="app.js?v=2.7"></script>
 </body>
 </html>
