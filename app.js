@@ -5290,6 +5290,141 @@ async function loadSyncTelemetryLogs() {
 }
 window.loadSyncTelemetryLogs = loadSyncTelemetryLogs;
 
+// ==========================================================================
+// AVAILABLE SPARE PARTS INVENTORY MODAL (الرصيد المتاح > 0)
+// ==========================================================================
+function openAvailableSparePartsModal() {
+    const modal = document.getElementById('modal-available-spare-parts');
+    if (!modal) return;
+
+    modal.style.display = 'flex';
+    renderAvailableSparePartsModalTable();
+
+    // Bind listeners once
+    if (!window.availSpModalBound) {
+        document.getElementById('btn-close-avail-sp-modal')?.addEventListener('click', closeAvailableSparePartsModal);
+        document.getElementById('btn-dismiss-avail-sp-modal')?.addEventListener('click', closeAvailableSparePartsModal);
+        document.getElementById('modal-avail-sp-search')?.addEventListener('input', () => renderAvailableSparePartsModalTable());
+        document.getElementById('btn-export-avail-sp-excel')?.addEventListener('click', exportAvailableSparePartsToExcel);
+        
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeAvailableSparePartsModal();
+        });
+        window.availSpModalBound = true;
+    }
+}
+window.openAvailableSparePartsModal = openAvailableSparePartsModal;
+
+function closeAvailableSparePartsModal() {
+    const modal = document.getElementById('modal-available-spare-parts');
+    if (modal) modal.style.display = 'none';
+}
+window.closeAvailableSparePartsModal = closeAvailableSparePartsModal;
+
+function renderAvailableSparePartsModalTable() {
+    const tbody = document.getElementById('modal-avail-sp-tbody');
+    const searchVal = (document.getElementById('modal-avail-sp-search')?.value || '').trim().toLowerCase();
+    const totalPiecesBadge = document.getElementById('modal-avail-sp-total-pieces');
+    const typesCountBadge = document.getElementById('modal-avail-sp-types-count');
+    if (!tbody) return;
+
+    if (!sparePartsDataCache || !sparePartsDataCache.parts_breakdown) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--text-muted);">جاري تحميل بيانات الرصيد من السيرفر...</td></tr>`;
+        return;
+    }
+
+    // Filter strictly to current_stock > 0
+    let list = sparePartsDataCache.parts_breakdown.filter(p => Number(p.current_stock || 0) > 0);
+
+    if (searchVal) {
+        list = list.filter(p => p.part_name && p.part_name.toLowerCase().includes(searchVal));
+    }
+
+    // Sort descending by current_stock
+    list.sort((a, b) => Number(b.current_stock || 0) - Number(a.current_stock || 0));
+
+    const totalAvailablePieces = list.reduce((sum, p) => sum + Number(p.current_stock || 0), 0);
+    if (totalPiecesBadge) totalPiecesBadge.textContent = `${totalAvailablePieces.toLocaleString('ar-EG')} قطعة متوفرة`;
+    if (typesCountBadge) typesCountBadge.textContent = `${list.length} صنف متوفر`;
+
+    if (list.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:35px; color:var(--text-muted);">لا توجد قطع غيار متوفرة مطابقة للبحث أو رصيدها أكبر من الصفر.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = list.map((p, idx) => {
+        const stock = Number(p.current_stock || 0);
+        let statusBadge = stock >= 10 
+            ? `<span class="badge inmerchant" style="font-weight:700;"><i data-lucide="check-circle" style="width:11px; height:11px; vertical-align:middle; margin-left:3px;"></i> متوفر بوفرة</span>`
+            : `<span class="badge warning" style="font-weight:700;"><i data-lucide="alert-triangle" style="width:11px; height:11px; vertical-align:middle; margin-left:3px;"></i> كمية محدودة</span>`;
+
+        return `
+            <tr>
+                <td style="font-family:var(--font-en); color:var(--text-muted); font-weight:700;">${idx + 1}</td>
+                <td>
+                    <strong style="color:var(--md-sys-color-primary); font-size:13px;">${p.part_name}</strong>
+                </td>
+                <td style="font-family:var(--font-en); font-weight:700; color:#10b981;">${Number(p.unit_price || 0).toLocaleString('ar-EG')} جم</td>
+                <td>
+                    <span class="badge inmerchant" style="font-family:var(--font-en); font-size:13px; font-weight:800; padding:4px 10px;">
+                        ${stock.toLocaleString('ar-EG')} قطعة
+                    </span>
+                </td>
+                <td style="font-family:var(--font-en); font-weight:600; color:var(--md-sys-color-on-surface-variant);">${Number(p.total_in || 0).toLocaleString('ar-EG')}</td>
+                <td style="font-family:var(--font-en); font-weight:600; color:#a855f7;">${Number(p.total_out || 0).toLocaleString('ar-EG')}</td>
+                <td>${statusBadge}</td>
+                <td>
+                    <button type="button" class="btn btn-secondary" onclick="closeAvailableSparePartsModal(); filterSparePartsByType('${p.part_name}');" style="padding:4px 8px; font-size:11px;" title="عرض سجل حركات ${p.part_name}">
+                        <i data-lucide="list" style="width:11px; height:11px;"></i> الحركات
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    refreshIcons();
+}
+window.renderAvailableSparePartsModalTable = renderAvailableSparePartsModalTable;
+
+function exportAvailableSparePartsToExcel() {
+    if (!sparePartsDataCache || !sparePartsDataCache.parts_breakdown) {
+        alert("لا توجد بيانات متاحة للتصدير");
+        return;
+    }
+
+    const list = sparePartsDataCache.parts_breakdown.filter(p => Number(p.current_stock || 0) > 0);
+    list.sort((a, b) => Number(b.current_stock || 0) - Number(a.current_stock || 0));
+
+    const rows = list.map((p, idx) => ({
+        "م": idx + 1,
+        "اسم قطعة الغيار": p.part_name,
+        "سعر القطعة (جم)": p.unit_price,
+        "الرصيد المتاح حالياً بالمخزن": p.current_stock,
+        "إجمالي الوارد التراكمي": p.total_in,
+        "إجمالي المنصرف": p.total_out,
+        "منصرف بمقابل": p.paid_count,
+        "منصرف مجاني": p.free_count,
+        "إجمالي الإيراد المحصل (جم)": p.total_revenue,
+        "نسبة الاستهلاك (%)": p.consumption_rate_pct
+    }));
+
+    if (window.XLSX) {
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "جرد الرصيد المتاح بالمخزن");
+        XLSX.writeFile(wb, `بيان_جرد_قطع_الغيار_المتوفرة_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } else {
+        const headers = Object.keys(rows[0]).join(",");
+        const csvContent = "\uFEFF" + [headers, ...rows.map(r => Object.values(r).map(v => `"${String(v).replace(/"/g, '""')}"`).join(","))].join("\r\n");
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `بيان_جرد_قطع_الغيار_المتوفرة_${new Date().toISOString().slice(0, 10)}.csv`;
+        link.click();
+    }
+}
+window.exportAvailableSparePartsToExcel = exportAvailableSparePartsToExcel;
+
 // Auto-run font initialization & sync health monitor
 if (typeof document !== 'undefined') {
     initFontSystem();

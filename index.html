@@ -1447,7 +1447,7 @@
                     <!-- Top 6 KPI Summary Cards Row -->
                     <div class="warehouse-kpi-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 16px; margin-bottom: 24px;">
                         <!-- Current Stock Balance -->
-                        <div class="wh-stat-card wh-card-total" onclick="drilldownSpareParts({ cardEl: this })" title="انقر للانتقال لجدول حركات ورصيد قطع الغيار" style="background: linear-gradient(135deg, rgba(56,189,248,0.12), rgba(14,165,233,0.05)); border: 1px solid rgba(56,189,248,0.3); border-radius: 16px; padding: 18px; position: relative; overflow: hidden; box-shadow: var(--md-elevation-1); cursor:pointer;">
+                        <div class="wh-stat-card wh-card-total" onclick="openAvailableSparePartsModal()" title="انقر لعرض بيان وجرد قطع الغيار المتوفرة بالمخزن فقط (الرصيد > 0)" style="background: linear-gradient(135deg, rgba(56,189,248,0.12), rgba(14,165,233,0.05)); border: 1px solid rgba(56,189,248,0.3); border-radius: 16px; padding: 18px; position: relative; overflow: hidden; box-shadow: var(--md-elevation-1); cursor:pointer;">
                             <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                                 <div>
                                     <span style="font-size:11px; font-weight:700; color:var(--md-sys-color-on-surface-variant); display:block; margin-bottom:4px;">الرصيد المتاح بالمخزن</span>
@@ -1457,8 +1457,9 @@
                                     <i data-lucide="boxes" style="width:22px; height:22px;"></i>
                                 </div>
                             </div>
-                            <div style="margin-top:10px; font-size:11px; color:var(--md-sys-color-on-surface-variant);">
+                            <div style="margin-top:10px; font-size:11px; color:var(--md-sys-color-on-surface-variant); display:flex; justify-content:space-between; align-items:center;">
                                 <span>وارد: <strong id="sp-kpi-sub-in" style="color:var(--md-sys-color-primary); font-family:var(--font-en);">0</strong> قطعة</span>
+                                <span class="badge inmerchant" style="font-size:10px; padding:2px 6px;">جرد حي 🔍</span>
                             </div>
                         </div>
 
@@ -2567,6 +2568,70 @@
             </div>
             <div class="modal-body" style="padding: 25px; overflow-y:auto; background:#ffffff;" id="printable-memo-content">
                 <!-- Dynamic Printable Sheet Area -->
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- MODAL: AVAILABLE SPARE PARTS INVENTORY (جرد الرصيد المتاح) -->
+    <!-- ======================================================== -->
+    <div class="modal-overlay" id="modal-available-spare-parts" style="backdrop-filter: blur(8px); display:none;">
+        <div class="modal-card" style="max-width: 900px; width: 95%; max-height: 90vh;">
+            <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <div style="width:36px; height:36px; border-radius:10px; background:rgba(56,189,248,0.15); color:var(--md-sys-color-primary); display:flex; align-items:center; justify-content:center;">
+                        <i data-lucide="boxes" style="width:20px; height:20px;"></i>
+                    </div>
+                    <div>
+                        <h3 style="margin:0; font-size:16px; font-weight:800;">بيان جرد قطع الغيار المتوفرة بالمخزن (الرصيد الفعلي)</h3>
+                        <p style="margin:0; font-size:12px; color:var(--md-sys-color-on-surface-variant);">عرض الأصناف المتوفرة حالياً فقط (الرصيد المتاح > 0) وأسعارها وإجمالي الكميات</p>
+                    </div>
+                </div>
+                <button class="close-modal-btn" id="btn-close-avail-sp-modal"><i data-lucide="x"></i></button>
+            </div>
+
+            <div class="modal-body" style="padding: 20px;">
+                <!-- Summary bar & Search inside Modal -->
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:18px; padding:12px 16px; background:var(--md-sys-color-surface-container-low); border:1px solid var(--md-sys-color-outline-variant); border-radius:12px;">
+                    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                        <span class="badge inmerchant" id="modal-avail-sp-total-pieces" style="font-size:13px; font-weight:800; font-family:var(--font-en); padding:6px 12px;">0 قطعة متوفرة</span>
+                        <span class="badge" style="background:rgba(56,189,248,0.15); color:var(--md-sys-color-primary); border:1px solid rgba(56,189,248,0.3); font-size:12px; font-weight:700;" id="modal-avail-sp-types-count">0 صنف متوفر</span>
+                    </div>
+                    
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                        <input type="text" id="modal-avail-sp-search" placeholder="بحث باسم القطعة..." style="padding:7px 12px; font-size:12px; border-radius:var(--md-shape-corner-full); width:220px;">
+                        <button type="button" class="btn btn-secondary" id="btn-export-avail-sp-excel" style="padding:7px 12px; font-size:12px; display:flex; align-items:center; gap:6px;">
+                            <i data-lucide="file-spreadsheet" style="width:14px; height:14px; color:#10b981;"></i>
+                            <span>تصدير Excel</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Live Stock Table -->
+                <div class="table-responsive" style="max-height: 480px; overflow-y: auto;">
+                    <table class="data-table" id="modal-avail-sp-table" style="width:100%;">
+                        <thead>
+                            <tr>
+                                <th style="width:45px;">#</th>
+                                <th>اسم قطعة الغيار</th>
+                                <th>سعر القطعة الرسمي</th>
+                                <th>الرصيد المتاح حالياً</th>
+                                <th>إجمالي الوارد التراكمي</th>
+                                <th>إجمالي المنصرف</th>
+                                <th>حالة الوفرة</th>
+                                <th style="width:90px;">الإجراء</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modal-avail-sp-tbody">
+                            <!-- Injected dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="modal-footer" style="padding: 14px 20px; border-top:1px solid var(--md-sys-color-outline-variant); display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-size:12px; color:var(--text-muted);"><i data-lucide="shield-check" style="width:13px; height:13px; vertical-align:middle;"></i> بيانات جرد حية ومحدثة لحظياً</span>
+                <button type="button" class="btn btn-secondary" id="btn-dismiss-avail-sp-modal">إغلاق</button>
             </div>
         </div>
     </div>
