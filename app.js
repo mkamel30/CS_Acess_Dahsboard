@@ -5572,34 +5572,47 @@ async function fetchCustomerSuggestions(q) {
         }
 
         suggestionsBox.innerHTML = data.results.map(item => {
-            const posBadge = item.pos_serials && item.pos_serials.length > 0
-                ? `<span class="badge inmerchant" style="font-family:var(--font-en); font-size:11px; padding:2px 6px;">POS: ${item.pos_serials.join(', ')}</span>`
-                : '';
-            const simBadge = item.sim_serials && item.sim_serials.length > 0
-                ? `<span class="badge" style="background:rgba(16,185,129,0.12); color:#10b981; border:1px solid rgba(16,185,129,0.3); font-family:var(--font-en); font-size:11px; padding:2px 6px;">SIM: ${item.sim_serials.join(', ')}</span>`
-                : '';
+            let posBadge = '';
+            if (item.pos_serials && item.pos_serials.length > 0) {
+                if (item.pos_serials.length <= 2) {
+                    posBadge = `<span class="badge inmerchant" style="font-family:var(--font-en); font-size:10px; padding:1px 6px;">POS: ${item.pos_serials.join(', ')}</span>`;
+                } else {
+                    posBadge = `<span class="badge inmerchant" style="font-family:var(--font-en); font-size:10px; padding:1px 6px;">POS: ${item.pos_serials[0]} (+${item.pos_serials.length - 1})</span>`;
+                }
+            }
+
+            let simBadge = '';
+            if (item.sim_serials && item.sim_serials.length > 0) {
+                if (item.sim_serials.length === 1) {
+                    const s = String(item.sim_serials[0]);
+                    const displaySim = s.length > 10 ? `...${s.slice(-7)}` : s;
+                    simBadge = `<span class="badge" style="background:rgba(16,185,129,0.12); color:#10b981; border:1px solid rgba(16,185,129,0.3); font-family:var(--font-en); font-size:10px; padding:1px 6px;">SIM: ${displaySim}</span>`;
+                } else {
+                    simBadge = `<span class="badge" style="background:rgba(16,185,129,0.12); color:#10b981; border:1px solid rgba(16,185,129,0.3); font-family:var(--font-en); font-size:10px; padding:1px 6px;">${item.sim_serials.length} شرائح SIM</span>`;
+                }
+            }
 
             return `
-                <div class="cust-suggestion-item" onclick="selectCustomerResult('${item.merchant_code}')" style="padding:12px 16px; border-bottom:1px solid var(--md-sys-color-outline-variant); cursor:pointer; display:flex; justify-content:space-between; align-items:center; transition:background 0.15s ease;" onmouseover="this.style.background='var(--md-sys-color-surface-container-high)'" onmouseout="this.style.background='transparent'">
-                    <div style="display:flex; align-items:center; gap:12px;">
-                        <div style="width:34px; height:34px; border-radius:10px; background:rgba(37,99,235,0.15); color:#2563eb; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-                            <i data-lucide="store" style="width:18px; height:18px;"></i>
+                <div class="cust-suggestion-item" onclick="selectCustomerResult('${item.merchant_code}')" style="padding:10px 14px; border-bottom:1px solid var(--md-sys-color-outline-variant); cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:10px; transition:background 0.15s ease;" onmouseover="this.style.background='var(--md-sys-color-surface-container-high)'" onmouseout="this.style.background='transparent'">
+                    <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+                        <div style="width:32px; height:32px; border-radius:10px; background:rgba(37,99,235,0.15); color:#2563eb; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                            <i data-lucide="store" style="width:16px; height:16px;"></i>
                         </div>
-                        <div>
-                            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                                <strong style="font-size:13px; color:var(--md-sys-color-on-surface);">${item.merchant_name}</strong>
-                                <span class="badge inmerchant" style="font-family:var(--font-en); font-size:11px; padding:1px 6px;">#${item.merchant_code}</span>
-                                <span class="badge" style="background:rgba(245,158,11,0.15); color:#f59e0b; font-size:11px; padding:1px 6px;">${item.government}</span>
+                        <div style="min-width:0;">
+                            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                <strong style="font-size:13px; color:var(--md-sys-color-on-surface); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:180px;">${item.merchant_name}</strong>
+                                <span class="badge inmerchant" style="font-family:var(--font-en); font-size:10px; padding:1px 5px;">#${item.merchant_code}</span>
+                                <span class="badge" style="background:rgba(245,158,11,0.15); color:#f59e0b; font-size:10px; padding:1px 5px;">${item.government}</span>
                             </div>
-                            <div style="display:flex; align-items:center; gap:8px; margin-top:4px; flex-wrap:wrap;">
-                                <span style="font-size:11px; color:var(--text-muted);">${item.matched_field}</span>
+                            <div style="display:flex; align-items:center; gap:6px; margin-top:3px; flex-wrap:wrap;">
+                                <span style="font-size:10px; color:var(--text-muted);">${item.matched_field}</span>
                                 ${posBadge}
                                 ${simBadge}
                             </div>
                         </div>
                     </div>
                     <div style="color:var(--md-sys-color-primary); flex-shrink:0;">
-                        <i data-lucide="chevron-left" style="width:18px; height:18px;"></i>
+                        <i data-lucide="chevron-left" style="width:16px; height:16px;"></i>
                     </div>
                 </div>
             `;
