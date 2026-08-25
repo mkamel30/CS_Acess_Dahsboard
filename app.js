@@ -3,6 +3,22 @@
  * Complete Frontend Controller & Client Architecture
  */
 
+// --- Global Skeleton Loader Helpers ---
+window.showTableLoading = function(tbodyId, columnsCount, rowsCount = 5) {
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    
+    let html = '';
+    for (let i = 0; i < rowsCount; i++) {
+        html += '<tr class="skeleton-row">';
+        for (let j = 0; j < columnsCount; j++) {
+            html += `<td style="background-color: inherit;"><div class="skeleton-block"></div></td>`;
+        }
+        html += '</tr>';
+    }
+    tbody.innerHTML = html;
+};
+
 // Safe Local Storage Wrapper
 function safeStorageGet(key, defaultVal = null) {
     try {
@@ -910,6 +926,8 @@ async function loadWarehouseInventory() {
     const exportBtn = document.getElementById('btn-export-warehouse-excel');
 
     try {
+        if (window.showTableLoading) window.showTableLoading('wh-devices-table-body', 6, 8);
+        
         const res = await fetch('/api/inventory/warehouse-dashboard');
         const data = await res.json();
         if (!data.success) throw new Error(data.error || 'Failed to load warehouse data');
@@ -1362,6 +1380,8 @@ async function loadSimsInventory() {
     const exportBtn = document.getElementById('btn-export-sims-excel');
 
     try {
+        if (window.showTableLoading) window.showTableLoading('sims-table-body', 6, 8);
+
         const res = await fetch('/api/inventory/sims-dashboard');
         const data = await res.json();
         if (!data.success) throw new Error(data.error || 'Failed to load sims data');
@@ -1789,6 +1809,8 @@ async function loadHqMaintenanceInventory() {
     const exportBtn = document.getElementById('btn-export-hq-excel');
 
     try {
+        if (window.showTableLoading) window.showTableLoading('hq-devices-table-body', 6, 8);
+
         const res = await fetch('/api/inventory/hq-maintenance-dashboard');
         const data = await res.json();
         if (!data.success) throw new Error(data.error || 'Failed to load HQ maintenance data');
@@ -2219,6 +2241,8 @@ async function loadInstallmentsDashboard() {
     const exportBtn = document.getElementById('btn-export-inst-excel');
 
     try {
+        if (window.showTableLoading) window.showTableLoading('inst-contracts-table-body', 7, 8);
+
         const res = await fetch('/api/inventory/installments-dashboard');
         const data = await res.json();
         if (!data.success) throw new Error(data.error || 'Failed to load installments data');
