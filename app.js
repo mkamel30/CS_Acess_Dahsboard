@@ -4635,7 +4635,23 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // 12. Initial Load
+    // 12. Available Spare Parts Modal Listeners
+    const availSpModal = document.getElementById('modal-available-spare-parts');
+    const closeAvailSp = () => {
+        if (availSpModal) {
+            availSpModal.classList.remove('active');
+            availSpModal.style.display = 'none';
+        }
+    };
+    document.getElementById('btn-close-avail-sp-modal')?.addEventListener('click', closeAvailSp);
+    document.getElementById('btn-dismiss-avail-sp-modal')?.addEventListener('click', closeAvailSp);
+    document.getElementById('modal-avail-sp-search')?.addEventListener('input', () => renderAvailableSparePartsModalTable());
+    document.getElementById('btn-export-avail-sp-excel')?.addEventListener('click', exportAvailableSparePartsToExcel);
+    availSpModal?.addEventListener('click', (e) => {
+        if (e.target === availSpModal) closeAvailSp();
+    });
+
+    // 13. Initial Load
     loadDashboard();
 });
 
@@ -5295,9 +5311,16 @@ window.loadSyncTelemetryLogs = loadSyncTelemetryLogs;
 // ==========================================================================
 async function openAvailableSparePartsModal() {
     const modal = document.getElementById('modal-available-spare-parts');
-    if (!modal) return;
+    if (!modal) {
+        console.error("modal-available-spare-parts not found!");
+        return;
+    }
 
     modal.classList.add('active');
+    modal.style.display = 'flex';
+    modal.style.opacity = '1';
+    modal.style.visibility = 'visible';
+    modal.style.zIndex = '999999';
 
     if (!sparePartsDataCache || !sparePartsDataCache.parts_breakdown) {
         const tbody = document.getElementById('modal-avail-sp-tbody');
@@ -5336,6 +5359,9 @@ function closeAvailableSparePartsModal() {
     const modal = document.getElementById('modal-available-spare-parts');
     if (modal) {
         modal.classList.remove('active');
+        modal.style.display = 'none';
+        modal.style.opacity = '0';
+        modal.style.visibility = 'hidden';
     }
 }
 window.closeAvailableSparePartsModal = closeAvailableSparePartsModal;
