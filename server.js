@@ -2179,6 +2179,465 @@ app.get('/api/reports/eod-detail', async (req, res) => {
     }
 });
 
+// ==========================================================================
+// CUSTOMER 360 CRM & ASSET DEEP-DIVE API ENDPOINTS
+// ==========================================================================
+
+// 1. Customer Smart Search (Fast suggestions across all fields)
+app.get('/api/customers/search', async (req, res) => {
+    try {
+        const { q = '' } = req.query;
+        const query = q.trim();
+        if (!query || query.length < 2) {
+            return res.json({ success: true, results: [] });
+        }
+
+        const cleanQ = query.replace(/^M-/i, '');
+        const likeQ = `%${query}%`;
+        const likeCleanQ = `%${cleanQ}%`;
+
+        // Search in assets_raw
+        const assetsMatches = await allQuery(`
+            SELECT a.ID,
+                   COALESCE(a.bkcode, a.POSID) as merchant_code,
+                   COALESCE(a.Owner, a.Contact_person, 'مخبز غير محدد') as merchant_name,
+                   COALESCE(a.dep, a.SupplyOffice, '-') as government,
+                   COALESCE(a.NationalD, '-') as national_id,
+                   COALESCE(a.telephone_1, a.telephone_2, '-') as phone,
+                   a.POS, a.POS_2, a.pos_3,
+                   a.Cell_Serial, a.[cell_2-ser] as [cell_2-ser], a.Cell_Serial3,
+                   a.Address
+            FROM assets_raw a
+            WHERE a.bkcode LIKE ? OR a.POSID LIKE ?
+               OR a.Owner LIKE ? OR a.Contact_person LIKE ?
+               OR a.POS LIKE ? OR a.POS_2 LIKE ? OR a.pos_3 LIKE ?
+               OR a.Cell_Serial LIKE ? OR a.[cell_2-ser] LIKE ? OR a.Cell_Serial3 LIKE ?
+               OR a.NationalD LIKE ?
+               OR a.telephone_1 LIKE ? OR a.telephone_2 LIKE ?
+            LIMIT 15
+        `, [
+            likeCleanQ, likeCleanQ,
+            likeQ, likeQ,
+            likeQ, likeQ, likeQ,
+            likeQ, likeQ, likeQ,
+            likeQ,
+            likeQ, likeQ
+        ]);
+
+        // Deduplicate by merchant_code
+        const seenCodes = new Set();
+        const results = [];
+
+        assetsMatches.forEach(a => {
+            const mCode = String(a.merchant_code || '').trim();
+            if (!mCode || seenCodes.has(mCode)) return;
+            seenCodes.add(mCode);
+
+            const posList = [a.POS, a.POS_2, a.pos_3].filter(p => p && p !== '-' && p !== 'null');
+            const simList = [a.Cell_Serial, a['cell_2-ser'], a.Cell_Serial3].filter(s => s && s !== '-' && s !== 'null');
+
+            // Detect matched field
+            let matchReason = 'كود المخبز';
+            if (a.merchant_name && a.merchant_name.toLowerCase().includes(query.toLowerCase())) matchReason = 'اسم العميل / المخبز';
+            else if (posList.some(p => String(p).toLowerCase().includes(query.toLowerCase()))) matchReason = 'سيريال ماكينة POS';
+            else if (simList.some(s => String(s).toLowerCase().includes(query.toLowerCase()))) matchReason = 'سيريال شريحة SIM';
+            else if (a.national_id && a.national_id.includes(query)) matchReason = 'الرقم القومي';
+            else if (a.phone && a.phone.includes(query)) matchReason = 'رقم الهاتف';
+
+            results.push({
+                merchant_code: mCode,
+                merchant_name: a.merchant_name,
+                government: a.government,
+                national_id: a.national_id,
+                phone: a.phone,
+                address: a.Address || '-',
+                pos_serials: posList,
+                sim_serials: simList,
+                matched_field: matchReason
+            });
+        });
+
+        res.json({ success: true, results: results.slice(0, 10) });
+    } catch (err) {
+        console.error("Customer search error:", err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// 2. Customer 360 Full Profile
+app.get('/api/customers/profile/:code', async (req, res) => {
+    try {
+        const { code } = req.params;
+        const cleanCode = code.trim().replace(/^M-/i, '');
+        const altCode = 'M-' + cleanCode;
+
+        // 1. Fetch Master Info from assets_raw
+        const asset = await getQuery(`
+            SELECT a.*,
+                   COALESCE(a.bkcode, a.POSID) as clean_code,
+                   COALESCE(a.Owner, a.Contact_person, 'مخبز') as clean_name,
+                   COALESCE(a.dep, a.SupplyOffice, '-') as clean_gov
+            FROM assets_raw a
+            WHERE a.bkcode = ? OR a.POSID = ? OR a.bkcode = ? OR a.POSID = ?
+               OR a.bkcode = ? OR a.POS = ? OR a.POS_2 = ?
+            LIMIT 1
+        `, [code, code, cleanCode, cleanCode, altCode, code, code]);
+
+        if (!asset) {
+            return res.status(404).json({ success: false, error: "لم يتم العثور على العميل" });
+        }
+
+        const merchantCode = asset.clean_code || code;
+
+        // 2. Resolve all POS devices linked to this customer
+        const posSet = new Map();
+        if (asset.POS && asset.POS !== '-') {
+            posSet.set(asset.POS, {
+                serial: asset.POS,
+                slot: 'الماكينة الرئيسية (POS 1)',
+                model: asset.Model || 'غير محدد',
+                manufacturer: asset.Manufacturer || 'Verifone',
+                condition: asset.Condition || 'سليمة',
+                acquired_date: asset['Acquired Date'] || '-',
+                pinpad: asset.PinpadSerial || '-'
+            });
+        }
+        if (asset.POS_2 && asset.POS_2 !== '-') {
+            posSet.set(asset.POS_2, {
+                serial: asset.POS_2,
+                slot: 'الماكينة الإضافية (POS 2)',
+                model: asset.Model2 || 'غير محدد',
+                manufacturer: asset.Manufacturer2 || 'PAX',
+                condition: 'سليمة',
+                acquired_date: '-',
+                pinpad: asset.Pinpad_2 || '-'
+            });
+        }
+        if (asset.pos_3 && asset.pos_3 !== '-') {
+            posSet.set(asset.pos_3, {
+                serial: asset.pos_3,
+                slot: 'الماكينة الثالثة (POS 3)',
+                model: asset.Model3 || 'غير محدد',
+                manufacturer: asset.Manufacturer3 || '-',
+                condition: 'سليمة',
+                acquired_date: '-',
+                pinpad: '-'
+            });
+        }
+
+        // Check if any other devices appear in transactions_raw for this merchant
+        const histDevices = await allQuery(`
+            SELECT DISTINCT t.POSN
+            FROM transactions_raw t
+            WHERE (t.GrocerName = ? OR t.GrocerName = ?) AND t.POSN IS NOT NULL AND t.POSN != '' AND t.POSN != '-'
+        `, [merchantCode, cleanCode]);
+
+        histDevices.forEach(h => {
+            if (!posSet.has(h.POSN)) {
+                posSet.set(h.POSN, {
+                    serial: h.POSN,
+                    slot: 'ماكينة تاريخية مسجلة بالبلاغات',
+                    model: 'سجل حركات',
+                    manufacturer: '-',
+                    condition: 'تاريخية',
+                    acquired_date: '-',
+                    pinpad: '-'
+                });
+            }
+        });
+
+        // 3. Resolve all SIM cards
+        const simCards = [];
+        if (asset.Cell_Serial && asset.Cell_Serial !== '-') {
+            simCards.push({
+                serial: asset.Cell_Serial,
+                slot: 'الشريحة 1',
+                carrier: asset.Cell_type || 'غير محدد',
+                phone: asset.telephone_1 || '-'
+            });
+        }
+        if (asset['cell_2-ser'] && asset['cell_2-ser'] !== '-') {
+            simCards.push({
+                serial: asset['cell_2-ser'],
+                slot: 'الشريحة 2',
+                carrier: asset['Cell_type-2'] || 'غير محدد',
+                phone: asset.telephone_2 || '-'
+            });
+        }
+        if (asset.Cell_Serial3 && asset.Cell_Serial3 !== '-') {
+            simCards.push({
+                serial: asset.Cell_Serial3,
+                slot: 'الشريحة 3',
+                carrier: asset.Cell_type3 || 'غير محدد',
+                phone: '-'
+            });
+        }
+
+        // 4. Installments info
+        const allPosSerials = Array.from(posSet.keys());
+        let installments = [];
+        let totalInstallmentDebt = 0;
+        let totalInstallmentPaid = 0;
+
+        if (allPosSerials.length > 0) {
+            const posPlaceholders = allPosSerials.map(() => '?').join(',');
+            installments = await allQuery(`
+                SELECT i.*
+                FROM installments_raw i
+                WHERE i.pos IN (${posPlaceholders})
+            `, allPosSerials);
+
+            installments.forEach(inst => {
+                const total = parseFloat(inst.finalunitprice || inst.unitprice || 0);
+                const monthly = parseFloat(inst.monthlyinstallmentprice || 0);
+                const count = parseInt(inst.installments || 0, 10);
+                totalInstallmentDebt += total;
+            });
+        }
+
+        // 5. Quick counts (Tickets, Spare Parts, HQ cycles)
+        const codesList = [merchantCode, cleanCode, altCode, ...allPosSerials];
+        const ph = codesList.map(() => '?').join(',');
+
+        const ticketsCountRes = await getQuery(`
+            SELECT COUNT(*) as count
+            FROM transactions_raw t
+            WHERE t.GrocerName IN (${ph}) OR t.POSN IN (${ph})
+        `, [...codesList, ...codesList]);
+
+        const spCountRes = await getQuery(`
+            SELECT COUNT(*) as count
+            FROM store_sp_raw s
+            WHERE s.Serial IN (${ph}) OR s.notes LIKE ?
+        `, [...codesList, `%${cleanCode}%`]);
+
+        const hqCountRes = await getQuery(`
+            SELECT COUNT(*) as count
+            FROM maintenance_raw m
+            WHERE m.FormNo IS NOT NULL AND m.[Unit Serial] IN (${ph})
+        `, codesList);
+
+        res.json({
+            success: true,
+            customer: {
+                merchant_code: merchantCode,
+                name: asset.clean_name,
+                government: asset.clean_gov,
+                national_id: asset.NationalD || '-',
+                phone_1: asset.telephone_1 || '-',
+                phone_2: asset.telephone_2 || '-',
+                address: asset.Address || '-',
+                city: asset.City || '-',
+                contact_person: asset.Contact_person || '-',
+                commercial_register: asset.Commercial_register || '-',
+                tax_card: asset.Tax_Card || '-',
+                bank_name: asset.banknm || '-',
+                bank_account: asset.bankacc || '-',
+                gate_no: asset.GateNo || '-',
+                has_gates: asset.hasgates || '-',
+                notes: asset.notes || asset.Comments || '-'
+            },
+            devices: Array.from(posSet.values()),
+            sim_cards: simCards,
+            installments: {
+                contracts: installments,
+                total_debt: totalInstallmentDebt,
+                count: installments.length
+            },
+            stats: {
+                total_tickets: ticketsCountRes?.count || 0,
+                total_spare_parts: spCountRes?.count || 0,
+                total_hq_cycles: hqCountRes?.count || 0,
+                total_devices: posSet.size,
+                total_sims: simCards.length
+            }
+        });
+
+    } catch (err) {
+        console.error("Customer profile error:", err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// 3. Device Deep-Dive 360 (4 Tabs: Replacements, Maintenance In/Out, Spare Parts, HQ Central Cycles)
+app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
+    try {
+        const { serial } = req.params;
+        const s = serial.trim();
+        if (!s) return res.status(400).json({ success: false, error: "Serial is required" });
+
+        // 1. Basic Device Info from assets_raw / devices
+        const rawAsset = await getQuery(`
+            SELECT a.*,
+                   COALESCE(a.bkcode, a.POSID) as clean_code,
+                   COALESCE(a.Owner, a.Contact_person) as clean_owner,
+                   COALESCE(a.dep, a.SupplyOffice) as clean_gov
+            FROM assets_raw a
+            WHERE a.POS = ? OR a.POS_2 = ? OR a.pos_3 = ?
+            LIMIT 1
+        `, [s, s, s]);
+
+        const isSec = rawAsset && String(rawAsset.POS_2).toUpperCase() === s.toUpperCase();
+        const isTert = rawAsset && String(rawAsset.pos_3).toUpperCase() === s.toUpperCase();
+
+        const deviceInfo = {
+            serial: s,
+            model: isSec ? (rawAsset.Model2 || 'S90') : (isTert ? (rawAsset.Model3 || '-') : (rawAsset?.Model || 'VX520')),
+            manufacturer: isSec ? (rawAsset.Manufacturer2 || 'PAX') : (isTert ? (rawAsset.Manufacturer3 || '-') : (rawAsset?.Manufacturer || 'Verifone')),
+            current_owner: rawAsset?.clean_owner || 'غير محدد',
+            merchant_code: rawAsset?.clean_code || '-',
+            government: rawAsset?.clean_gov || '-',
+            acquired_date: rawAsset?.['Acquired Date'] || '-',
+            condition: rawAsset?.Condition || 'سليمة بالميدان'
+        };
+
+        // 2. TAB 1: Replacements & Swaps History
+        const replacements = await allQuery(`
+            SELECT t.ID, t.IssueDate as date, t.GrocerName as merchant_code,
+                   t.Procedure as technician, t.ActionType as action_type,
+                   t.NoteG as complaint, t.NoteD as action_taken,
+                   t.Fees as fees, t.Paid as paid
+            FROM transactions_raw t
+            WHERE t.POSN = ? AND (
+                t.ActionType LIKE '%استبدال%' OR t.ActionType LIKE '%تغيير%' OR
+                t.NoteD LIKE '%استبدال%' OR t.NoteD LIKE '%تغيير ماكينة%' OR t.NoteD LIKE '%صرف ماكينة%'
+            )
+            ORDER BY t.ID DESC
+        `, [s]);
+
+        // 3. TAB 2: Branch Maintenance Tickets (with Entry Date/Time & Exit Date/Time)
+        const maintenanceTickets = await allQuery(`
+            SELECT t.ID as ticket_id,
+                   t.IssueDate as entry_datetime,
+                   t.ActionDate as exit_datetime,
+                   t.Procedure as technician_raw,
+                   t.NoteG as complaint,
+                   t.NoteD as action_taken,
+                   t.Fees as fees_type,
+                   t.Paid as is_paid,
+                   t.FeesAmount as fees_amount,
+                   t.ActionType as action_type,
+                   t.GrocerName as merchant_code
+            FROM transactions_raw t
+            WHERE t.POSN = ?
+            ORDER BY t.ID DESC
+        `, [s]);
+
+        const formattedTickets = maintenanceTickets.map(t => {
+            let tech = t.technician_raw || '';
+            if (tech.toUpperCase() === 'AHMEDMAHDY') tech = 'أحمد المهدي محفوظ المهدي';
+            else if (tech.toUpperCase() === 'ELFAKHARANY') tech = 'أحمد فؤاد سيد الفخراني';
+            else if (tech.toUpperCase() === 'MESSAM') tech = 'محمد عصام محمود فرغلي';
+            else if (tech.toUpperCase() === 'MOSTAFA') tech = 'مصطفى محمد أبو العطا';
+            else if (!tech || tech.startsWith('DESKTOP') || tech === 'SHARE' || tech === '35') tech = 'فني الصيانة بالفرع';
+
+            return {
+                ticket_id: t.ticket_id,
+                entry_datetime: t.entry_datetime || '-',
+                exit_datetime: t.exit_datetime || '-',
+                technician: tech,
+                complaint: t.complaint || 'صيانة دورية / فحص',
+                action_taken: t.action_taken || 'تم الإصلاح والفحص',
+                action_type: t.action_type || 'صيانة',
+                fees_type: t.fees_type || 'مجاني',
+                fees_amount: t.fees_amount || 0,
+                is_paid: t.is_paid || 'نعم'
+            };
+        });
+
+        // 4. TAB 3: Spare Parts Consumed for this machine
+        const spareParts = await allQuery(`
+            SELECT s.rowid as id,
+                   s.out_date as date,
+                   s.type as part_name,
+                   s.count_in,
+                   s.count_out,
+                   s.faulty as price_raw,
+                   s.faulty_detils as payment_status_raw,
+                   s.notes
+            FROM store_sp_raw s
+            WHERE s.Serial LIKE ? OR s.notes LIKE ?
+            ORDER BY s.rowid DESC
+        `, [`%${s}%`, `%${s}%`]);
+
+        const formattedParts = spareParts.map(sp => {
+            const notesStr = String(sp.notes || '');
+            let isFree = sp.payment_status_raw?.includes('ضمان') || notesStr.includes('ضمان') || notesStr.includes('مجاني');
+            let isDeferred = notesStr.includes('مؤجل') || notesStr.includes('اجل') || sp.payment_status_raw?.includes('مؤجل');
+            let isPaid = !isFree && !isDeferred;
+
+            let paymentLabel = isFree ? 'مجاني (ضمان)' : (isDeferred ? 'تحصيل مؤجل ⚠️' : 'مسدد بمقابل ✅');
+            let price = parseFloat(sp.price_raw || 0);
+
+            // Extract receipt if available
+            let receiptNo = '-';
+            const rMatch = notesStr.match(/(?:إيصال|ايصال|وصل|رقم)\s*[:#]?\s*([0-9A-Za-z_-]+)/i);
+            if (rMatch) receiptNo = rMatch[1];
+
+            return {
+                id: sp.id,
+                date: sp.date || '-',
+                part_name: sp.part_name || 'قطعة غيار',
+                quantity: Math.abs(parseInt(sp.count_in || sp.count_out || 1, 10)),
+                unit_price: price,
+                total_amount: price,
+                payment_status_label: paymentLabel,
+                receipt_number: receiptNo,
+                notes: sp.notes || '-'
+            };
+        });
+
+        // 5. TAB 4: HQ Central Maintenance Cycles
+        const hqCycles = await allQuery(`
+            SELECT m.ID,
+                   m.FormNo as form_no,
+                   m.[Checked Out Date] as sent_date,
+                   m.[Checked In Date] as return_date,
+                   m.[Checked Out Condition] as sent_condition,
+                   m.[Checked In Condition] as return_condition,
+                   m.Notes as notes,
+                   m.spstatus as hq_parts_note,
+                   m.Procedure as technician,
+                   m.Model as model,
+                   m.Manufactor as manufacturer
+            FROM maintenance_raw m
+            WHERE m.[Unit Serial] = ? OR m.[Unit Serial] LIKE ?
+            ORDER BY m.ID DESC
+        `, [s, `%${s}%`]);
+
+        // Join HQ Spare Parts from store_sp_maintenance_raw for each cycle
+        for (const cycle of hqCycles) {
+            if (cycle.form_no) {
+                const parts = await allQuery(`
+                    SELECT sm.*
+                    FROM store_sp_maintenance_raw sm
+                    WHERE sm.FormNo = ? OR sm.Serial = ?
+                `, [cycle.form_no, s]);
+                cycle.hq_parts_replaced = parts.map(p => ({
+                    part_name: p.type || p.PartName || 'بوردة / قطعة رئيسية',
+                    quantity: p.count_in || 1,
+                    notes: p.notes || '-'
+                }));
+            } else {
+                cycle.hq_parts_replaced = [];
+            }
+        }
+
+        res.json({
+            success: true,
+            device_info: deviceInfo,
+            replacements: replacements,
+            maintenance: formattedTickets,
+            spare_parts: formattedParts,
+            hq_cycles: hqCycles
+        });
+
+    } catch (err) {
+        console.error("Device deepdive error:", err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // Universal Asset Search & Historical Timeline API
 app.get('/api/assets/timeline', async (req, res) => {
     try {

@@ -374,6 +374,7 @@ function switchTab(tabName) {
         AppState.currentTab = tabName;
         
         if (tabName === 'dashboard') loadDashboard();
+        else if (tabName === 'customers') initCustomerManagement();
         else if (tabName === 'branch-warehouse') loadWarehouseInventory();
         else if (tabName === 'sim-warehouse') loadSimsInventory();
         else if (tabName === 'hq-maintenance') loadHqMaintenanceInventory();
@@ -407,6 +408,7 @@ function initNavigation() {
 
             // Route handler
             if (tabName === 'dashboard') loadDashboard();
+            else if (tabName === 'customers') initCustomerManagement();
             else if (tabName === 'branch-warehouse') loadWarehouseInventory();
             else if (tabName === 'sim-warehouse') loadSimsInventory();
             else if (tabName === 'hq-maintenance') loadHqMaintenanceInventory();
@@ -5477,9 +5479,483 @@ function exportAvailableSparePartsToExcel() {
 }
 window.exportAvailableSparePartsToExcel = exportAvailableSparePartsToExcel;
 
+// ==========================================================================
+// 6. CUSTOMER 360 CRM & ASSET DEEP-DIVE CONTROLLERS
+// ==========================================================================
+
+let activeCustomerProfile = null;
+let custSearchDebounceTimer = null;
+let currentDeviceDeepdiveData = null;
+
+function initCustomerManagement() {
+    initCustomerSearch();
+    initDeviceDeepdiveModal();
+}
+window.initCustomerManagement = initCustomerManagement;
+
+function initCustomerSearch() {
+    const input = document.getElementById('cust-search-input');
+    const suggestionsBox = document.getElementById('cust-search-suggestions');
+    const clearBtn = document.getElementById('btn-clear-cust-search');
+
+    if (!input || input.dataset.bound) return;
+    input.dataset.bound = "true";
+
+    input.addEventListener('input', (e) => {
+        const val = e.target.value.trim();
+        if (clearBtn) clearBtn.style.display = val ? 'block' : 'none';
+
+        clearTimeout(custSearchDebounceTimer);
+        if (val.length < 2) {
+            if (suggestionsBox) {
+                suggestionsBox.style.display = 'none';
+                suggestionsBox.innerHTML = '';
+            }
+            return;
+        }
+
+        custSearchDebounceTimer = setTimeout(async () => {
+            await fetchCustomerSuggestions(val);
+        }, 220);
+    });
+
+    clearBtn?.addEventListener('click', () => {
+        input.value = '';
+        clearBtn.style.display = 'none';
+        if (suggestionsBox) suggestionsBox.style.display = 'none';
+        input.focus();
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!input.contains(e.target) && !suggestionsBox?.contains(e.target)) {
+            if (suggestionsBox) suggestionsBox.style.display = 'none';
+        }
+    });
+
+    input.addEventListener('focus', () => {
+        if (input.value.trim().length >= 2 && suggestionsBox && suggestionsBox.children.length > 0) {
+            suggestionsBox.style.display = 'block';
+        }
+    });
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const firstItem = suggestionsBox?.querySelector('.cust-suggestion-item');
+            if (firstItem) {
+                firstItem.click();
+            }
+        }
+    });
+}
+
+async function fetchCustomerSuggestions(q) {
+    const suggestionsBox = document.getElementById('cust-search-suggestions');
+    if (!suggestionsBox) return;
+
+    try {
+        suggestionsBox.innerHTML = `<div style="padding:14px; text-align:center; color:var(--text-muted); font-size:12px;"><i data-lucide="refresh-cw" class="spin-animation" style="width:14px; height:14px; vertical-align:middle;"></i> جاري البحث الفوري في سجلات العملاء والماكينات...</div>`;
+        suggestionsBox.style.display = 'block';
+        if (typeof refreshIcons === 'function') refreshIcons();
+
+        const res = await fetch(`/api/customers/search?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+
+        if (!data.success || !data.results || data.results.length === 0) {
+            suggestionsBox.innerHTML = `
+                <div style="padding:16px; text-align:center; color:var(--text-muted); font-size:12px;">
+                    <i data-lucide="alert-circle" style="width:16px; height:16px; vertical-align:middle; margin-left:4px; color:#f59e0b;"></i>
+                    لا توجد نتائج مطابقة لـ "${q}"
+                </div>
+            `;
+            if (typeof refreshIcons === 'function') refreshIcons();
+            return;
+        }
+
+        suggestionsBox.innerHTML = data.results.map(item => {
+            const posBadge = item.pos_serials && item.pos_serials.length > 0
+                ? `<span class="badge inmerchant" style="font-family:var(--font-en); font-size:11px; padding:2px 6px;">POS: ${item.pos_serials.join(', ')}</span>`
+                : '';
+            const simBadge = item.sim_serials && item.sim_serials.length > 0
+                ? `<span class="badge" style="background:rgba(16,185,129,0.12); color:#10b981; border:1px solid rgba(16,185,129,0.3); font-family:var(--font-en); font-size:11px; padding:2px 6px;">SIM: ${item.sim_serials.join(', ')}</span>`
+                : '';
+
+            return `
+                <div class="cust-suggestion-item" onclick="selectCustomerResult('${item.merchant_code}')" style="padding:12px 16px; border-bottom:1px solid var(--md-sys-color-outline-variant); cursor:pointer; display:flex; justify-content:space-between; align-items:center; transition:background 0.15s ease;" onmouseover="this.style.background='var(--md-sys-color-surface-container-high)'" onmouseout="this.style.background='transparent'">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <div style="width:34px; height:34px; border-radius:10px; background:rgba(37,99,235,0.15); color:#2563eb; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                            <i data-lucide="store" style="width:18px; height:18px;"></i>
+                        </div>
+                        <div>
+                            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                <strong style="font-size:13px; color:var(--md-sys-color-on-surface);">${item.merchant_name}</strong>
+                                <span class="badge inmerchant" style="font-family:var(--font-en); font-size:11px; padding:1px 6px;">#${item.merchant_code}</span>
+                                <span class="badge" style="background:rgba(245,158,11,0.15); color:#f59e0b; font-size:11px; padding:1px 6px;">${item.government}</span>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:8px; margin-top:4px; flex-wrap:wrap;">
+                                <span style="font-size:11px; color:var(--text-muted);">${item.matched_field}</span>
+                                ${posBadge}
+                                ${simBadge}
+                            </div>
+                        </div>
+                    </div>
+                    <div style="color:var(--md-sys-color-primary); flex-shrink:0;">
+                        <i data-lucide="chevron-left" style="width:18px; height:18px;"></i>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        if (typeof refreshIcons === 'function') refreshIcons();
+
+    } catch (err) {
+        console.error("Suggestions error:", err);
+        suggestionsBox.innerHTML = `<div style="padding:14px; text-align:center; color:#ef4444; font-size:12px;">حدث خطأ أثناء البحث</div>`;
+    }
+}
+
+async function selectCustomerResult(merchantCode) {
+    const suggestionsBox = document.getElementById('cust-search-suggestions');
+    if (suggestionsBox) suggestionsBox.style.display = 'none';
+
+    await loadCustomerProfile(merchantCode);
+}
+window.selectCustomerResult = selectCustomerResult;
+
+async function loadCustomerProfile(merchantCode) {
+    const emptyPrompt = document.getElementById('cust-empty-prompt');
+    const profileContainer = document.getElementById('cust-profile-container');
+    if (!profileContainer) return;
+
+    if (emptyPrompt) emptyPrompt.style.display = 'none';
+    profileContainer.style.display = 'block';
+
+    // Show loading state in header
+    document.getElementById('cust-profile-name').textContent = 'جاري تحميل ملف العميل...';
+    document.getElementById('cust-profile-code-badge').textContent = `#${merchantCode}`;
+
+    try {
+        const res = await fetch(`/api/customers/profile/${encodeURIComponent(merchantCode)}`);
+        const data = await res.json();
+
+        if (!data.success) {
+            alert(data.error || "تعذر جلب ملف العميل");
+            return;
+        }
+
+        activeCustomerProfile = data;
+        renderCustomerProfileView(data);
+
+    } catch (err) {
+        console.error("Error loading customer profile:", err);
+        alert("حدث خطأ أثناء تحميل بيانات العميل");
+    }
+}
+window.loadCustomerProfile = loadCustomerProfile;
+
+function renderCustomerProfileView(data) {
+    const { customer, devices, sim_cards, installments, stats } = data;
+
+    // 1. Header & Badges
+    document.getElementById('cust-profile-name').textContent = customer.name;
+    document.getElementById('cust-profile-code-badge').textContent = `#${customer.merchant_code}`;
+    document.getElementById('cust-profile-gov-badge').textContent = customer.government || 'الإدارة غير محددة';
+    document.getElementById('cust-profile-contact-person').textContent = customer.contact_person ? `المسؤول: ${customer.contact_person}` : `كود المخبز: ${customer.merchant_code}`;
+
+    // 2. Metadata Grid
+    document.getElementById('cust-profile-nid').textContent = customer.national_id || '-';
+    const phones = [customer.phone_1, customer.phone_2].filter(p => p && p !== '-' && p !== 'null').join(' / ');
+    document.getElementById('cust-profile-phones').textContent = phones || '-';
+    document.getElementById('cust-profile-address').textContent = customer.address || '-';
+    document.getElementById('cust-profile-bank').textContent = customer.bank_name !== '-' ? `${customer.bank_name} (${customer.bank_account})` : '-';
+    document.getElementById('cust-profile-tax').textContent = customer.tax_card !== '-' ? `سجل: ${customer.commercial_register} | بطاقة: ${customer.tax_card}` : '-';
+    document.getElementById('cust-profile-gate').textContent = customer.gate_no !== '-' ? `بوابة #${customer.gate_no}` : (customer.has_gates === '1' ? 'يوجد بوابات' : '-');
+
+    // 3. Stats KPIs
+    document.getElementById('cust-kpi-devices').textContent = stats.total_devices;
+    document.getElementById('cust-kpi-sims').textContent = stats.total_sims;
+    document.getElementById('cust-kpi-tickets').textContent = stats.total_tickets;
+    document.getElementById('cust-kpi-sp').textContent = stats.total_spare_parts;
+    document.getElementById('cust-kpi-debt').textContent = `${Number(installments.total_debt || 0).toLocaleString('ar-EG')} جم`;
+
+    // 4. POS Devices List
+    const devList = document.getElementById('cust-devices-list');
+    document.getElementById('cust-devices-count-badge').textContent = `${devices.length} ماكينة`;
+
+    if (devices.length === 0) {
+        devList.innerHTML = `<div style="text-align:center; padding:25px; color:var(--text-muted); font-size:12px;">لا توجد ماكينات مسجلة حالياً على هذا العميل</div>`;
+    } else {
+        devList.innerHTML = devices.map(d => `
+            <div style="background:var(--md-sys-color-surface-container-low); border:1px solid var(--md-sys-color-outline-variant); border-radius:12px; padding:14px 16px; transition:transform 0.15s ease, box-shadow 0.15s ease;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <span class="badge inmerchant" style="font-weight:700; font-size:11px;">${d.slot}</span>
+                    <span class="badge" style="background:rgba(56,189,248,0.15); color:var(--md-sys-color-primary); font-size:11px; font-weight:700;">${d.condition}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <div>
+                        <strong style="font-size:17px; font-family:var(--font-en); color:var(--md-sys-color-primary); letter-spacing:0.5px;">${d.serial}</strong>
+                        <span style="display:block; font-size:11px; color:var(--text-muted); margin-top:2px;">الموديل: ${d.manufacturer} ${d.model} ${d.pinpad !== '-' ? `| Pinpad: ${d.pinpad}` : ''}</span>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-primary" onclick="openDevice360Modal('${d.serial}')" style="width:100%; padding:8px 12px; font-size:12px; display:flex; align-items:center; justify-content:center; gap:8px; margin-top:8px; border-radius:8px; box-shadow:0 2px 8px rgba(37,99,235,0.25);">
+                    <i data-lucide="search" style="width:14px; height:14px;"></i>
+                    <span>فحص سجل وتاريخ الماكينة الكامل (360°)</span>
+                </button>
+            </div>
+        `).join('');
+    }
+
+    // 5. SIM Cards List
+    const simsList = document.getElementById('cust-sims-list');
+    document.getElementById('cust-sims-count-badge').textContent = `${sim_cards.length} شريحة`;
+
+    if (sim_cards.length === 0) {
+        simsList.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size:12px;">لا توجد شرائح مسجلة</div>`;
+    } else {
+        simsList.innerHTML = sim_cards.map(s => `
+            <div style="background:var(--md-sys-color-surface-container-low); border:1px solid var(--md-sys-color-outline-variant); border-radius:10px; padding:10px 14px; display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <div style="width:28px; height:28px; border-radius:8px; background:rgba(16,185,129,0.15); color:#10b981; display:flex; align-items:center; justify-content:center; font-size:11px;">
+                        <i data-lucide="signal" style="width:15px; height:15px;"></i>
+                    </div>
+                    <div>
+                        <strong style="font-size:13px; font-family:var(--font-en); color:var(--md-sys-color-on-surface);">${s.serial}</strong>
+                        <span style="display:block; font-size:11px; color:var(--text-muted);">${s.slot} • ${s.carrier} ${s.phone !== '-' ? `• هاتف: ${s.phone}` : ''}</span>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // 6. Installments List
+    const instList = document.getElementById('cust-installments-list');
+    document.getElementById('cust-inst-count-badge').textContent = `${installments.count} عقود`;
+
+    if (installments.count === 0) {
+        instList.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size:12px;">لا توجد عقود أقساط مسجلة على هذه الماكينات</div>`;
+    } else {
+        instList.innerHTML = installments.contracts.map(c => `
+            <div style="background:var(--md-sys-color-surface-container-low); border:1px solid var(--md-sys-color-outline-variant); border-radius:10px; padding:12px 14px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <strong style="font-size:13px; font-family:var(--font-en); color:#f59e0b;">عقد ماكينة #${c.pos}</strong>
+                    <span class="badge inmerchant" style="font-family:var(--font-en); font-weight:800;">${Number(c.finalunitprice || c.unitprice || 0).toLocaleString('ar-EG')} جم</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted);">
+                    <span>عدد الأقساط: ${c.installments || 0} شهر</span>
+                    <span>القسط الشهري: ${Number(c.monthlyinstallmentprice || 0).toLocaleString('ar-EG')} جم</span>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    if (typeof refreshIcons === 'function') refreshIcons();
+}
+
+// --------------------------------------------------------------------------
+// DEVICE 360 INTERACTIVE MODAL (4 TABS)
+// --------------------------------------------------------------------------
+
+function initDeviceDeepdiveModal() {
+    if (window.devDeepdiveModalBound) return;
+
+    document.getElementById('btn-close-device-360-modal')?.addEventListener('click', closeDevice360Modal);
+    document.getElementById('btn-dismiss-device-360-modal')?.addEventListener('click', closeDevice360Modal);
+
+    const modal = document.getElementById('modal-device-360-deepdive');
+    modal?.addEventListener('click', (e) => {
+        if (e.target === modal) closeDevice360Modal();
+    });
+
+    // Subtab switching
+    document.querySelectorAll('.dev-deepdive-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const subtab = btn.getAttribute('data-subtab');
+            switchDeviceSubtab(subtab);
+        });
+    });
+
+    window.devDeepdiveModalBound = true;
+}
+
+function switchDeviceSubtab(subtab) {
+    document.querySelectorAll('.dev-deepdive-tab').forEach(b => {
+        if (b.getAttribute('data-subtab') === subtab) {
+            b.classList.remove('btn-secondary');
+            b.classList.add('btn-primary', 'active');
+        } else {
+            b.classList.remove('btn-primary', 'active');
+            b.classList.add('btn-secondary');
+        }
+    });
+
+    document.querySelectorAll('.dev-subtab-pane').forEach(p => {
+        p.style.display = 'none';
+    });
+
+    const targetPane = document.getElementById(`dev-pane-${subtab}`);
+    if (targetPane) targetPane.style.display = 'block';
+
+    if (typeof refreshIcons === 'function') refreshIcons();
+}
+
+async function openDevice360Modal(serial) {
+    const modal = document.getElementById('modal-device-360-deepdive');
+    if (!modal) return;
+
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+    modal.style.opacity = '1';
+    modal.style.visibility = 'visible';
+    modal.style.zIndex = '999999';
+
+    // Header info
+    document.getElementById('dev-modal-serial').textContent = serial;
+    document.getElementById('dev-modal-model').textContent = 'جاري الفحص...';
+    document.getElementById('dev-modal-owner').textContent = '-';
+
+    // Initial Loading spinners in all 4 tables
+    const loadingHtml = `<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--text-muted);"><i data-lucide="refresh-cw" class="spin-animation" style="width:16px;height:16px;vertical-align:middle;"></i> جاري تحميل السجلات المدققة...</td></tr>`;
+    document.getElementById('dev-table-maintenance-body').innerHTML = loadingHtml;
+    document.getElementById('dev-table-replacements-body').innerHTML = loadingHtml;
+    document.getElementById('dev-table-spare-parts-body').innerHTML = loadingHtml;
+    document.getElementById('dev-table-hq-body').innerHTML = loadingHtml;
+
+    // Reset to first subtab
+    switchDeviceSubtab('maintenance');
+
+    try {
+        const res = await fetch(`/api/customers/device-deepdive/${encodeURIComponent(serial)}`);
+        const data = await res.json();
+
+        if (!data.success) {
+            alert(data.error || "تعذر جلب سجلات الماكينة");
+            return;
+        }
+
+        currentDeviceDeepdiveData = data;
+        renderDeviceDeepdiveContent(data);
+
+    } catch (err) {
+        console.error("Error fetching device deepdive:", err);
+        alert("حدث خطأ أثناء تحميل سجل الماكينة");
+    }
+}
+window.openDevice360Modal = openDevice360Modal;
+
+function closeDevice360Modal() {
+    const modal = document.getElementById('modal-device-360-deepdive');
+    if (modal) {
+        modal.classList.remove('active');
+        modal.style.display = 'none';
+        modal.style.opacity = '0';
+        modal.style.visibility = 'hidden';
+    }
+}
+window.closeDevice360Modal = closeDevice360Modal;
+
+function renderDeviceDeepdiveContent(data) {
+    const { device_info, maintenance, replacements, spare_parts, hq_cycles } = data;
+
+    // Modal Header
+    document.getElementById('dev-modal-serial').textContent = device_info.serial;
+    document.getElementById('dev-modal-model').textContent = `${device_info.manufacturer} ${device_info.model}`;
+    document.getElementById('dev-modal-owner').textContent = `المالك الحالي: ${device_info.current_owner} (#${device_info.merchant_code}) • ${device_info.government}`;
+
+    // Subtab counts
+    document.getElementById('dev-tab-count-maint').textContent = maintenance.length;
+    document.getElementById('dev-tab-count-rep').textContent = replacements.length;
+    document.getElementById('dev-tab-count-sp').textContent = spare_parts.length;
+    document.getElementById('dev-tab-count-hq').textContent = hq_cycles.length;
+
+    // TAB 1: Maintenance Tickets (Entry & Exit timestamps)
+    const maintBody = document.getElementById('dev-table-maintenance-body');
+    if (maintenance.length === 0) {
+        maintBody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:35px; color:var(--text-muted);">لا توجد صيانات مسجلة لهذه الماكينة بالفرع</td></tr>`;
+    } else {
+        maintBody.innerHTML = maintenance.map((m, idx) => `
+            <tr>
+                <td style="font-family:var(--font-en); font-weight:700; color:var(--text-muted);">${idx + 1}</td>
+                <td>${formatDateTimeCell(m.entry_datetime)}</td>
+                <td>${formatDateTimeCell(m.exit_datetime)}</td>
+                <td><strong style="color:var(--md-sys-color-primary); font-size:12px;">${m.technician}</strong></td>
+                <td style="max-width:200px; word-break:break-word; font-size:12px;">${m.complaint}</td>
+                <td style="max-width:220px; word-break:break-word; font-size:12px; color:var(--md-sys-color-on-surface);">${m.action_taken}</td>
+                <td>
+                    <span class="badge ${m.fees_type === 'مجاني' ? 'inmerchant' : 'warning'}" style="font-size:11px; font-weight:700;">
+                        ${m.fees_type} ${m.fees_amount > 0 ? `(${Number(m.fees_amount).toLocaleString('ar-EG')} جم)` : ''}
+                    </span>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    // TAB 2: Replacements & Swaps
+    const repBody = document.getElementById('dev-table-replacements-body');
+    if (replacements.length === 0) {
+        repBody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:35px; color:var(--text-muted);">لا توجد حركات استبدال مسجلة لهذه الماكينة</td></tr>`;
+    } else {
+        repBody.innerHTML = replacements.map((r, idx) => `
+            <tr>
+                <td style="font-family:var(--font-en); font-weight:700; color:var(--text-muted);">${idx + 1}</td>
+                <td>${formatDateTimeCell(r.date)}</td>
+                <td><span class="badge inmerchant" style="font-family:var(--font-en); font-weight:700;">#${r.merchant_code}</span></td>
+                <td><strong style="font-size:12px;">${r.technician || 'فني الصيانة'}</strong></td>
+                <td><span class="badge warning" style="font-weight:700;">${r.action_type || 'استبدال ماكينة'}</span></td>
+                <td style="font-size:12px;">${r.complaint || '-'}</td>
+                <td style="font-size:12px; color:var(--md-sys-color-on-surface);">${r.action_taken || '-'}</td>
+            </tr>
+        `).join('');
+    }
+
+    // TAB 3: Spare Parts
+    const spBody = document.getElementById('dev-table-spare-parts-body');
+    if (spare_parts.length === 0) {
+        spBody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:35px; color:var(--text-muted);">لا توجد قطع غيار منصرفة لهذه الماكينة في سجلات المخزن</td></tr>`;
+    } else {
+        spBody.innerHTML = spare_parts.map((sp, idx) => `
+            <tr>
+                <td style="font-family:var(--font-en); font-weight:700; color:var(--text-muted);">${idx + 1}</td>
+                <td>${formatDateTimeCell(sp.date)}</td>
+                <td><strong style="color:var(--md-sys-color-primary); font-size:13px;">${sp.part_name}</strong></td>
+                <td style="font-family:var(--font-en); font-weight:700;">${sp.quantity}</td>
+                <td style="font-family:var(--font-en); font-weight:700; color:#10b981;">${Number(sp.unit_price).toLocaleString('ar-EG')} جم</td>
+                <td><span class="badge inmerchant" style="font-size:11px; font-weight:700;">${sp.payment_status_label}</span></td>
+                <td style="font-family:var(--font-en); font-weight:700; color:var(--text-muted);">${sp.receipt_number}</td>
+                <td style="font-size:11px; color:var(--text-muted); max-width:180px; word-break:break-word;">${sp.notes}</td>
+            </tr>
+        `).join('');
+    }
+
+    // TAB 4: HQ Central Maintenance
+    const hqBody = document.getElementById('dev-table-hq-body');
+    if (hq_cycles.length === 0) {
+        hqBody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:35px; color:var(--text-muted);">لم يتم إرسال هذه الماكينة إلى مركز الصيانة الرئيسي بالشركة</td></tr>`;
+    } else {
+        hqBody.innerHTML = hq_cycles.map((hq, idx) => {
+            const partsBadges = hq.hq_parts_replaced && hq.hq_parts_replaced.length > 0
+                ? hq.hq_parts_replaced.map(p => `<span class="badge warning" style="margin:2px; font-size:11px;">${p.part_name}</span>`).join('')
+                : (hq.hq_parts_note || '<span style="color:var(--text-muted); font-size:11px;">صيانة شاملة</span>');
+
+            return `
+                <tr>
+                    <td style="font-family:var(--font-en); font-weight:700; color:var(--text-muted);">${idx + 1}</td>
+                    <td><span class="badge inmerchant" style="font-family:var(--font-en); font-weight:800;">إذن #${hq.form_no || '-'}</span></td>
+                    <td>${formatDateTimeCell(hq.sent_date)}</td>
+                    <td>${formatDateTimeCell(hq.return_date)}</td>
+                    <td><span class="badge inmerchant">${hq.return_condition || hq.sent_condition || 'تم الفحص'}</span></td>
+                    <td>${partsBadges}</td>
+                    <td style="font-size:11px; color:var(--text-muted); max-width:180px; word-break:break-word;">${hq.notes || '-'}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    if (typeof refreshIcons === 'function') refreshIcons();
+}
+
 // Auto-run font initialization & sync health monitor
 if (typeof document !== 'undefined') {
     initFontSystem();
     checkSyncHealth();
     setInterval(checkSyncHealth, 15000);
 }
+
