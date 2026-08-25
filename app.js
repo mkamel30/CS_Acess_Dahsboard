@@ -5532,10 +5532,12 @@ function initCustomerSearch() {
         input.focus();
     });
 
-    document.addEventListener('click', (e) => {
-        if (!input.contains(e.target) && !suggestionsBox?.contains(e.target)) {
-            if (suggestionsBox) suggestionsBox.style.display = 'none';
-        }
+    ['click', 'touchstart', 'pointerdown'].forEach(evt => {
+        document.addEventListener(evt, (e) => {
+            if (!input.contains(e.target) && !suggestionsBox?.contains(e.target)) {
+                if (suggestionsBox) suggestionsBox.style.display = 'none';
+            }
+        }, { passive: true });
     });
 
     input.addEventListener('focus', () => {
@@ -5633,8 +5635,17 @@ async function fetchCustomerSuggestions(q) {
 }
 
 async function selectCustomerResult(merchantCode) {
+    clearTimeout(custSearchDebounceTimer);
     const suggestionsBox = document.getElementById('cust-search-suggestions');
-    if (suggestionsBox) suggestionsBox.style.display = 'none';
+    if (suggestionsBox) {
+        suggestionsBox.style.display = 'none';
+        suggestionsBox.innerHTML = '';
+    }
+
+    const input = document.getElementById('cust-smart-search-input');
+    if (input) {
+        input.blur(); // Hide virtual keyboard on mobile
+    }
 
     await loadCustomerProfile(merchantCode);
 }
@@ -5643,6 +5654,12 @@ window.selectCustomerResult = selectCustomerResult;
 async function loadCustomerProfile(merchantCode) {
     const emptyPrompt = document.getElementById('cust-empty-prompt');
     const profileContainer = document.getElementById('cust-profile-container');
+    const suggestionsBox = document.getElementById('cust-search-suggestions');
+    if (suggestionsBox) {
+        suggestionsBox.style.display = 'none';
+        suggestionsBox.innerHTML = '';
+    }
+
     if (!profileContainer) return;
 
     if (emptyPrompt) emptyPrompt.style.display = 'none';
@@ -5651,6 +5668,9 @@ async function loadCustomerProfile(merchantCode) {
     // Show loading state in header
     document.getElementById('cust-profile-name').textContent = 'جاري تحميل ملف العميل...';
     document.getElementById('cust-profile-code-badge').textContent = `#${merchantCode}`;
+
+    // Smooth scroll into view on mobile
+    profileContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
     try {
         const res = await fetch(`/api/customers/profile/${encodeURIComponent(merchantCode)}`);
