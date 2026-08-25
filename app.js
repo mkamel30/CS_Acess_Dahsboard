@@ -459,84 +459,26 @@ function initNavigation() {
         document.getElementById('tab-btn-reports')?.click();
     });
 
-    document.getElementById('switch-to-pos')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-branch-warehouse')?.click();
-    });
-    document.getElementById('switch-to-pos-2')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-branch-warehouse')?.click();
-    });
-    document.getElementById('switch-to-pos-3')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-branch-warehouse')?.click();
-    });
-    document.getElementById('switch-to-pos-4')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-branch-warehouse')?.click();
-    });
-    document.getElementById('switch-to-pos-5')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-branch-warehouse')?.click();
-    });
-
-    document.getElementById('switch-to-sims')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-sim-warehouse')?.click();
-    });
-    document.getElementById('switch-to-sims-2')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-sim-warehouse')?.click();
-    });
-    document.getElementById('switch-to-sims-3')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-sim-warehouse')?.click();
-    });
-    document.getElementById('switch-to-sims-4')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-sim-warehouse')?.click();
-    });
-    document.getElementById('switch-to-sims-5')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-sim-warehouse')?.click();
-    });
-
-    document.getElementById('switch-to-maint')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-hq-maintenance')?.click();
-    });
-    document.getElementById('switch-to-maint-2')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-hq-maintenance')?.click();
-    });
-    document.getElementById('switch-to-maint-3')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-hq-maintenance')?.click();
-    });
-    document.getElementById('switch-to-maint-4')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-hq-maintenance')?.click();
-    });
-    document.getElementById('switch-to-maint-5')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-hq-maintenance')?.click();
-    });
-
-    document.getElementById('switch-to-inst')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-installments')?.click();
-    });
-    document.getElementById('switch-to-inst-2')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-installments')?.click();
-    });
-    document.getElementById('switch-to-inst-3')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-installments')?.click();
-    });
-    document.getElementById('switch-to-inst-4')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-installments')?.click();
-    });
-    document.getElementById('switch-to-inst-5')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-installments')?.click();
-    });
-
-    document.getElementById('switch-to-sp')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-spare-parts-inventory')?.click();
-    });
-    document.getElementById('switch-to-sp-2')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-spare-parts-inventory')?.click();
-    });
-    document.getElementById('switch-to-sp-3')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-spare-parts-inventory')?.click();
-    });
-    document.getElementById('switch-to-sp-4')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-spare-parts-inventory')?.click();
-    });
-    document.getElementById('switch-to-sp-5')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-spare-parts-inventory')?.click();
+    // Warehouse & Operations Sub-tabs Switcher Bindings (All 6 Tabs)
+    ['', '-2', '-3', '-4', '-5', '-6'].forEach(suffix => {
+        document.getElementById(`switch-to-customers${suffix}`)?.addEventListener('click', () => {
+            document.getElementById('tab-btn-customers')?.click();
+        });
+        document.getElementById(`switch-to-pos${suffix}`)?.addEventListener('click', () => {
+            document.getElementById('tab-btn-branch-warehouse')?.click();
+        });
+        document.getElementById(`switch-to-sims${suffix}`)?.addEventListener('click', () => {
+            document.getElementById('tab-btn-sim-warehouse')?.click();
+        });
+        document.getElementById(`switch-to-maint${suffix}`)?.addEventListener('click', () => {
+            document.getElementById('tab-btn-hq-maintenance')?.click();
+        });
+        document.getElementById(`switch-to-inst${suffix}`)?.addEventListener('click', () => {
+            document.getElementById('tab-btn-installments')?.click();
+        });
+        document.getElementById(`switch-to-sp${suffix}`)?.addEventListener('click', () => {
+            document.getElementById('tab-btn-spare-parts-inventory')?.click();
+        });
     });
 }
 
