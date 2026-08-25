@@ -5684,20 +5684,26 @@ function renderCustomerProfileView(data) {
         devList.innerHTML = `<div style="text-align:center; padding:25px; color:var(--text-muted); font-size:12px;">لا توجد ماكينات مسجلة حالياً على هذا العميل</div>`;
     } else {
         devList.innerHTML = devices.map(d => `
-            <div style="background:var(--md-sys-color-surface-container-low); border:1px solid var(--md-sys-color-outline-variant); border-radius:14px; padding:16px; transition:transform 0.15s ease, box-shadow 0.15s ease; box-shadow:var(--md-elevation-1);" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <span class="badge inmerchant" style="font-weight:700; font-size:11px;">${d.slot}</span>
-                    <span class="badge" style="background:rgba(56,189,248,0.15); color:var(--md-sys-color-primary); font-size:11px; font-weight:700;">${d.condition}</span>
-                </div>
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <div>
-                        <strong style="font-size:18px; font-family:var(--font-en); color:var(--md-sys-color-primary); letter-spacing:0.5px;">${d.serial}</strong>
-                        <span style="display:block; font-size:11px; color:var(--text-muted); margin-top:2px;">الموديل: ${d.manufacturer} ${d.model} ${d.pinpad !== '-' ? `| Pinpad: ${d.pinpad}` : ''}</span>
+            <div style="background:var(--md-sys-color-surface-container-low); border:1px solid var(--md-sys-color-outline-variant); border-radius:12px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; gap:12px; transition:border-color 0.15s ease;" onmouseover="this.style.borderColor='var(--md-sys-color-primary)'" onmouseout="this.style.borderColor='var(--md-sys-color-outline-variant)'">
+                <div style="display:flex; align-items:center; gap:12px; min-width:0;">
+                    <div style="width:34px; height:34px; border-radius:10px; background:rgba(56,189,248,0.15); color:var(--md-sys-color-primary); display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <i data-lucide="boxes" style="width:18px; height:18px;"></i>
+                    </div>
+                    <div style="min-width:0;">
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <strong style="font-size:14px; font-family:var(--font-en); color:var(--md-sys-color-primary); letter-spacing:0.5px;">${d.serial}</strong>
+                            <span class="badge inmerchant" style="font-size:10px; padding:2px 8px;">${d.slot}</span>
+                            <span class="badge" style="background:rgba(56,189,248,0.12); color:var(--md-sys-color-primary); font-size:10px; padding:2px 6px;">${d.condition || 'سليمة'}</span>
+                        </div>
+                        <span style="display:block; font-size:11px; color:var(--text-muted); margin-top:2px;">
+                            الموديل: <strong style="color:var(--md-sys-color-on-surface);">${d.manufacturer} ${d.model}</strong>
+                            ${d.pinpad && d.pinpad !== '-' ? `• Pinpad: <span style="font-family:var(--font-en);">${d.pinpad}</span>` : ''}
+                        </span>
                     </div>
                 </div>
-                <button type="button" class="btn btn-primary" onclick="openDevice360Modal('${d.serial}')" style="width:100%; padding:9px 12px; font-size:12px; display:flex; align-items:center; justify-content:center; gap:8px; margin-top:8px; border-radius:10px; box-shadow:0 2px 10px rgba(37,99,235,0.25);">
-                    <i data-lucide="search" style="width:15px; height:15px;"></i>
-                    <span>فحص سجل وتاريخ الماكينة الكامل (360°)</span>
+                <button type="button" class="btn btn-primary" onclick="openDevice360Modal('${d.serial}')" style="padding:6px 12px; font-size:11px; display:inline-flex; align-items:center; gap:6px; border-radius:8px; white-space:nowrap; flex-shrink:0; box-shadow:0 2px 6px rgba(37,99,235,0.25);">
+                    <i data-lucide="search" style="width:13px; height:13px;"></i>
+                    <span>فحص الماكينة (360°)</span>
                 </button>
             </div>
         `).join('');
