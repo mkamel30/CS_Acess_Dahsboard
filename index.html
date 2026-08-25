@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CS Dashboard | Customer Support & Operations Platform</title>
-    <!-- Google Fonts: Cairo, Alexandria, Tajawal, Almarai, Readex Pro, IBM Plex Sans Arabic, Noto Sans Arabic -->
+    <!-- Google Fonts: Cairo, Alexandria, Tajawal, Almarai, Readex Pro, IBM Plex Sans Arabic, Noto Sans Arabic, JetBrains Mono, Orbitron, Fira Code, Share Tech Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;600;700;800&family=Almarai:wght@400;700;800&family=Cairo:wght@400;500;600;700;800;900&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Readex+Pro:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;600;700;800&family=Almarai:wght@400;700;800&family=Cairo:wght@400;500;600;700;800;900&family=Fira+Code:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;0,800;1,400&family=Noto+Sans+Arabic:wght@400;600;700;800&family=Orbitron:wght@500;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Readex+Pro:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600&family=Share+Tech+Mono&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
     <!-- PWA & Mobile Meta -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0284c7">
@@ -18,7 +18,7 @@
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- Stylesheet -->
-    <link rel="stylesheet" href="index.css?v=2.2">
+    <link rel="stylesheet" href="index.css?v=2.3">
 </head>
 <body>
     <div class="app-container">
@@ -2410,136 +2410,177 @@
                     </div>
 
                     <!-- ======================================================== -->
-                    <!-- SUBTAB 4: SYSTEM DIAGNOSTICS & ERROR TRACER (مركز التشخيص)-->
+                    <!-- SUBTAB 4: SYSTEM DIAGNOSTICS & CYBER TELEMETRY HUD MATRIX  -->
                     <!-- ======================================================== -->
-                    <div class="settings-subtab-pane" id="pane-settings-diagnostics" style="display:none;">
-                        <!-- KPI Row for Diagnostics -->
-                        <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:14px; margin-bottom:18px;">
-                            <div class="card kpi-card" style="border-top: 3px solid #ef4444;">
-                                <div class="kpi-icon-box" style="background: rgba(239, 68, 68, 0.12); color: #ef4444;">
-                                    <i data-lucide="alert-octagon"></i>
+                    <div class="settings-subtab-pane cyber-terminal-root" id="pane-settings-diagnostics" style="display:none;">
+                        
+                        <!-- 🛸 Top Cyber Command Terminal Header -->
+                        <div class="cyber-hud-header">
+                            <div>
+                                <div class="cyber-terminal-prompt">
+                                    <span style="color:var(--cyber-neon-cyan);">root@smartcs-core:~$</span>
+                                    <span>sys_diagnostic_auditor --live-stream --realtime</span>
+                                    <span class="cyber-blink-cursor"></span>
                                 </div>
-                                <div class="kpi-info">
-                                    <span class="kpi-label">أخطاء النظام (24 ساعة)</span>
-                                    <h3 class="kpi-value" id="diag-kpi-errors-24h" style="color: #ef4444;">0</h3>
-                                    <span class="kpi-subtext" id="diag-kpi-errors-total">إجمالي الأخطاء: 0</span>
-                                </div>
+                                <h2 class="cyber-hud-title">
+                                    <i data-lucide="terminal" style="width:24px; height:24px; color:var(--cyber-neon-cyan);"></i>
+                                    <span>مركز التشخيص السيبراني وتدقيق التطابق اللحظي</span>
+                                </h2>
                             </div>
-
-                            <div class="card kpi-card" style="border-top: 3px solid #10b981;">
-                                <div class="kpi-icon-box" style="background: rgba(16, 185, 129, 0.12); color: #10b981;">
-                                    <i data-lucide="check-check"></i>
+                            
+                            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                                <div class="cyber-node-badge">
+                                    <span class="cyber-node-dot"></span>
+                                    <span>LOCAL NODE: 127.0.0.1:8970</span>
                                 </div>
-                                <div class="kpi-info">
-                                    <span class="kpi-label">تطابق قاعدة البيانات (لوكال / VPS)</span>
-                                    <h3 class="kpi-value" id="diag-kpi-match-status" style="color: #10b981; font-size: 20px;">100% متطابق</h3>
-                                    <span class="kpi-subtext" id="diag-kpi-mismatch-count">0 جداول بها فارق</span>
-                                </div>
-                            </div>
-
-                            <div class="card kpi-card" style="border-top: 3px solid #38bdf8;">
-                                <div class="kpi-icon-box" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8;">
-                                    <i data-lucide="database"></i>
-                                </div>
-                                <div class="kpi-info">
-                                    <span class="kpi-label">إجمالي السجلات المفحوصة</span>
-                                    <h3 class="kpi-value" id="diag-kpi-total-records" style="color: #38bdf8;">-</h3>
-                                    <span class="kpi-subtext">عبر 13 جدولاً رئيسياً</span>
-                                </div>
-                            </div>
-
-                            <div class="card kpi-card" style="border-top: 3px solid #c084fc;">
-                                <div class="kpi-icon-box" style="background: rgba(192, 132, 252, 0.12); color: #c084fc;">
-                                    <i data-lucide="zap"></i>
-                                </div>
-                                <div class="kpi-info">
-                                    <span class="kpi-label">الرصد والحماية اللحظية</span>
-                                    <h3 class="kpi-value" style="color: #c084fc; font-size: 20px;">نشط 24/7 ⚡</h3>
-                                    <span class="kpi-subtext">تتبع الأخطاء والتنبيه الفوري</span>
+                                <div class="cyber-node-badge" style="border-color:rgba(0, 255, 157, 0.4); color:var(--cyber-neon-green);">
+                                    <i data-lucide="radio" style="width:13px; height:13px;"></i>
+                                    <span>VPS LINK: 141.147.136.170 [LIVE]</span>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- 1. Database Reconciliation Matrix (Local vs VPS) -->
-                        <div class="glass-panel" style="margin-bottom:18px;">
-                            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-                                <div>
-                                    <h3><i data-lucide="scale"></i> مصفوفة فحص وتدقيق التطابق (Local SQLite ⟷ Oracle Cloud VPS)</h3>
-                                    <p style="font-size:12px; color:var(--text-secondary); margin:2px 0 0 0;">مقارنة حية لعدد السجلات بين قاعدة الجهاز المحلي والسيرفر السحابي لرصد أي فارق فوراً</p>
+                        <!-- 🛸 4 Futuristic Holographic KPI Gauges -->
+                        <div class="cyber-kpi-grid">
+                            <!-- Gauge 1: Anomalies -->
+                            <div class="cyber-kpi-card">
+                                <div class="cyber-kpi-label">
+                                    <span>[ANOMALIES_24H]</span>
+                                    <i data-lucide="shield-alert" style="width:16px; height:16px; color:var(--cyber-neon-red);"></i>
                                 </div>
-                                <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                                    <button type="button" class="btn btn-secondary" onclick="loadReconciliationMatrix()" style="padding:7px 14px; font-size:12px; display:flex; align-items:center; gap:6px;">
+                                <div class="cyber-kpi-val" id="diag-kpi-errors-24h" style="color:var(--cyber-neon-red);">0</div>
+                                <div class="cyber-kpi-sub" id="diag-kpi-errors-total">
+                                    <i data-lucide="activity" style="width:12px; height:12px;"></i>
+                                    <span>إجمالي الأخطاء المسجلة: 0</span>
+                                </div>
+                            </div>
+
+                            <!-- Gauge 2: Database Drift & Sync Integrity -->
+                            <div class="cyber-kpi-card">
+                                <div class="cyber-kpi-label">
+                                    <span>[DB_SYNC_INTEGRITY]</span>
+                                    <i data-lucide="check-check" style="width:16px; height:16px; color:var(--cyber-neon-green);"></i>
+                                </div>
+                                <div class="cyber-kpi-val" id="diag-kpi-match-status" style="color:var(--cyber-neon-green); font-size:22px;">100% MATCHED</div>
+                                <div class="cyber-kpi-sub" id="diag-kpi-mismatch-count" style="color:var(--cyber-neon-green);">
+                                    <i data-lucide="cpu" style="width:12px; height:12px;"></i>
+                                    <span>تطابق تام بين اللوكال والـ VPS</span>
+                                </div>
+                            </div>
+
+                            <!-- Gauge 3: Audited Telemetry Entities -->
+                            <div class="cyber-kpi-card">
+                                <div class="cyber-kpi-label">
+                                    <span>[TOTAL_TELEMETRY_ROWS]</span>
+                                    <i data-lucide="database" style="width:16px; height:16px; color:var(--cyber-neon-cyan);"></i>
+                                </div>
+                                <div class="cyber-kpi-val" id="diag-kpi-total-records" style="color:var(--cyber-neon-cyan);">-</div>
+                                <div class="cyber-kpi-sub">
+                                    <i data-lucide="layers" style="width:12px; height:12px;"></i>
+                                    <span>13 جدول بيانات رئيسي</span>
+                                </div>
+                            </div>
+
+                            <!-- Gauge 4: Quantum Watchdog Engine -->
+                            <div class="cyber-kpi-card">
+                                <div class="cyber-kpi-label">
+                                    <span>[QUANTUM_WATCHDOG]</span>
+                                    <i data-lucide="zap" style="width:16px; height:16px; color:var(--cyber-neon-purple);"></i>
+                                </div>
+                                <div class="cyber-kpi-val" style="color:var(--cyber-neon-purple); font-size:22px;">ONLINE 24/7</div>
+                                <div class="cyber-kpi-sub">
+                                    <i data-lucide="radar" style="width:12px; height:12px;"></i>
+                                    <span>المراقبة الحية والاعتراض الفوري</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 🛸 Panel 1: Matrix Reconciliation Terminal (Local vs VPS) -->
+                        <div class="cyber-panel">
+                            <div class="cyber-panel-header">
+                                <div>
+                                    <h3 class="cyber-panel-title">
+                                        <i data-lucide="binary" style="width:18px; height:18px;"></i>
+                                        <span>مصفوفة التطابق والمقارنة الحية [LOCAL_SQLITE ⟷ CLOUD_VPS]</span>
+                                    </h3>
+                                    <p style="font-size:11px; color:#64748b; margin:4px 0 0 0; font-family:var(--cyber-font-mono);">
+                                        STATUS: ACTIVE AUDITING PROTOCOL // AUTOMATIC ROW HASH & COUNT RECONCILIATION
+                                    </p>
+                                </div>
+                                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                                    <button type="button" class="cyber-btn-secondary" onclick="loadReconciliationMatrix()">
                                         <i data-lucide="refresh-cw" id="icon-reconciliation-refresh"></i>
                                         <span>فحص التطابق الآن</span>
                                     </button>
-                                    <button type="button" class="btn btn-primary" id="btn-reseed-vps-action" onclick="triggerFullCloudReseed()" style="background: linear-gradient(135deg, #059669, #10b981); box-shadow: 0 4px 14px rgba(16,185,129,0.3); padding:7px 16px; font-size:12px; display:flex; align-items:center; gap:6px;">
-                                        <i data-lucide="cloud-lightning" id="icon-reseed-vps"></i>
+                                    <button type="button" class="cyber-btn-primary" id="btn-reseed-vps-action" onclick="triggerFullCloudReseed()">
+                                        <i data-lucide="zap" id="icon-reseed-vps"></i>
                                         <span>إعادة مزامنة وتأسيس شامل للـ VPS ⚡</span>
                                     </button>
                                 </div>
                             </div>
-                            <div class="panel-body">
-                                <div class="table-responsive" style="max-height: 380px; overflow-y: auto;">
-                                    <table class="data-table" id="table-reconciliation-matrix">
-                                        <thead>
-                                            <tr>
-                                                <th style="width:40px;">#</th>
-                                                <th>اسم الجدول والبيان</th>
-                                                <th>السجلات محلياً (Local)</th>
-                                                <th>السجلات سحابياً (Cloud VPS)</th>
-                                                <th>الفارق (Delta)</th>
-                                                <th>حالة التطابق</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="reconciliation-matrix-tbody">
-                                            <tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted);"><i data-lucide="loader-2" class="spin-animation"></i> جاري فحص ومقارنة التطابق...</td></tr>
-                                        </tbody>
-                                    </table>
-                                </div>
+                            <div style="overflow-x: auto; max-height: 400px;">
+                                <table class="cyber-table" id="table-reconciliation-matrix">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:50px;">HEX_ID</th>
+                                            <th>بيان واسم الجدول (Entity Name)</th>
+                                            <th>السجلات محلياً (Local Node)</th>
+                                            <th>السجلات سحابياً (Cloud VPS)</th>
+                                            <th>الفارق (Delta)</th>
+                                            <th>حالة التطابق والتدقيق</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="reconciliation-matrix-tbody">
+                                        <tr><td colspan="6" style="text-align:center; padding:30px; color:#64748b;"><i data-lucide="loader-2" class="spin-animation"></i> جاري فحص ومقارنة التطابق...</td></tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
 
-                        <!-- 2. System Error Logs Table -->
-                        <div class="glass-panel">
-                            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                        <!-- 🛸 Panel 2: Live System Error Trace Blackbox (Logs Terminal) -->
+                        <div class="cyber-panel">
+                            <div class="cyber-panel-header">
                                 <div>
-                                    <h3><i data-lucide="bug"></i> سجل تتبع أخطاء النظام الحية (System Error Trace Logs)</h3>
-                                    <p style="font-size:12px; color:var(--text-secondary); margin:2px 0 0 0;">كافة أخطاء الـ API والاستعلامات ومحرك المزامنة وكود الواجهة مسجلة بالتفصيل والـ Stack Trace</p>
+                                    <h3 class="cyber-panel-title" style="color:var(--cyber-neon-purple);">
+                                        <i data-lucide="file-code" style="width:18px; height:18px;"></i>
+                                        <span>سجل تتبع أخطاء النظام والصندوق الأسود (System Blackbox & Error Stream)</span>
+                                    </h3>
+                                    <p style="font-size:11px; color:#64748b; margin:4px 0 0 0; font-family:var(--cyber-font-mono);">
+                                        ZERO SILENT FAILURES // SQL, API, & CLIENT-SIDE EXCEPTION INTERCEPTOR
+                                    </p>
                                 </div>
-                                <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                                    <select id="diag-error-filter-severity" style="padding:6px 12px; font-size:12px;" onchange="loadDiagnosticsErrorLogs()">
-                                        <option value="ALL">كافة درجات الخطورة</option>
-                                        <option value="CRITICAL">أخطاء حرجة (CRITICAL) 🚨</option>
-                                        <option value="ERROR">أخطاء عادية (ERROR) ⚠️</option>
-                                        <option value="CLIENT_UI">أخطاء المتصفح والواجهة (CLIENT_UI) 🖥️</option>
+                                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                                    <select id="diag-error-filter-severity" style="background:#0a0f1d; border:1px solid rgba(0,240,255,0.3); color:#38bdf8; font-family:var(--cyber-font-mono); font-size:11px; padding:6px 12px; border-radius:6px;" onchange="loadDiagnosticsErrorLogs()">
+                                        <option value="ALL">>_ كافة درجات الخطورة</option>
+                                        <option value="CRITICAL">>_ أخطاء حرجة (CRITICAL) 🚨</option>
+                                        <option value="ERROR">>_ أخطاء عادية (ERROR) ⚠️</option>
+                                        <option value="CLIENT_UI">>_ أخطاء المتصفح والواجهة (CLIENT_UI) 🖥️</option>
                                     </select>
-                                    <button type="button" class="btn btn-secondary" onclick="loadDiagnosticsErrorLogs()" style="padding:6px 12px; font-size:12px;">
+                                    <button type="button" class="cyber-btn-secondary" onclick="loadDiagnosticsErrorLogs()">
                                         <i data-lucide="refresh-cw" id="icon-diag-refresh"></i> تحديث
                                     </button>
-                                    <button type="button" class="btn btn-secondary" onclick="clearAllDiagnosticsErrors()" style="padding:6px 12px; font-size:12px; color:#f87171; border-color:rgba(239, 68, 68, 0.3);">
+                                    <button type="button" class="cyber-btn-secondary" onclick="clearAllDiagnosticsErrors()" style="border-color:rgba(255,0,85,0.4); color:#ff0055;">
                                         <i data-lucide="trash-2"></i> مسح السجل
                                     </button>
                                 </div>
                             </div>
-                            <div class="panel-body">
-                                <div class="table-responsive" style="max-height: 480px; overflow-y: auto;">
-                                    <table class="data-table" id="table-system-errors">
-                                        <thead>
-                                            <tr>
-                                                <th style="width:45px;">#</th>
-                                                <th>الدرجة</th>
-                                                <th>المصدر / الموديول</th>
-                                                <th>المسار / الحدث</th>
-                                                <th>رسالة الخطأ والبيان</th>
-                                                <th>التوقيت</th>
-                                                <th>تفاصيل الـ Stack</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="system-errors-tbody">
-                                            <tr><td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted);"><i data-lucide="loader-2" class="spin-animation"></i> جاري جلب سجل الأخطاء...</td></tr>
-                                        </tbody>
-                                    </table>
-                                </div>
+                            <div style="overflow-x: auto; max-height: 500px;">
+                                <table class="cyber-table" id="table-system-errors">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:50px;">#</th>
+                                            <th>الدرجة</th>
+                                            <th>المصدر / الموديول</th>
+                                            <th>المسار / الحدث</th>
+                                            <th>بيان ورسالة الخطأ</th>
+                                            <th>التوقيت والختم الزمني</th>
+                                            <th>الـ Stack Trace</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="system-errors-tbody">
+                                        <tr><td colspan="7" style="text-align:center; padding:30px; color:#64748b;"><i data-lucide="loader-2" class="spin-animation"></i> جاري جلب سجل الأخطاء...</td></tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -3472,6 +3513,6 @@
     </div>
 
     <!-- Main Client Application Script -->
-    <script src="app.js?v=3.8"></script>
+    <script src="app.js?v=3.9"></script>
 </body>
 </html>

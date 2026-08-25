@@ -6396,27 +6396,29 @@ async function loadReconciliationMatrix() {
 
         tbody.innerHTML = tables.map((t, idx) => {
             const isMatched = t.status === 'MATCHED';
+            const hexIdx = `0x${(idx + 1).toString(16).toUpperCase().padStart(2, '0')}`;
+            
             const statusBadge = isMatched
-                ? `<span class="badge inmerchant" style="font-weight:700;"><i data-lucide="check-circle" style="width:12px;height:12px;vertical-align:middle;margin-left:3px;"></i> متطابق 100% ✅</span>`
-                : `<span class="badge faulty" style="font-weight:700;"><i data-lucide="alert-triangle" style="width:12px;height:12px;vertical-align:middle;margin-left:3px;"></i> فارق ${Math.abs(t.diff)} سجل ⚠️</span>`;
+                ? `<span class="cyber-badge-matched"><i data-lucide="shield-check" style="width:12px;height:12px;"></i> [MATCH_OK: 100%]</span>`
+                : `<span class="cyber-badge-mismatch"><i data-lucide="alert-triangle" style="width:12px;height:12px;"></i> [DIFF_DELTA: ${Math.abs(t.diff)}]</span>`;
 
             const diffBadge = t.diff === 0
-                ? `<span style="color:var(--color-success); font-family:var(--font-en); font-weight:700;">0</span>`
-                : `<span style="color:#ef4444; font-family:var(--font-en); font-weight:800; background:rgba(239,68,68,0.1); padding:2px 8px; border-radius:6px;">${t.diff > 0 ? '+' : ''}${t.diff}</span>`;
+                ? `<span style="color:var(--cyber-neon-green); font-weight:800; font-size:13px;">0</span>`
+                : `<span style="color:var(--cyber-neon-red); font-weight:900; font-size:13px; text-shadow:0 0 8px rgba(255,0,85,0.4);">${t.diff > 0 ? '+' : ''}${t.diff}</span>`;
 
             const cloudCountText = t.cloud_count !== null 
-                ? Number(t.cloud_count).toLocaleString('ar-EG')
-                : (data.cloud_fetch_error ? `<span style="color:var(--text-muted); font-size:11px;">تعذر الاتصال بالـ VPS</span>` : '-');
+                ? Number(t.cloud_count).toLocaleString('en-US')
+                : (data.cloud_fetch_error ? `<span style="color:#ef4444; font-size:10px;">[LINK_OFFLINE]</span>` : '-');
 
             return `
-                <tr style="${!isMatched ? 'background:rgba(239,68,68,0.04);' : ''}">
-                    <td style="font-family:var(--font-en); font-weight:700; color:var(--text-muted);">${idx + 1}</td>
+                <tr style="${!isMatched ? 'background:rgba(255,0,85,0.06);' : ''}">
+                    <td><span class="cyber-badge-hex">${hexIdx}</span></td>
                     <td>
-                        <strong style="color:var(--text-primary); font-size:13px;">${t.name_ar}</strong>
-                        <div style="font-family:var(--font-en); font-size:11px; color:var(--text-muted);">${t.table}</div>
+                        <strong style="color:#ffffff; font-size:13px; display:block;">${t.name_ar}</strong>
+                        <span class="cyber-code-box" style="margin-top:3px;">${t.table}</span>
                     </td>
-                    <td><strong style="font-family:var(--font-en); color:var(--md-sys-color-primary); font-size:14px;">${Number(t.local_count).toLocaleString('ar-EG')}</strong></td>
-                    <td><strong style="font-family:var(--font-en); color:${isMatched ? 'var(--color-success)' : '#ef4444'}; font-size:14px;">${cloudCountText}</strong></td>
+                    <td><strong style="color:var(--cyber-neon-cyan); font-size:14px; letter-spacing:0.5px;">${Number(t.local_count).toLocaleString('en-US')}</strong></td>
+                    <td><strong style="color:${isMatched ? 'var(--cyber-neon-green)' : 'var(--cyber-neon-red)'}; font-size:14px; letter-spacing:0.5px;">${cloudCountText}</strong></td>
                     <td>${diffBadge}</td>
                     <td>${statusBadge}</td>
                 </tr>
@@ -6426,7 +6428,7 @@ async function loadReconciliationMatrix() {
     } catch (err) {
         console.error("Reconciliation error:", err);
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--color-critical); padding:25px;">خطأ في فحص التطابق: ${err.message}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--cyber-neon-red); padding:25px; font-family:var(--cyber-font-mono);">[FATAL_RECONCILIATION_EXCEPTION]: ${err.message}</td></tr>`;
         }
     } finally {
         if (refreshIcon) refreshIcon.classList.remove('spin-animation');
@@ -6473,7 +6475,7 @@ async function loadDiagnosticsErrorLogs() {
     const severity = document.getElementById('diag-error-filter-severity')?.value || 'ALL';
 
     if (refreshIcon) refreshIcon.classList.add('spin-animation');
-    if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted);"><i data-lucide="loader-2" class="spin-animation"></i> جاري جلب سجل الأخطاء...</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:30px; color:#64748b; font-family:var(--cyber-font-mono);"><i data-lucide="loader-2" class="spin-animation"></i> [STREAMING_SYSTEM_BLACKBOX_LOGS]...</td></tr>`;
     refreshIcons();
 
     try {
@@ -6484,25 +6486,27 @@ async function loadDiagnosticsErrorLogs() {
 
         const errors = data.errors || [];
         const kpiErrorsTotal = document.getElementById('diag-kpi-errors-total');
-        if (kpiErrorsTotal) kpiErrorsTotal.textContent = `إجمالي الأخطاء: ${data.total || 0}`;
+        if (kpiErrorsTotal) kpiErrorsTotal.textContent = `إجمالي الأخطاء المسجلة: ${data.total || 0}`;
 
         if (!tbody) return;
 
         if (errors.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:35px; color:var(--color-success); font-weight:700;"><i data-lucide="check-circle" style="width:20px; height:20px; vertical-align:middle; margin-left:6px;"></i> لا توجد أي أخطاء مسجلة بالنظام (النظام يعمل بكفاءة 100% ✨)</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:35px; color:var(--cyber-neon-green); font-weight:800; font-family:var(--cyber-font-mono);"><i data-lucide="shield-check" style="width:20px; height:20px; vertical-align:middle; margin-left:6px;"></i> [BLACKBOX_CLEAR]: NO ANOMALIES DETECTED // 100% OPERATIONAL EXCELLENCE ✨</td></tr>`;
             return;
         }
 
         window.__diagnosticErrorStackMap = {};
         tbody.innerHTML = errors.map((err, idx) => {
             window.__diagnosticErrorStackMap[err.id] = err.stack_trace || '';
-            let sevBadge = `<span class="badge" style="background:rgba(239,68,68,0.15); color:#ef4444; border:1px solid rgba(239,68,68,0.3); font-weight:800;">ERROR</span>`;
+            const hexIdx = `0x${(idx + 1).toString(16).toUpperCase().padStart(2, '0')}`;
+            
+            let sevBadge = `<span style="background:rgba(255,0,85,0.15); color:var(--cyber-neon-red); border:1px solid rgba(255,0,85,0.4); padding:2px 8px; border-radius:4px; font-weight:900; font-size:10px;">[ERROR]</span>`;
             if (err.severity === 'CRITICAL') {
-                sevBadge = `<span class="badge" style="background:#ef4444; color:#ffffff; font-weight:800;">CRITICAL 🚨</span>`;
+                sevBadge = `<span style="background:var(--cyber-neon-red); color:#ffffff; font-weight:900; font-size:10px; padding:2px 8px; border-radius:4px; box-shadow:0 0 10px rgba(255,0,85,0.6);">[CRITICAL_ALERT 🚨]</span>`;
             } else if (err.severity === 'WARN') {
-                sevBadge = `<span class="badge" style="background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3); font-weight:800;">WARN ⚠️</span>`;
+                sevBadge = `<span style="background:rgba(255,183,3,0.15); color:var(--cyber-neon-amber); border:1px solid rgba(255,183,3,0.4); padding:2px 8px; border-radius:4px; font-weight:800; font-size:10px;">[WARN ⚠️]</span>`;
             } else if (err.module === 'CLIENT_UI') {
-                sevBadge = `<span class="badge" style="background:rgba(192,132,252,0.15); color:#c084fc; border:1px solid rgba(192,132,252,0.3); font-weight:800;">CLIENT UI 🖥️</span>`;
+                sevBadge = `<span style="background:rgba(192,132,252,0.15); color:var(--cyber-neon-purple); border:1px solid rgba(192,132,252,0.4); padding:2px 8px; border-radius:4px; font-weight:800; font-size:10px;">[CLIENT_UI 🖥️]</span>`;
             }
 
             const formattedTime = formatCairoDateTime(err.timestamp || new Date().toISOString());
@@ -6510,20 +6514,20 @@ async function loadDiagnosticsErrorLogs() {
 
             return `
                 <tr>
-                    <td style="font-family:var(--font-en); font-weight:700; color:var(--text-muted);">${idx + 1}</td>
+                    <td><span class="cyber-badge-hex">${hexIdx}</span></td>
                     <td>${sevBadge}</td>
-                    <td><span class="badge" style="font-family:var(--font-en); font-weight:700; font-size:11px;">${err.module || 'SYS'}</span></td>
-                    <td style="font-family:var(--font-en); font-size:11px; color:var(--md-sys-color-primary);">${err.endpoint || '-'}</td>
-                    <td style="font-size:12px; font-weight:600; color:var(--text-primary); max-width:320px; white-space:normal; word-break:break-word;">
-                        ${err.error_message || 'خطأ غير محدد'}
+                    <td><span class="cyber-code-box">${err.module || 'SYS'}</span></td>
+                    <td><span style="font-family:var(--cyber-font-mono); font-size:11px; color:var(--cyber-neon-cyan);">${err.endpoint || '-'}</span></td>
+                    <td style="font-size:12px; font-weight:600; color:#f1f5f9; max-width:320px; white-space:normal; word-break:break-word; font-family:var(--cyber-font-mono);">
+                        ${err.error_message || 'Unspecified Error'}
                     </td>
-                    <td>${formattedTime}</td>
+                    <td><span style="color:#94a3b8; font-size:11px; font-family:var(--cyber-font-mono);">${formattedTime}</span></td>
                     <td>
                         ${hasStack ? `
-                            <button type="button" class="btn btn-secondary" style="padding:3px 8px; font-size:10px; font-family:var(--font-en);" onclick="showDiagnosticStack(${err.id})">
-                                <i data-lucide="file-code"></i> عرض الـ Stack
+                            <button type="button" class="cyber-btn-secondary" style="padding:3px 10px; font-size:10px;" onclick="showDiagnosticStack(${err.id})">
+                                <i data-lucide="terminal"></i> [TRACE_STACK]
                             </button>
-                        ` : '<span style="color:var(--text-muted); font-size:11px;">-</span>'}
+                        ` : '<span style="color:#475569; font-size:11px;">[NO_STACK]</span>'}
                     </td>
                 </tr>
             `;
@@ -6532,7 +6536,7 @@ async function loadDiagnosticsErrorLogs() {
     } catch (err) {
         console.error("Error logs fetch error:", err);
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--color-critical); padding:25px;">خطأ في جلب السجل: ${err.message}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--cyber-neon-red); padding:25px; font-family:var(--cyber-font-mono);">[FATAL_LOG_STREAM_EXCEPTION]: ${err.message}</td></tr>`;
         }
     } finally {
         if (refreshIcon) refreshIcon.classList.remove('spin-animation');
