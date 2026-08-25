@@ -5235,7 +5235,8 @@ function switchSettingsSubtab(subtabId) {
     const paneMap = {
         'settings-db': 'pane-settings-db',
         'settings-fonts': 'pane-settings-fonts',
-        'settings-sync-logs': 'pane-settings-sync-logs'
+        'settings-sync-logs': 'pane-settings-sync-logs',
+        'settings-diagnostics': 'pane-settings-diagnostics'
     };
 
     Object.entries(paneMap).forEach(([key, paneId]) => {
@@ -5255,6 +5256,8 @@ function switchSettingsSubtab(subtabId) {
         loadSyncTelemetryLogs();
     } else if (subtabId === 'settings-fonts') {
         renderFontSelectionCards();
+    } else if (subtabId === 'settings-diagnostics') {
+        loadDiagnosticsDashboard();
     }
 
     refreshIcons();
@@ -6356,10 +6359,294 @@ function renderTimeMachineSims(filterText = '') {
 window.initTimeMachineTab = initTimeMachineTab;
 window.loadTimeMachineData = loadTimeMachineData;
 
+// ==========================================================================
+// 19. SYSTEM DIAGNOSTICS, ERROR TRACER & RECONCILIATION AUDITOR
+// ==========================================================================
+
+// Global Frontend Error Listeners (Capture client JS errors automatically)
+window.addEventListener('error', function(e) {
+    try {
+        fetch('/api/diagnostics/log-client-error', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: e.message,
+                source: e.filename,
+                lineno: e.lineno,
+                colno: e.colno,
+                stack: e.error ? e.error.stack : '',
+                url: window.location.href,
+                userAgent: navigator.userAgent
+            })
+        }).catch(() => {});
+        checkDiagnosticsPulse();
+    } catch(err) {}
+});
+
+window.addEventListener('unhandledrejection', function(e) {
+    try {
+        const reason = e.reason;
+        fetch('/api/diagnostics/log-client-error', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: reason ? (reason.message || String(reason)) : 'Unhandled Promise Rejection',
+                stack: reason && reason.stack ? reason.stack : '',
+                url: window.location.href,
+                userAgent: navigator.userAgent
+            })
+        }).catch(() => {});
+        checkDiagnosticsPulse();
+    } catch(err) {}
+});
+
+function openDiagnosticsTab() {
+    switchTab('settings');
+    switchSettingsSubtab('settings-diagnostics');
+}
+window.openDiagnosticsTab = openDiagnosticsTab;
+
+async function loadDiagnosticsDashboard() {
+    loadReconciliationMatrix();
+    loadDiagnosticsErrorLogs();
+}
+window.loadDiagnosticsDashboard = loadDiagnosticsDashboard;
+
+async function loadReconciliationMatrix() {
+    const tbody = document.getElementById('reconciliation-matrix-tbody');
+    const refreshIcon = document.getElementById('icon-reconciliation-refresh');
+    if (refreshIcon) refreshIcon.classList.add('spin-animation');
+    if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted);"><i data-lucide="loader-2" class="spin-animation"></i> جاري فحص ومقارنة السجلات بين السيرفر المحلي والـ VPS...</td></tr>`;
+    refreshIcons();
+
+    try {
+        const res = await fetch('/api/diagnostics/reconciliation');
+        const data = await res.json();
+
+        if (!res.ok || !data.success) throw new Error(data.error || 'تعذر فحص التطابق');
+
+        // Update KPIs
+        const kpiErrors24h = document.getElementById('diag-kpi-errors-24h');
+        const kpiMatchStatus = document.getElementById('diag-kpi-match-status');
+        const kpiMismatchCount = document.getElementById('diag-kpi-mismatch-count');
+        const kpiTotalRecords = document.getElementById('diag-kpi-total-records');
+
+        if (kpiErrors24h) kpiErrors24h.textContent = data.errors_last_24h ?? 0;
+        if (kpiTotalRecords) kpiTotalRecords.textContent = Number(data.total_local_records || 0).toLocaleString('ar-EG');
+
+        if (data.is_all_matched) {
+            if (kpiMatchStatus) {
+                kpiMatchStatus.textContent = '100% متطابق ✅';
+                kpiMatchStatus.style.color = '#10b981';
+            }
+            if (kpiMismatchCount) kpiMismatchCount.textContent = 'كافة الجداول متطابقة تماماً';
+        } else {
+            if (kpiMatchStatus) {
+                kpiMatchStatus.textContent = '⚠️ يوجد عدم تطابق';
+                kpiMatchStatus.style.color = '#ef4444';
+            }
+            if (kpiMismatchCount) kpiMismatchCount.textContent = `${data.mismatched_count} جداول بها فارق في السجلات`;
+        }
+
+        // Render Matrix Table
+        if (!tbody) return;
+        const tables = data.tables || [];
+
+        tbody.innerHTML = tables.map((t, idx) => {
+            const isMatched = t.status === 'MATCHED';
+            const statusBadge = isMatched
+                ? `<span class="badge inmerchant" style="font-weight:700;"><i data-lucide="check-circle" style="width:12px;height:12px;vertical-align:middle;margin-left:3px;"></i> متطابق 100% ✅</span>`
+                : `<span class="badge faulty" style="font-weight:700;"><i data-lucide="alert-triangle" style="width:12px;height:12px;vertical-align:middle;margin-left:3px;"></i> فارق ${Math.abs(t.diff)} سجل ⚠️</span>`;
+
+            const diffBadge = t.diff === 0
+                ? `<span style="color:var(--color-success); font-family:var(--font-en); font-weight:700;">0</span>`
+                : `<span style="color:#ef4444; font-family:var(--font-en); font-weight:800; background:rgba(239,68,68,0.1); padding:2px 8px; border-radius:6px;">${t.diff > 0 ? '+' : ''}${t.diff}</span>`;
+
+            const cloudCountText = t.cloud_count !== null 
+                ? Number(t.cloud_count).toLocaleString('ar-EG')
+                : (data.cloud_fetch_error ? `<span style="color:var(--text-muted); font-size:11px;">تعذر الاتصال بالـ VPS</span>` : '-');
+
+            return `
+                <tr style="${!isMatched ? 'background:rgba(239,68,68,0.04);' : ''}">
+                    <td style="font-family:var(--font-en); font-weight:700; color:var(--text-muted);">${idx + 1}</td>
+                    <td>
+                        <strong style="color:var(--text-primary); font-size:13px;">${t.name_ar}</strong>
+                        <div style="font-family:var(--font-en); font-size:11px; color:var(--text-muted);">${t.table}</div>
+                    </td>
+                    <td><strong style="font-family:var(--font-en); color:var(--md-sys-color-primary); font-size:14px;">${Number(t.local_count).toLocaleString('ar-EG')}</strong></td>
+                    <td><strong style="font-family:var(--font-en); color:${isMatched ? 'var(--color-success)' : '#ef4444'}; font-size:14px;">${cloudCountText}</strong></td>
+                    <td>${diffBadge}</td>
+                    <td>${statusBadge}</td>
+                </tr>
+            `;
+        }).join('');
+
+    } catch (err) {
+        console.error("Reconciliation error:", err);
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--color-critical); padding:25px;">خطأ في فحص التطابق: ${err.message}</td></tr>`;
+        }
+    } finally {
+        if (refreshIcon) refreshIcon.classList.remove('spin-animation');
+        refreshIcons();
+    }
+}
+window.loadReconciliationMatrix = loadReconciliationMatrix;
+
+async function triggerFullCloudReseed() {
+    const btn = document.getElementById('btn-reseed-vps-action');
+    const icon = document.getElementById('icon-reseed-vps');
+
+    const confirmed = confirm('هل أنت متأكد من رغبتك في إعادة مزامنة وتأسيس السيرفر السحابي (VPS) بالكامل؟\n\nسيتم إرسال كافة الجداول الـ 13 محلياً بدقة متناهية وإعادة بناء كافة الكيانات السحابية.');
+    if (!confirmed) return;
+
+    if (btn) btn.disabled = true;
+    if (icon) icon.classList.add('spin-animation');
+
+    try {
+        const res = await fetch('/api/diagnostics/reseed-vps', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) throw new Error(data.error || 'فشلت المزامنة الشاملة');
+
+        alert(`✅ نجحت العملية!\n${data.message}\n(المدة: ${data.duration_ms || 0} ms)`);
+        loadReconciliationMatrix();
+        checkDiagnosticsPulse();
+    } catch (err) {
+        alert(`❌ حدث خطأ أثناء المزامنة: ${err.message}`);
+    } finally {
+        if (btn) btn.disabled = false;
+        if (icon) icon.classList.remove('spin-animation');
+        refreshIcons();
+    }
+}
+window.triggerFullCloudReseed = triggerFullCloudReseed;
+
+async function loadDiagnosticsErrorLogs() {
+    const tbody = document.getElementById('system-errors-tbody');
+    const refreshIcon = document.getElementById('icon-diag-refresh');
+    const severity = document.getElementById('diag-error-filter-severity')?.value || 'ALL';
+
+    if (refreshIcon) refreshIcon.classList.add('spin-animation');
+    if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted);"><i data-lucide="loader-2" class="spin-animation"></i> جاري جلب سجل الأخطاء...</td></tr>`;
+    refreshIcons();
+
+    try {
+        const res = await fetch(`/api/diagnostics/errors?severity=${encodeURIComponent(severity)}`);
+        const data = await res.json();
+
+        if (!res.ok || !data.success) throw new Error(data.error || 'فشل جلب الأخطاء');
+
+        const errors = data.errors || [];
+        const kpiErrorsTotal = document.getElementById('diag-kpi-errors-total');
+        if (kpiErrorsTotal) kpiErrorsTotal.textContent = `إجمالي الأخطاء: ${data.total || 0}`;
+
+        if (!tbody) return;
+
+        if (errors.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:35px; color:var(--color-success); font-weight:700;"><i data-lucide="check-circle" style="width:20px; height:20px; vertical-align:middle; margin-left:6px;"></i> لا توجد أي أخطاء مسجلة بالنظام (النظام يعمل بكفاءة 100% ✨)</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = errors.map((err, idx) => {
+            let sevBadge = `<span class="badge" style="background:rgba(239,68,68,0.15); color:#ef4444; border:1px solid rgba(239,68,68,0.3); font-weight:800;">ERROR</span>`;
+            if (err.severity === 'CRITICAL') {
+                sevBadge = `<span class="badge" style="background:#ef4444; color:#ffffff; font-weight:800;">CRITICAL 🚨</span>`;
+            } else if (err.severity === 'WARN') {
+                sevBadge = `<span class="badge" style="background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3); font-weight:800;">WARN ⚠️</span>`;
+            } else if (err.module === 'CLIENT_UI') {
+                sevBadge = `<span class="badge" style="background:rgba(192,132,252,0.15); color:#c084fc; border:1px solid rgba(192,132,252,0.3); font-weight:800;">CLIENT UI 🖥️</span>`;
+            }
+
+            const formattedTime = formatCairoDateTime(err.timestamp || new Date().toISOString());
+            const hasStack = err.stack_trace && err.stack_trace.trim().length > 0;
+
+            return `
+                <tr>
+                    <td style="font-family:var(--font-en); font-weight:700; color:var(--text-muted);">${idx + 1}</td>
+                    <td>${sevBadge}</td>
+                    <td><span class="badge" style="font-family:var(--font-en); font-weight:700; font-size:11px;">${err.module || 'SYS'}</span></td>
+                    <td style="font-family:var(--font-en); font-size:11px; color:var(--md-sys-color-primary);">${err.endpoint || '-'}</td>
+                    <td style="font-size:12px; font-weight:600; color:var(--text-primary); max-width:320px; white-space:normal; word-break:break-word;">
+                        ${err.error_message || 'خطأ غير محدد'}
+                    </td>
+                    <td>${formattedTime}</td>
+                    <td>
+                        ${hasStack ? `
+                            <button type="button" class="btn btn-secondary" style="padding:3px 8px; font-size:10px; font-family:var(--font-en);" onclick="alert('Stack Trace:\\n\\n' + ${JSON.stringify(err.stack_trace)})">
+                                <i data-lucide="file-code"></i> عرض الـ Stack
+                            </button>
+                        ` : '<span style="color:var(--text-muted); font-size:11px;">-</span>'}
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+    } catch (err) {
+        console.error("Error logs fetch error:", err);
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--color-critical); padding:25px;">خطأ في جلب السجل: ${err.message}</td></tr>`;
+        }
+    } finally {
+        if (refreshIcon) refreshIcon.classList.remove('spin-animation');
+        refreshIcons();
+    }
+}
+window.loadDiagnosticsErrorLogs = loadDiagnosticsErrorLogs;
+
+async function clearAllDiagnosticsErrors() {
+    const confirmed = confirm('هل أنت متأكد من رغبتك في مسح وتفريغ سجل الأخطاء بالكامل؟');
+    if (!confirmed) return;
+
+    try {
+        const res = await fetch('/api/diagnostics/clear-errors', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'فشل مسح السجل');
+
+        loadDiagnosticsErrorLogs();
+        checkDiagnosticsPulse();
+    } catch (err) {
+        alert('خطأ أثناء مسح السجل: ' + err.message);
+    }
+}
+window.clearAllDiagnosticsErrors = clearAllDiagnosticsErrors;
+
+async function checkDiagnosticsPulse() {
+    if (document.hidden) return;
+    try {
+        const res = await fetch('/api/diagnostics/errors?limit=1');
+        const data = await res.json();
+        const headerPill = document.getElementById('header-diagnostic-pill');
+        const headerText = document.getElementById('header-diagnostic-text');
+
+        if (data && data.last_24h_count > 0) {
+            if (headerPill) {
+                headerPill.style.display = 'flex';
+                headerPill.classList.add('pulse-alert');
+            }
+            if (headerText) headerText.textContent = `${data.last_24h_count} أخطاء مرصودة ⚠️`;
+        } else {
+            if (headerPill) {
+                headerPill.style.display = 'none';
+                headerPill.classList.remove('pulse-alert');
+            }
+        }
+    } catch (e) {}
+}
+window.checkDiagnosticsPulse = checkDiagnosticsPulse;
+
 // Auto-run font initialization & sync health monitor
 if (typeof document !== 'undefined') {
     initFontSystem();
     checkSyncHealth();
+    checkDiagnosticsPulse();
     setInterval(checkSyncHealth, 15000);
+    setInterval(checkDiagnosticsPulse, 20000);
 }
 

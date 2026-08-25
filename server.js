@@ -78,13 +78,58 @@ const dbPath = path.join(__dirname, 'branch_database.db');
 const db = new sqlite3.Database(dbPath);
 db.run("PRAGMA journal_mode = WAL;");
 db.run("PRAGMA busy_timeout = 10000;");
+db.run(`
+    CREATE TABLE IF NOT EXISTS system_error_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp DATETIME DEFAULT (datetime('now', 'localtime')),
+        severity TEXT DEFAULT 'ERROR',
+        module TEXT,
+        endpoint TEXT,
+        error_message TEXT,
+        stack_trace TEXT,
+        request_data TEXT,
+        client_ip TEXT
+    );
+`);
 
-// Helper for database queries
+// Helper for database queries with automatic error logging
+async function logSystemError(module, endpoint, err, req = null, severity = 'ERROR') {
+    try {
+        const errMsg = err ? (err.message || String(err)) : 'Unknown error';
+        const stack = err && err.stack ? err.stack : '';
+        const clientIp = req ? (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '') : '';
+        const reqData = req ? JSON.stringify({ method: req.method, query: req.query, path: req.path }) : null;
+        
+        console.error(`[SYSTEM ERROR - ${module}] [${endpoint}]:`, errMsg);
+        
+        db.run(`
+            INSERT INTO system_error_logs (severity, module, endpoint, error_message, stack_trace, request_data, client_ip)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [severity, module, endpoint || '-', errMsg, stack, reqData, clientIp]);
+
+        if (typeof broadcastSseEvent === 'function') {
+            broadcastSseEvent('system_error_alert', {
+                severity,
+                module,
+                endpoint,
+                error_message: errMsg,
+                timestamp: new Date().toISOString()
+            });
+        }
+    } catch (e) {
+        console.error('[FAILED TO LOG SYSTEM ERROR]', e.message);
+    }
+}
+
 function runQuery(sql, params = []) {
     return new Promise((resolve, reject) => {
         db.run(sql, params, function(err) {
-            if (err) reject(err);
-            else resolve(this);
+            if (err) {
+                logSystemError('SQL_RUN', sql.slice(0, 120), err);
+                reject(err);
+            } else {
+                resolve(this);
+            }
         });
     });
 }
@@ -92,8 +137,12 @@ function runQuery(sql, params = []) {
 function getQuery(sql, params = []) {
     return new Promise((resolve, reject) => {
         db.get(sql, params, (err, row) => {
-            if (err) reject(err);
-            else resolve(row);
+            if (err) {
+                logSystemError('SQL_GET', sql.slice(0, 120), err);
+                reject(err);
+            } else {
+                resolve(row);
+            }
         });
     });
 }
@@ -101,8 +150,12 @@ function getQuery(sql, params = []) {
 function allQuery(sql, params = []) {
     return new Promise((resolve, reject) => {
         db.all(sql, params, (err, rows) => {
-            if (err) reject(err);
-            else resolve(rows || []);
+            if (err) {
+                logSystemError('SQL_ALL', sql.slice(0, 120), err);
+                reject(err);
+            } else {
+                resolve(rows || []);
+            }
         });
     });
 }
@@ -274,6 +327,22 @@ async function initAppSchema() {
             }
         }
 
+
+        // Initialize system_error_logs table for automated diagnostics & tracing
+        await runQuery(`
+            CREATE TABLE IF NOT EXISTS system_error_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME DEFAULT (datetime('now', 'localtime')),
+                severity TEXT DEFAULT 'ERROR',
+                module TEXT,
+                endpoint TEXT,
+                error_message TEXT,
+                stack_trace TEXT,
+                request_data TEXT,
+                client_ip TEXT
+            );
+        `);
+        await runQuery(`CREATE INDEX IF NOT EXISTS idx_system_error_logs_ts ON system_error_logs(timestamp);`).catch(() => {});
 
         console.log("[DB INIT] App Database Schema Verified and Ready.");
     } catch(err) {
@@ -3865,6 +3934,351 @@ app.get('/api/sync/telemetry-logs', async (req, res) => {
         });
     } catch (err) {
         console.error("Telemetry logs error:", err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// ==========================================
+// 7. DIAGNOSTICS, ERROR TRACER & RECONCILIATION API
+// ==========================================
+
+const CORE_RECONCILIATION_TABLES = [
+    { table: 'assets_raw', name_ar: 'بيانات المخابز والأجهزة (Assets)' },
+    { table: 'transactions_raw', name_ar: 'حركات وصيانة الماكينات (TransAction)' },
+    { table: 'maintenance_raw', name_ar: 'بلاغات الصيانة (Maintenance)' },
+    { table: 'payments_raw', name_ar: 'المدفوعات والتحصيلات (Payments)' },
+    { table: 'store_pos_raw', name_ar: 'مخزن ماكينات الـ POS (Store_POS)' },
+    { table: 'store_sim_raw', name_ar: 'مخزن شرائح الاتصال (Store_Sim)' },
+    { table: 'store_sp_raw', name_ar: 'مخزن وحركات قطع غيار الفرع (Store_SP)' },
+    { table: 'store_sp_maintenance_raw', name_ar: 'قطع غيار مركز الصيانة الرئيسي (Store_SP_maintenance)' },
+    { table: 'installments_raw', name_ar: 'عقود وأقساط الماكينات (tblInstallments)' },
+    { table: 'tblfaults_raw', name_ar: 'قائمة الأعطال (tblFaults)' },
+    { table: 'tblstaff_raw', name_ar: 'طاقم العمل والفنيين (AuthorizedUsers)' },
+    { table: 'tblfixes_raw', name_ar: 'أنواع الإصلاحات (tblFixes)' },
+    { table: 'failure_points_raw', name_ar: 'نقاط الأعطال والأسعار الرسمية (failure_points)' }
+];
+
+// 1. Get System Error Logs
+app.get('/api/diagnostics/errors', async (req, res) => {
+    try {
+        const { limit = 100, severity, module } = req.query;
+        let query = 'SELECT * FROM system_error_logs';
+        const params = [];
+        const conditions = [];
+
+        if (severity && severity !== 'ALL') {
+            conditions.push('severity = ?');
+            params.push(severity);
+        }
+        if (module && module !== 'ALL') {
+            conditions.push('module = ?');
+            params.push(module);
+        }
+        if (conditions.length > 0) {
+            query += ' WHERE ' + conditions.join(' AND ');
+        }
+        query += ' ORDER BY id DESC LIMIT ?';
+        params.push(parseInt(limit, 10));
+
+        const errors = await allQuery(query, params);
+        
+        // Summary stats
+        const last24hCount = (await getQuery(`
+            SELECT COUNT(*) as count FROM system_error_logs 
+            WHERE timestamp >= datetime('now', '-24 hours', 'localtime')
+        `))?.count || 0;
+
+        const totalErrors = (await getQuery(`SELECT COUNT(*) as count FROM system_error_logs`))?.count || 0;
+
+        res.json({
+            success: true,
+            total: totalErrors,
+            last_24h_count: last24hCount,
+            errors
+        });
+    } catch (err) {
+        logSystemError('DIAGNOSTICS', '/api/diagnostics/errors', err, req);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// 2. Client-Side Error Ingestion (Frontend Unhandled Errors)
+app.post('/api/diagnostics/log-client-error', express.json(), async (req, res) => {
+    try {
+        const { message, source, lineno, colno, stack, url, userAgent } = req.body || {};
+        const errObj = {
+            message: message || 'Client Error',
+            stack: stack || `at ${source || 'unknown'}:${lineno || 0}:${colno || 0}\nURL: ${url || ''}\nUA: ${userAgent || ''}`
+        };
+        await logSystemError('CLIENT_UI', url || 'frontend', errObj, req, 'ERROR');
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// 3. Clear System Error Logs
+app.post('/api/diagnostics/clear-errors', requireAdmin, async (req, res) => {
+    try {
+        await runQuery('DELETE FROM system_error_logs');
+        res.json({ success: true, message: 'تم تفريغ سجل الأخطاء بنجاح' });
+    } catch (err) {
+        logSystemError('DIAGNOSTICS', '/api/diagnostics/clear-errors', err, req);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// 4. Get Table Counts on Current Node
+app.get('/api/diagnostics/table-counts', async (req, res) => {
+    try {
+        const counts = {};
+        for (const item of CORE_RECONCILIATION_TABLES) {
+            try {
+                const r = await getQuery(`SELECT COUNT(*) as c FROM "${item.table}"`);
+                counts[item.table] = r ? r.c : 0;
+            } catch (e) {
+                counts[item.table] = -1; // table might not exist
+            }
+        }
+        res.json({ success: true, counts, timestamp: new Date().toISOString() });
+    } catch (err) {
+        logSystemError('DIAGNOSTICS', '/api/diagnostics/table-counts', err, req);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// 5. Database Reconciliation Matrix (Local vs Cloud VPS)
+app.get('/api/diagnostics/reconciliation', async (req, res) => {
+    try {
+        // 1. Gather Local Counts
+        const localCounts = {};
+        for (const item of CORE_RECONCILIATION_TABLES) {
+            try {
+                const r = await getQuery(`SELECT COUNT(*) as c FROM "${item.table}"`);
+                localCounts[item.table] = r ? r.c : 0;
+            } catch (e) {
+                localCounts[item.table] = 0;
+            }
+        }
+
+        const config = readAppConfig();
+        const isCloud = !!config.isCloudServer;
+        let cloudCounts = null;
+        let cloudFetchError = null;
+
+        // 2. Fetch Cloud VPS Counts if on local server
+        if (!isCloud) {
+            const cloudUrl = (config.cloudEndpoint || 'https://smartcs.m-kamel.workers.dev/api/sync/delta').replace(/\/api\/sync\/delta.*$/, '/api/diagnostics/table-counts');
+            const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
+            try {
+                const cloudResp = await fetchFn(cloudUrl, {
+                    headers: { 'x-sync-secret': SYNC_SECRET },
+                    timeout: 8000
+                });
+                const cloudData = await cloudResp.json();
+                if (cloudData.success && cloudData.counts) {
+                    cloudCounts = cloudData.counts;
+                } else {
+                    cloudFetchError = cloudData.error || 'Failed to parse cloud response';
+                }
+            } catch (e) {
+                cloudFetchError = e.message;
+            }
+        }
+
+        // 3. Build Matrix
+        let allMatched = true;
+        let mismatchedCount = 0;
+        let totalLocalRecords = 0;
+        let totalCloudRecords = 0;
+
+        const tableMatrix = CORE_RECONCILIATION_TABLES.map(item => {
+            const lCount = localCounts[item.table] ?? 0;
+            totalLocalRecords += (lCount >= 0 ? lCount : 0);
+
+            let cCount = null;
+            let diff = 0;
+            let status = 'UNKNOWN';
+
+            if (isCloud) {
+                cCount = lCount; // We are on cloud
+                status = 'MATCHED';
+            } else if (cloudCounts) {
+                cCount = cloudCounts[item.table] ?? 0;
+                totalCloudRecords += (cCount >= 0 ? cCount : 0);
+                diff = lCount - cCount;
+                if (diff === 0) {
+                    status = 'MATCHED';
+                } else {
+                    status = 'MISMATCH';
+                    allMatched = false;
+                    mismatchedCount++;
+                }
+            }
+
+            return {
+                table: item.table,
+                name_ar: item.name_ar,
+                local_count: lCount,
+                cloud_count: cCount,
+                diff: diff,
+                status: status
+            };
+        });
+
+        // Check recent errors in last 24h
+        const errorsLast24h = (await getQuery(`
+            SELECT COUNT(*) as count FROM system_error_logs 
+            WHERE timestamp >= datetime('now', '-24 hours', 'localtime')
+        `))?.count || 0;
+
+        res.json({
+            success: true,
+            is_cloud_server: isCloud,
+            is_all_matched: isCloud ? true : allMatched,
+            mismatched_count: mismatchedCount,
+            total_local_records: totalLocalRecords,
+            total_cloud_records: isCloud ? totalLocalRecords : totalCloudRecords,
+            cloud_fetch_error: cloudFetchError,
+            errors_last_24h: errorsLast24h,
+            tables: tableMatrix,
+            timestamp: new Date().toISOString()
+        });
+    } catch (err) {
+        logSystemError('DIAGNOSTICS', '/api/diagnostics/reconciliation', err, req);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// 6. Full Cloud Seed Receiver (VPS Endpoint)
+app.post('/api/sync/full-seed', express.json({ limit: '100mb' }), async (req, res) => {
+    const secret = req.headers['x-sync-secret'] || req.query.secret;
+    if (secret !== SYNC_SECRET) {
+        return res.status(401).json({ success: false, error: 'Unauthorized: Invalid sync secret' });
+    }
+
+    const { tablesData } = req.body || {};
+    if (!tablesData || typeof tablesData !== 'object') {
+        return res.status(400).json({ success: false, error: 'Missing tablesData payload' });
+    }
+
+    const startTime = Date.now();
+    let totalImported = 0;
+
+    try {
+        for (const [tbl, rows] of Object.entries(tablesData)) {
+            if (!Array.isArray(rows) || rows.length === 0) continue;
+
+            const sample = rows[0];
+            const cols = Object.keys(sample);
+            const createCols = cols.map(c => `"${c}" TEXT`).join(', ');
+            await runQuery(`CREATE TABLE IF NOT EXISTS "${tbl}" (${createCols});`);
+
+            const placeholders = cols.map(() => '?').join(', ');
+            const quotedCols = cols.map(c => `"${c}"`).join(', ');
+            const insertSql = `INSERT INTO "${tbl}" (${quotedCols}) VALUES (${placeholders});`;
+
+            await runQuery('BEGIN TRANSACTION;');
+            try {
+                await runQuery(`DELETE FROM "${tbl}";`);
+                const stmt = db.prepare(insertSql);
+                for (const row of rows) {
+                    const vals = cols.map(c => {
+                        const v = row[c];
+                        if (v === null || v === undefined) return '';
+                        if (typeof v === 'object') return JSON.stringify(v);
+                        return String(v);
+                    });
+                    stmt.run(vals);
+                }
+                await new Promise(r => stmt.finalize(r));
+                await runQuery('COMMIT;');
+                totalImported += rows.length;
+            } catch (e) {
+                await runQuery('ROLLBACK;');
+                throw e;
+            }
+        }
+
+        // Rebuild domain entities
+        if (syncEngine && typeof syncEngine.syncHighLevelDomainEntities === 'function') {
+            await syncEngine.syncHighLevelDomainEntities(db);
+        }
+
+        // Broadcast event
+        broadcastSseEvent('sync_completed', {
+            type: 'full_seed_applied',
+            totalRecords: totalImported,
+            durationMs: Date.now() - startTime,
+            timestamp: new Date().toISOString()
+        });
+
+        res.json({
+            success: true,
+            total_records: totalImported,
+            duration_ms: Date.now() - startTime,
+            message: `تمت المزامنة والتأسيس الشامل بنجاح (${totalImported} سجل)`
+        });
+    } catch (err) {
+        logSystemError('FULL_SEED_RECEIVE', '/api/sync/full-seed', err, req, 'CRITICAL');
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// 7. Reseed Cloud VPS from Local Database (1-Click Action)
+app.post('/api/diagnostics/reseed-vps', requireAdmin, async (req, res) => {
+    try {
+        const config = readAppConfig();
+        if (config.isCloudServer) {
+            return res.status(400).json({ success: false, error: 'Cannot reseed cloud from cloud itself.' });
+        }
+
+        console.log('[DIAGNOSTICS] Starting 1-Click Full Cloud Reseed from Local SQLite...');
+        const startTime = Date.now();
+        const exportData = {};
+        let totalCount = 0;
+
+        for (const item of CORE_RECONCILIATION_TABLES) {
+            try {
+                const rows = await allQuery(`SELECT * FROM "${item.table}"`);
+                exportData[item.table] = rows || [];
+                totalCount += (rows || []).length;
+            } catch (e) {
+                exportData[item.table] = [];
+            }
+        }
+
+        const cloudUrl = (config.cloudEndpoint || 'https://smartcs.m-kamel.workers.dev/api/sync/delta').replace(/\/api\/sync\/delta.*$/, '/api/sync/full-seed');
+        const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
+
+        const cloudResp = await fetchFn(cloudUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-sync-secret': SYNC_SECRET
+            },
+            body: JSON.stringify({
+                tablesData: exportData,
+                timestamp: new Date().toISOString()
+            })
+        });
+
+        const cloudResult = await cloudResp.json();
+        const duration = Date.now() - startTime;
+
+        if (cloudResult.success) {
+            console.log(`[DIAGNOSTICS] Full Reseed Successful: ${totalCount} records synced to Cloud VPS in ${duration}ms!`);
+            res.json({
+                success: true,
+                total_records: totalCount,
+                duration_ms: duration,
+                message: `تمت المزامنة وإعادة التأسيس الشامل بنجاح لجميع الجداول (${totalCount} سجل) على السيرفر السحابي ⚡`
+            });
+        } else {
+            throw new Error(cloudResult.error || 'Cloud VPS failed to apply seed payload');
+        }
+    } catch (err) {
+        logSystemError('RESEED_VPS', '/api/diagnostics/reseed-vps', err, req);
         res.status(500).json({ success: false, error: err.message });
     }
 });

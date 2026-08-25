@@ -159,6 +159,12 @@
                         </div>
                     </div>
 
+                    <!-- Diagnostics & Error Alert Pill (Appears on errors or drift) -->
+                    <div class="meta-pill system-status" id="header-diagnostic-pill" style="display:none; cursor:pointer; transition: all 0.2s ease; padding: 6px 14px; border-radius: var(--md-shape-corner-full); border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1); color: #f87171; align-items:center; gap:8px;" onclick="openDiagnosticsTab()" title="مركز تتبع الأخطاء والتطابق">
+                        <i data-lucide="alert-triangle" style="width:16px; height:16px;"></i>
+                        <span id="header-diagnostic-text" style="font-size:12px; font-weight:700;">0 أخطاء</span>
+                    </div>
+
                     <!-- Database Sync Status Pill -->
                     <div class="meta-pill system-status" id="header-db-pill" style="cursor:pointer; transition: all 0.2s ease; padding: 6px 14px; border-radius: var(--md-shape-corner-full); border: 1px solid var(--md-sys-color-outline-variant); background: var(--md-sys-color-surface-container); display:flex; align-items:center; gap:8px;" onclick="switchTab('settings')" title="حالة اتصال قاعدة بيانات الآكسيس والمزامنة">
                         <i data-lucide="database" id="header-db-icon" style="color:var(--color-success); width:16px; height:16px;"></i>
@@ -2107,6 +2113,9 @@
                         <button type="button" class="btn btn-secondary settings-subtab-btn" data-subtab="settings-sync-logs" id="btn-subtab-settings-sync-logs" onclick="switchSettingsSubtab('settings-sync-logs')">
                             <i data-lucide="activity"></i> <span>سجل (لوج) المزامنة اللوكال والـ VPS 📜</span>
                         </button>
+                        <button type="button" class="btn btn-secondary settings-subtab-btn" data-subtab="settings-diagnostics" id="btn-subtab-settings-diagnostics" onclick="switchSettingsSubtab('settings-diagnostics')" style="background:rgba(239, 68, 68, 0.08); border-color:rgba(239, 68, 68, 0.3); color:#f87171;">
+                            <i data-lucide="stethoscope"></i> <span>مركز التشخيص وتتبع الأخطاء والتطابق 🩺⚡</span>
+                        </button>
                     </div>
 
                     <!-- ======================================================== -->
@@ -2342,6 +2351,141 @@
                                         </thead>
                                         <tbody id="sync-telemetry-table-body">
                                             <tr><td colspan="8" style="text-align:center; padding:30px; color:var(--text-muted);"><i data-lucide="loader-2" class="spin-animation"></i> جاري جلب سجلات المزامنة...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ======================================================== -->
+                    <!-- SUBTAB 4: SYSTEM DIAGNOSTICS & ERROR TRACER (مركز التشخيص)-->
+                    <!-- ======================================================== -->
+                    <div class="settings-subtab-pane" id="pane-settings-diagnostics" style="display:none;">
+                        <!-- KPI Row for Diagnostics -->
+                        <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:14px; margin-bottom:18px;">
+                            <div class="card kpi-card" style="border-top: 3px solid #ef4444;">
+                                <div class="kpi-icon-box" style="background: rgba(239, 68, 68, 0.12); color: #ef4444;">
+                                    <i data-lucide="alert-octagon"></i>
+                                </div>
+                                <div class="kpi-info">
+                                    <span class="kpi-label">أخطاء النظام (24 ساعة)</span>
+                                    <h3 class="kpi-value" id="diag-kpi-errors-24h" style="color: #ef4444;">0</h3>
+                                    <span class="kpi-subtext" id="diag-kpi-errors-total">إجمالي الأخطاء: 0</span>
+                                </div>
+                            </div>
+
+                            <div class="card kpi-card" style="border-top: 3px solid #10b981;">
+                                <div class="kpi-icon-box" style="background: rgba(16, 185, 129, 0.12); color: #10b981;">
+                                    <i data-lucide="check-check"></i>
+                                </div>
+                                <div class="kpi-info">
+                                    <span class="kpi-label">تطابق قاعدة البيانات (لوكال / VPS)</span>
+                                    <h3 class="kpi-value" id="diag-kpi-match-status" style="color: #10b981; font-size: 20px;">100% متطابق</h3>
+                                    <span class="kpi-subtext" id="diag-kpi-mismatch-count">0 جداول بها فارق</span>
+                                </div>
+                            </div>
+
+                            <div class="card kpi-card" style="border-top: 3px solid #38bdf8;">
+                                <div class="kpi-icon-box" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8;">
+                                    <i data-lucide="database"></i>
+                                </div>
+                                <div class="kpi-info">
+                                    <span class="kpi-label">إجمالي السجلات المفحوصة</span>
+                                    <h3 class="kpi-value" id="diag-kpi-total-records" style="color: #38bdf8;">-</h3>
+                                    <span class="kpi-subtext">عبر 13 جدولاً رئيسياً</span>
+                                </div>
+                            </div>
+
+                            <div class="card kpi-card" style="border-top: 3px solid #c084fc;">
+                                <div class="kpi-icon-box" style="background: rgba(192, 132, 252, 0.12); color: #c084fc;">
+                                    <i data-lucide="zap"></i>
+                                </div>
+                                <div class="kpi-info">
+                                    <span class="kpi-label">الرصد والحماية اللحظية</span>
+                                    <h3 class="kpi-value" style="color: #c084fc; font-size: 20px;">نشط 24/7 ⚡</h3>
+                                    <span class="kpi-subtext">تتبع الأخطاء والتنبيه الفوري</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 1. Database Reconciliation Matrix (Local vs VPS) -->
+                        <div class="glass-panel" style="margin-bottom:18px;">
+                            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                                <div>
+                                    <h3><i data-lucide="scale"></i> مصفوفة فحص وتدقيق التطابق (Local SQLite ⟷ Oracle Cloud VPS)</h3>
+                                    <p style="font-size:12px; color:var(--text-secondary); margin:2px 0 0 0;">مقارنة حية لعدد السجلات بين قاعدة الجهاز المحلي والسيرفر السحابي لرصد أي فارق فوراً</p>
+                                </div>
+                                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                    <button type="button" class="btn btn-secondary" onclick="loadReconciliationMatrix()" style="padding:7px 14px; font-size:12px; display:flex; align-items:center; gap:6px;">
+                                        <i data-lucide="refresh-cw" id="icon-reconciliation-refresh"></i>
+                                        <span>فحص التطابق الآن</span>
+                                    </button>
+                                    <button type="button" class="btn btn-primary" id="btn-reseed-vps-action" onclick="triggerFullCloudReseed()" style="background: linear-gradient(135deg, #059669, #10b981); box-shadow: 0 4px 14px rgba(16,185,129,0.3); padding:7px 16px; font-size:12px; display:flex; align-items:center; gap:6px;">
+                                        <i data-lucide="cloud-lightning" id="icon-reseed-vps"></i>
+                                        <span>إعادة مزامنة وتأسيس شامل للـ VPS ⚡</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="panel-body">
+                                <div class="table-responsive" style="max-height: 380px; overflow-y: auto;">
+                                    <table class="data-table" id="table-reconciliation-matrix">
+                                        <thead>
+                                            <tr>
+                                                <th style="width:40px;">#</th>
+                                                <th>اسم الجدول والبيان</th>
+                                                <th>السجلات محلياً (Local)</th>
+                                                <th>السجلات سحابياً (Cloud VPS)</th>
+                                                <th>الفارق (Delta)</th>
+                                                <th>حالة التطابق</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="reconciliation-matrix-tbody">
+                                            <tr><td colspan="6" style="text-align:center; padding:30px; color:var(--text-muted);"><i data-lucide="loader-2" class="spin-animation"></i> جاري فحص ومقارنة التطابق...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 2. System Error Logs Table -->
+                        <div class="glass-panel">
+                            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                                <div>
+                                    <h3><i data-lucide="bug"></i> سجل تتبع أخطاء النظام الحية (System Error Trace Logs)</h3>
+                                    <p style="font-size:12px; color:var(--text-secondary); margin:2px 0 0 0;">كافة أخطاء الـ API والاستعلامات ومحرك المزامنة وكود الواجهة مسجلة بالتفصيل والـ Stack Trace</p>
+                                </div>
+                                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                    <select id="diag-error-filter-severity" style="padding:6px 12px; font-size:12px;" onchange="loadDiagnosticsErrorLogs()">
+                                        <option value="ALL">كافة درجات الخطورة</option>
+                                        <option value="CRITICAL">أخطاء حرجة (CRITICAL) 🚨</option>
+                                        <option value="ERROR">أخطاء عادية (ERROR) ⚠️</option>
+                                        <option value="CLIENT_UI">أخطاء المتصفح والواجهة (CLIENT_UI) 🖥️</option>
+                                    </select>
+                                    <button type="button" class="btn btn-secondary" onclick="loadDiagnosticsErrorLogs()" style="padding:6px 12px; font-size:12px;">
+                                        <i data-lucide="refresh-cw" id="icon-diag-refresh"></i> تحديث
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" onclick="clearAllDiagnosticsErrors()" style="padding:6px 12px; font-size:12px; color:#f87171; border-color:rgba(239, 68, 68, 0.3);">
+                                        <i data-lucide="trash-2"></i> مسح السجل
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="panel-body">
+                                <div class="table-responsive" style="max-height: 480px; overflow-y: auto;">
+                                    <table class="data-table" id="table-system-errors">
+                                        <thead>
+                                            <tr>
+                                                <th style="width:45px;">#</th>
+                                                <th>الدرجة</th>
+                                                <th>المصدر / الموديول</th>
+                                                <th>المسار / الحدث</th>
+                                                <th>رسالة الخطأ والبيان</th>
+                                                <th>التوقيت</th>
+                                                <th>تفاصيل الـ Stack</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="system-errors-tbody">
+                                            <tr><td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted);"><i data-lucide="loader-2" class="spin-animation"></i> جاري جلب سجل الأخطاء...</td></tr>
                                         </tbody>
                                     </table>
                                 </div>
@@ -3277,6 +3421,6 @@
     </div>
 
     <!-- Main Client Application Script -->
-    <script src="app.js?v=3.5"></script>
+    <script src="app.js?v=3.6"></script>
 </body>
 </html>
