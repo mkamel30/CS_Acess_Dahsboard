@@ -2663,7 +2663,7 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
             SELECT t.rowid as id,
                    COALESCE(t.Transfer_Date, '-') as transfer_date,
                    COALESCE(t.bkCode, '-') as merchant_code,
-                   COALESCE(t.POSCode, '-') as merchant_name,
+                   COALESCE(t.bkCode, '-') as merchant_name,
                    COALESCE(t.OldPOS, '-') as old_serial,
                    COALESCE(t.NewPOS, '-') as new_serial,
                    COALESCE(t.OldType, '-') as old_type,
