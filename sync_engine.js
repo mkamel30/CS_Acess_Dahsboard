@@ -1387,6 +1387,7 @@ module.exports = {
     initSyncDatabase,
     syncHighLevelDomainEntities,
     pushDeltaToCloud,
+    flushDeltaOutbox,
     getAccessFilePath,
     setAccessFilePath,
     startFileWatcher,
