@@ -5981,20 +5981,35 @@ function renderDeviceDeepdiveContent(data) {
     // TAB 3: Spare Parts
     const spBody = document.getElementById('dev-table-spare-parts-body');
     if (spare_parts.length === 0) {
-        spBody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:35px; color:var(--text-muted);">لا توجد قطع غيار منصرفة لهذه الماكينة في سجلات المخزن</td></tr>`;
+        spBody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:35px; color:var(--text-muted);">لا توجد قطع غيار منصرفة لهذه الماكينة في سجلات المخزن</td></tr>`;
     } else {
-        spBody.innerHTML = spare_parts.map((sp, idx) => `
+        spBody.innerHTML = spare_parts.map((sp, idx) => {
+            const hasReceipt = sp.receipt_number && sp.receipt_number !== '-' && !sp.receipt_number.includes('مجاني');
+            const receiptHtml = hasReceipt
+                ? `<span class="badge inmerchant" style="font-family:var(--font-en); font-weight:800; font-size:11px; padding:2px 8px; border:1px solid rgba(56,189,248,0.4);"><i data-lucide="receipt" style="width:11px; height:11px; vertical-align:middle; margin-left:3px;"></i>${sp.receipt_number}</span>`
+                : `<span style="font-size:11px; color:var(--text-muted);">${sp.receipt_number}</span>`;
+
+            const paidColor = sp.paid_amount > 0 ? '#10b981' : 'var(--text-muted)';
+            const statusBadge = sp.is_free
+                ? `<span class="badge inmerchant" style="font-size:11px; font-weight:700;">${sp.payment_status_label}</span>`
+                : (sp.payment_status_label.includes('مؤجل')
+                    ? `<span class="badge" style="background:rgba(245,158,11,0.15); color:#f59e0b; font-size:11px; font-weight:700;">${sp.payment_status_label}</span>`
+                    : `<span class="badge" style="background:rgba(16,185,129,0.15); color:#10b981; font-size:11px; font-weight:700;">${sp.payment_status_label}</span>`);
+
+            return `
             <tr>
                 <td style="font-family:var(--font-en); font-weight:700; color:var(--text-muted);">${idx + 1}</td>
                 <td>${formatDateTimeCell(sp.date)}</td>
                 <td><strong style="color:var(--md-sys-color-primary); font-size:13px;">${sp.part_name}</strong></td>
                 <td style="font-family:var(--font-en); font-weight:700;">${sp.quantity}</td>
-                <td style="font-family:var(--font-en); font-weight:700; color:#10b981;">${Number(sp.unit_price).toLocaleString('ar-EG')} جم</td>
-                <td><span class="badge inmerchant" style="font-size:11px; font-weight:700;">${sp.payment_status_label}</span></td>
-                <td style="font-family:var(--font-en); font-weight:700; color:var(--text-muted);">${sp.receipt_number}</td>
-                <td style="font-size:11px; color:var(--text-muted); max-width:180px; word-break:break-word;">${sp.notes}</td>
+                <td style="font-family:var(--font-en); font-weight:700; color:var(--md-sys-color-on-surface);">${Number(sp.official_price || 0).toLocaleString('ar-EG')} جم</td>
+                <td style="font-family:var(--font-en); font-weight:800; color:${paidColor};">${sp.paid_amount > 0 ? `${Number(sp.paid_amount).toLocaleString('ar-EG')} جم` : '0 جم (مجاني)'}</td>
+                <td>${statusBadge}</td>
+                <td>${receiptHtml}</td>
+                <td style="font-size:11px; color:var(--text-muted); max-width:200px; word-break:break-word;">${sp.notes}</td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
     }
 
     // TAB 4: HQ Central Maintenance

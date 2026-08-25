@@ -2739,8 +2739,17 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
         });
 
         // 4. TAB 3: Spare Parts Consumed for this machine
+        // Query official price catalog from failure_points_raw
+        const priceCatalogRows = await allQuery(`SELECT type, price FROM failure_points_raw WHERE price IS NOT NULL AND price != ''`);
+        const priceMap = new Map();
+        priceCatalogRows.forEach(p => {
+            if (p.type) priceMap.set(p.type.trim().toLowerCase(), parseFloat(p.price) || 0);
+        });
+
+        const strippedS = s.replace(/^S/i, '').replace(/^M-/i, '');
         const spareParts = await allQuery(`
             SELECT s.rowid as id,
+                   s.Serial as serial_raw,
                    s.out_date as date,
                    s.type as part_name,
                    s.count_in,
@@ -2749,34 +2758,69 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
                    s.faulty_detils as payment_status_raw,
                    s.notes
             FROM store_sp_raw s
-            WHERE s.Serial LIKE ? OR s.notes LIKE ?
+            WHERE s.Serial LIKE ? OR s.notes LIKE ? OR s.Serial LIKE ? OR s.notes LIKE ?
             ORDER BY s.rowid DESC
-        `, [`%${s}%`, `%${s}%`]);
+        `, [`%${s}%`, `%${s}%`, `%${strippedS}%`, `%${strippedS}%`]);
 
         const formattedParts = spareParts.map(sp => {
+            const serialRaw = String(sp.serial_raw || '');
             const notesStr = String(sp.notes || '');
-            let isFree = sp.payment_status_raw?.includes('ضمان') || notesStr.includes('ضمان') || notesStr.includes('مجاني');
-            let isDeferred = notesStr.includes('مؤجل') || notesStr.includes('اجل') || sp.payment_status_raw?.includes('مؤجل');
-            let isPaid = !isFree && !isDeferred;
+            const combinedText = `${serialRaw} ${notesStr} ${String(sp.payment_status_raw || '')}`;
 
-            let paymentLabel = isFree ? 'مجاني (ضمان)' : (isDeferred ? 'تحصيل مؤجل ⚠️' : 'مسدد بمقابل ✅');
-            let price = parseFloat(sp.price_raw || 0);
+            // Check if free (ضمان / فرع / مجاني)
+            let isFree = /مجاني|ضمان|مخزن الفرع|ماكينة مخزن|بدون مقابل/i.test(combinedText);
+            let isDeferred = /مؤجل|اجل|تحصيل مؤجل/i.test(combinedText);
 
-            // Extract receipt if available
+            // Extract Receipt Number from serialRaw (e.g. '40180096190525 - قارئ بطاقات ...')
             let receiptNo = '-';
-            const rMatch = notesStr.match(/(?:إيصال|ايصال|وصل|رقم)\s*[:#]?\s*([0-9A-Za-z_-]+)/i);
-            if (rMatch) receiptNo = rMatch[1];
+            const numMatch = serialRaw.match(/^([0-9]{6,20})/);
+            if (numMatch) {
+                receiptNo = numMatch[1];
+            } else {
+                const rMatch = combinedText.match(/(?:إيصال|ايصال|وصل|رقم|ref|receipt)\s*[:#\-]?\s*([0-9]{6,20})/i);
+                if (rMatch) receiptNo = rMatch[1];
+            }
+
+            if (receiptNo === '-' && isFree) {
+                receiptNo = 'صرف مجاني (ضمان/فرع)';
+            }
+
+            // Get Official Catalog Price from failure_points_raw
+            const partNameTrim = String(sp.part_name || '').trim().toLowerCase();
+            let catalogPrice = priceMap.get(partNameTrim) || 0;
+            if (catalogPrice === 0) {
+                for (const [k, v] of priceMap.entries()) {
+                    if (partNameTrim.includes(k) || k.includes(partNameTrim)) {
+                        catalogPrice = v;
+                        break;
+                    }
+                }
+            }
+
+            // Paid amount
+            let paidAmount = 0;
+            if (isFree) {
+                paidAmount = 0;
+            } else {
+                let fPrice = parseFloat(sp.price_raw);
+                paidAmount = (!isNaN(fPrice) && fPrice > 0) ? fPrice : catalogPrice;
+            }
+
+            let paymentLabel = isFree ? 'مجاني (ضمان/فرع) 🛡️' : (isDeferred ? 'تحصيل مؤجل ⚠️' : 'مسدد بمقابل ✅');
 
             return {
                 id: sp.id,
                 date: sp.date || '-',
                 part_name: sp.part_name || 'قطعة غيار',
                 quantity: Math.abs(parseInt(sp.count_in || sp.count_out || 1, 10)),
-                unit_price: price,
-                total_amount: price,
+                official_price: catalogPrice,
+                paid_amount: paidAmount,
+                unit_price: catalogPrice,
+                total_amount: paidAmount,
                 payment_status_label: paymentLabel,
+                is_free: isFree,
                 receipt_number: receiptNo,
-                notes: sp.notes || '-'
+                notes: sp.notes || serialRaw || '-'
             };
         });
 
