@@ -6493,7 +6493,9 @@ async function loadDiagnosticsErrorLogs() {
             return;
         }
 
+        window.__diagnosticErrorStackMap = {};
         tbody.innerHTML = errors.map((err, idx) => {
+            window.__diagnosticErrorStackMap[err.id] = err.stack_trace || '';
             let sevBadge = `<span class="badge" style="background:rgba(239,68,68,0.15); color:#ef4444; border:1px solid rgba(239,68,68,0.3); font-weight:800;">ERROR</span>`;
             if (err.severity === 'CRITICAL') {
                 sevBadge = `<span class="badge" style="background:#ef4444; color:#ffffff; font-weight:800;">CRITICAL 🚨</span>`;
@@ -6518,7 +6520,7 @@ async function loadDiagnosticsErrorLogs() {
                     <td>${formattedTime}</td>
                     <td>
                         ${hasStack ? `
-                            <button type="button" class="btn btn-secondary" style="padding:3px 8px; font-size:10px; font-family:var(--font-en);" onclick="alert('Stack Trace:\\n\\n' + ${JSON.stringify(err.stack_trace)})">
+                            <button type="button" class="btn btn-secondary" style="padding:3px 8px; font-size:10px; font-family:var(--font-en);" onclick="showDiagnosticStack(${err.id})">
                                 <i data-lucide="file-code"></i> عرض الـ Stack
                             </button>
                         ` : '<span style="color:var(--text-muted); font-size:11px;">-</span>'}
@@ -6538,6 +6540,14 @@ async function loadDiagnosticsErrorLogs() {
     }
 }
 window.loadDiagnosticsErrorLogs = loadDiagnosticsErrorLogs;
+
+function showDiagnosticStack(id) {
+    const stack = window.__diagnosticErrorStackMap ? window.__diagnosticErrorStackMap[id] : '';
+    if (stack) {
+        alert('تفاصيل الـ Stack Trace:\n\n' + stack);
+    }
+}
+window.showDiagnosticStack = showDiagnosticStack;
 
 async function clearAllDiagnosticsErrors() {
     const confirmed = confirm('هل أنت متأكد من رغبتك في مسح وتفريغ سجل الأخطاء بالكامل؟');

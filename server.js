@@ -298,7 +298,10 @@ function parseDateToIso(str) {
 async function initAppSchema() {
     try {
         await syncEngine.initSyncDatabase(db);
-        await runQuery("ALTER TABLE merchants ADD COLUMN status TEXT DEFAULT 'active'").catch(() => {});
+        const merchantCols = await allQuery("PRAGMA table_info(merchants)").catch(() => []);
+        if (merchantCols && !merchantCols.some(c => c.name === 'status')) {
+            await runQuery("ALTER TABLE merchants ADD COLUMN status TEXT DEFAULT 'active'").catch(() => {});
+        }
         
         // Initialize tblinstallments
         await runQuery(`
