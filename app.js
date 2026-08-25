@@ -380,6 +380,7 @@ function switchTab(tabName) {
         else if (tabName === 'hq-maintenance') loadHqMaintenanceInventory();
         else if (tabName === 'installments') loadInstallmentsDashboard();
         else if (tabName === 'spare-parts-inventory') loadSparePartsInventory();
+        else if (tabName === 'time-machine') initTimeMachineTab();
         else if (tabName === 'sync-monitor') loadSyncMonitor();
         else if (tabName === 'data-explorer') loadDataExplorer();
         else if (tabName === 'settings') loadSettings();
@@ -414,6 +415,7 @@ function initNavigation() {
             else if (tabName === 'hq-maintenance') loadHqMaintenanceInventory();
             else if (tabName === 'installments') loadInstallmentsDashboard();
             else if (tabName === 'spare-parts-inventory') loadSparePartsInventory();
+            else if (tabName === 'time-machine') initTimeMachineTab();
             else if (tabName === 'sync-monitor') loadSyncMonitor();
             else if (tabName === 'data-explorer') loadDataExplorer();
             else if (tabName === 'settings') loadSettings();
@@ -443,6 +445,9 @@ function initNavigation() {
     });
     document.getElementById('btn-goto-spare-parts')?.addEventListener('click', () => {
         document.getElementById('tab-btn-spare-parts-inventory')?.click();
+    });
+    document.getElementById('btn-goto-time-machine')?.addEventListener('click', () => {
+        document.getElementById('tab-btn-time-machine')?.click();
     });
     document.getElementById('btn-goto-maintenance')?.addEventListener('click', () => {
         document.getElementById('tab-btn-hq-maintenance')?.click();
@@ -6038,6 +6043,301 @@ function renderDeviceDeepdiveContent(data) {
 
     if (typeof refreshIcons === 'function') refreshIcons();
 }
+
+// =========================================================================
+// POINT-IN-TIME INVENTORY TIME MACHINE (آلة الزمن المخزنية)
+// =========================================================================
+let timeMachineCurrentData = null;
+let timeMachineActiveSubtab = 'sp';
+
+function initTimeMachineTab() {
+    const dateInput = document.getElementById('tm-date-input');
+    if (dateInput && !dateInput.value) {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        dateInput.value = todayStr;
+    }
+
+    // Bind subtab buttons
+    document.querySelectorAll('.tm-subtab-btn').forEach(btn => {
+        btn.onclick = () => {
+            document.querySelectorAll('.tm-subtab-btn').forEach(b => {
+                b.classList.remove('active');
+                b.style.background = '';
+                b.style.color = '';
+            });
+            document.querySelectorAll('.tm-subpane').forEach(p => p.style.display = 'none');
+
+            btn.classList.add('active');
+            timeMachineActiveSubtab = btn.dataset.subtab;
+            const pane = document.getElementById(`tm-pane-${timeMachineActiveSubtab}`);
+            if (pane) pane.style.display = 'block';
+            if (typeof refreshIcons === 'function') refreshIcons();
+        };
+    });
+
+    // Bind presets
+    document.querySelectorAll('.tm-preset-btn').forEach(btn => {
+        btn.onclick = () => {
+            document.querySelectorAll('.tm-preset-btn').forEach(b => {
+                b.classList.remove('active');
+                b.style.background = '';
+                b.style.color = '';
+            });
+            btn.classList.add('active');
+            btn.style.background = 'var(--md-sys-color-primary-container)';
+            btn.style.color = 'var(--md-sys-color-primary)';
+
+            const preset = btn.dataset.preset;
+            let targetDate = new Date();
+
+            if (preset === 'today') {
+                targetDate = new Date();
+            } else if (preset === 'end_last_month') {
+                const now = new Date();
+                targetDate = new Date(now.getFullYear(), now.getMonth(), 0);
+            } else if (preset === 'start_year_2026') {
+                targetDate = new Date('2026-01-01');
+            } else if (preset === 'end_year_2025') {
+                targetDate = new Date('2025-12-31');
+            } else if (preset === 'mid_year_2025') {
+                targetDate = new Date('2025-06-30');
+            }
+
+            const yyyy = targetDate.getFullYear();
+            const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
+            const dd = String(targetDate.getDate()).padStart(2, '0');
+            const formatted = `${yyyy}-${mm}-${dd}`;
+
+            if (dateInput) dateInput.value = formatted;
+            loadTimeMachineData(formatted);
+        };
+    });
+
+    // Query button
+    document.getElementById('btn-tm-query')?.addEventListener('click', () => {
+        const val = dateInput ? dateInput.value : '';
+        loadTimeMachineData(val);
+    });
+
+    // Search filters
+    document.getElementById('tm-sp-search')?.addEventListener('input', (e) => {
+        renderTimeMachineSpareParts(e.target.value.trim());
+    });
+    document.getElementById('tm-pos-search')?.addEventListener('input', (e) => {
+        renderTimeMachinePos(e.target.value.trim());
+    });
+    document.getElementById('tm-sims-search')?.addEventListener('input', (e) => {
+        renderTimeMachineSims(e.target.value.trim());
+    });
+
+    // Print button
+    document.getElementById('btn-tm-print')?.addEventListener('click', () => {
+        window.print();
+    });
+
+    // Initial load
+    const currentVal = dateInput ? dateInput.value : '';
+    loadTimeMachineData(currentVal);
+}
+
+async function loadTimeMachineData(dateStr) {
+    try {
+        const queryDate = dateStr || new Date().toISOString().slice(0, 10);
+        
+        // Show loading in tables
+        const spTbody = document.getElementById('tm-sp-table-body');
+        if (spTbody) spTbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:35px; color:var(--text-muted);"><i data-lucide="loader-2" class="spin-animation" style="width:20px;height:20px;vertical-align:middle;margin-left:6px;"></i> جاري استرجاع رصيد آلة الزمن لتاريخ ${queryDate}...</td></tr>`;
+        if (typeof refreshIcons === 'function') refreshIcons();
+
+        const res = await fetch(`/api/inventory/time-machine?date=${encodeURIComponent(queryDate)}`);
+        const data = await res.json();
+
+        if (!data.success) {
+            if (typeof showToast === 'function') showToast('error', 'تعذر استرجاع رصيد آلة الزمن', data.error || '');
+            return;
+        }
+
+        timeMachineCurrentData = data;
+
+        // 1. Update KPI Highlights
+        const posValEl = document.getElementById('tm-stat-pos-count');
+        if (posValEl) posValEl.textContent = Number(data.summary.total_pos).toLocaleString('ar-EG');
+        const posSubEl = document.getElementById('tm-stat-pos-sub');
+        if (posSubEl) posSubEl.textContent = `${data.summary.total_pos_models} موديل • ${data.summary.branch_backup_pos} ماكينة احتياطية (S)`;
+
+        const simValEl = document.getElementById('tm-stat-sims-count');
+        if (simValEl) simValEl.textContent = Number(data.summary.total_sims).toLocaleString('ar-EG');
+        const simSubEl = document.getElementById('tm-stat-sims-sub');
+        if (simSubEl) simSubEl.textContent = `متاحة بالمخزن`;
+
+        const spValEl = document.getElementById('tm-stat-sp-units');
+        if (spValEl) spValEl.textContent = Number(data.summary.total_sp_units).toLocaleString('ar-EG') + ' قطعة';
+        const spCostEl = document.getElementById('tm-stat-sp-valuation');
+        if (spCostEl) spCostEl.textContent = Number(data.summary.total_sp_valuation).toLocaleString('ar-EG') + ' جم';
+
+        const asOfEl = document.getElementById('tm-as-of-date-text');
+        if (asOfEl) asOfEl.textContent = data.as_of_formatted || data.as_of_date;
+
+        // Subtab counts
+        const cntSp = document.getElementById('tm-subcount-sp');
+        if (cntSp) cntSp.textContent = data.spare_parts_inventory.items.length;
+        const cntPos = document.getElementById('tm-subcount-pos');
+        if (cntPos) cntPos.textContent = data.pos_inventory.total;
+        const cntSims = document.getElementById('tm-subcount-sims');
+        if (cntSims) cntSims.textContent = data.sims_inventory.total;
+
+        // 2. Render Subtabs
+        renderTimeMachineSpareParts();
+        renderTimeMachinePos();
+        renderTimeMachineSims();
+
+        if (typeof refreshIcons === 'function') refreshIcons();
+    } catch (err) {
+        console.error('loadTimeMachineData error:', err);
+        if (typeof showToast === 'function') showToast('error', 'خطأ في الاتصال بالخادم', err.message);
+    }
+}
+
+function renderTimeMachineSpareParts(filterText = '') {
+    if (!timeMachineCurrentData) return;
+    const items = timeMachineCurrentData.spare_parts_inventory.items || [];
+    const tbody = document.getElementById('tm-sp-table-body');
+    if (!tbody) return;
+
+    const filtered = items.filter(it => !filterText || it.type.toLowerCase().includes(filterText.toLowerCase()));
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:35px; color:var(--text-muted);">لا توجد قطع غيار مطابقة للبحث في هذا التاريخ</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = filtered.map((p, idx) => {
+        let statusBadge = '<span class="badge inmerchant">رصيد متوفر ✅</span>';
+        let balColor = '#10b981';
+        if (p.current_balance <= 0) {
+            statusBadge = '<span class="badge" style="background:rgba(239,68,68,0.15); color:#ef4444; border:1px solid rgba(239,68,68,0.3);">رصيد نفد ⚠️</span>';
+            balColor = '#ef4444';
+        } else if (p.current_balance < 5) {
+            statusBadge = '<span class="badge warning">رصيد منخفض ⚠️</span>';
+            balColor = '#f59e0b';
+        }
+
+        return `
+            <tr>
+                <td style="font-family:var(--font-en); font-weight:700; color:var(--text-muted);">${idx + 1}</td>
+                <td><strong style="font-size:13px; color:var(--md-sys-color-primary);">${p.type}</strong></td>
+                <td style="font-family:var(--font-en); font-weight:700; color:var(--md-sys-color-on-surface);">${Number(p.unit_price).toLocaleString('ar-EG')} جم</td>
+                <td style="font-family:var(--font-en); font-weight:700; color:#38bdf8;">+${Number(p.cumulative_in).toLocaleString('ar-EG')}</td>
+                <td style="font-family:var(--font-en); font-weight:700; color:#ef4444;">-${Number(p.cumulative_out).toLocaleString('ar-EG')}</td>
+                <td><strong style="font-family:var(--font-en); font-size:14px; color:${balColor};">${Number(p.current_balance).toLocaleString('ar-EG')}</strong></td>
+                <td style="font-family:var(--font-en); font-weight:800; color:#fbbf24;">${Number(p.total_value).toLocaleString('ar-EG')} جم</td>
+                <td>${statusBadge}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function renderTimeMachinePos(filterText = '') {
+    if (!timeMachineCurrentData) return;
+    const { by_model, items } = timeMachineCurrentData.pos_inventory;
+    
+    // 1. Models Matrix
+    const grid = document.getElementById('tm-pos-models-grid');
+    if (grid && by_model) {
+        grid.innerHTML = Object.entries(by_model).map(([modelName, count]) => `
+            <div style="background:var(--md-sys-color-surface-container); border:1px solid var(--md-sys-color-outline-variant); border-radius:12px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <span style="font-size:11px; color:var(--text-muted); display:block;">موديل الماكينة</span>
+                    <strong style="font-size:13px; color:var(--md-sys-color-primary); font-family:var(--font-en);">${modelName}</strong>
+                </div>
+                <span class="badge inmerchant" style="font-family:var(--font-en); font-size:14px; font-weight:800;">${count}</span>
+            </div>
+        `).join('');
+    }
+
+    // 2. Table Rows
+    const tbody = document.getElementById('tm-pos-table-body');
+    if (!tbody) return;
+
+    const filtered = (items || []).filter(it => {
+        if (!filterText) return true;
+        const q = filterText.toLowerCase();
+        return it.serial.toLowerCase().includes(q) || it.full_model.toLowerCase().includes(q) || it.notes.toLowerCase().includes(q);
+    });
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:35px; color:var(--text-muted);">لا توجد ماكينات مطابقة في مخزن هذا التاريخ</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = filtered.map((d, idx) => `
+        <tr>
+            <td style="font-family:var(--font-en); font-weight:700; color:var(--text-muted);">${idx + 1}</td>
+            <td>
+                <strong style="font-family:var(--font-en); color:var(--md-sys-color-primary); font-size:13px; letter-spacing:0.5px;">${d.serial}</strong>
+                ${d.is_branch_backup ? '<span class="badge" style="background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3); font-size:10px; padding:2px 6px; margin-right:4px;">ماكينة احتياطية (S)</span>' : ''}
+            </td>
+            <td><strong style="font-family:var(--font-en); font-size:12px;">${d.full_model}</strong></td>
+            <td><span class="badge inmerchant" style="font-size:11px;">ماكينة فرع</span></td>
+            <td><span class="badge ${d.status.includes('تالفة') ? 'warning' : 'ready'}" style="font-size:11px;">${d.status}</span></td>
+            <td style="font-size:11px; color:var(--text-muted); max-width:200px; word-break:break-word;">${d.notes}</td>
+        </tr>
+    `).join('');
+}
+
+function renderTimeMachineSims(filterText = '') {
+    if (!timeMachineCurrentData) return;
+    const { by_carrier, items } = timeMachineCurrentData.sims_inventory;
+
+    // 1. Carriers Grid
+    const grid = document.getElementById('tm-sims-carriers-grid');
+    if (grid && by_carrier) {
+        const carrierColors = {
+            Vodafone: '#ef4444',
+            Orange: '#f97316',
+            WE: '#a855f7',
+            Etisalat: '#10b981',
+            Other: '#64748b'
+        };
+
+        grid.innerHTML = Object.entries(by_carrier).map(([carrier, count]) => `
+            <div style="background:var(--md-sys-color-surface-container); border:1px solid var(--md-sys-color-outline-variant); border-radius:12px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center; border-right:3px solid ${carrierColors[carrier] || '#64748b'};">
+                <div>
+                    <span style="font-size:11px; color:var(--text-muted); display:block;">شبكة الاتصال</span>
+                    <strong style="font-size:13px; color:${carrierColors[carrier] || 'var(--text-primary)'}; font-family:var(--font-en);">${carrier}</strong>
+                </div>
+                <span class="badge inmerchant" style="font-family:var(--font-en); font-size:14px; font-weight:800;">${count}</span>
+            </div>
+        `).join('');
+    }
+
+    // 2. Table Rows
+    const tbody = document.getElementById('tm-sims-table-body');
+    if (!tbody) return;
+
+    const filtered = (items || []).filter(it => {
+        if (!filterText) return true;
+        const q = filterText.toLowerCase();
+        return it.serial.toLowerCase().includes(q) || it.carrier.toLowerCase().includes(q) || it.notes.toLowerCase().includes(q);
+    });
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:35px; color:var(--text-muted);">لا توجد شرائح مطابقة في مخزن هذا التاريخ</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = filtered.map((s, idx) => `
+        <tr>
+            <td style="font-family:var(--font-en); font-weight:700; color:var(--text-muted);">${idx + 1}</td>
+            <td><strong style="font-family:var(--font-en); color:var(--md-sys-color-primary); font-size:13px; letter-spacing:0.5px;">${s.serial}</strong></td>
+            <td><span class="badge inmerchant" style="font-family:var(--font-en); font-weight:700;">${s.carrier}</span></td>
+            <td style="font-size:11px; color:var(--text-muted);">${s.notes}</td>
+        </tr>
+    `).join('');
+}
+
+window.initTimeMachineTab = initTimeMachineTab;
+window.loadTimeMachineData = loadTimeMachineData;
 
 // Auto-run font initialization & sync health monitor
 if (typeof document !== 'undefined') {

@@ -63,6 +63,10 @@
                     <i data-lucide="layers"></i>
                     <span>مخزن وحركات قطع الغيار</span>
                 </a>
+                <a href="#" class="nav-item" data-tab="time-machine" id="tab-btn-time-machine">
+                    <i data-lucide="hourglass"></i>
+                    <span>آلة الزمن المخزنية</span>
+                </a>
                 <a href="#" class="nav-item" data-tab="sync-monitor" id="tab-btn-sync-monitor">
                     <i data-lucide="refresh-cw"></i>
                     <span>مراقبة التغيرات والمزامنة</span>
@@ -201,6 +205,10 @@
                                 <button class="btn btn-secondary" id="btn-goto-spare-parts" style="white-space:nowrap; flex-shrink:0; border-color: rgba(168, 85, 247, 0.4); background: rgba(168, 85, 247, 0.08); color: #c084fc; border-radius: var(--md-shape-corner-full); padding: 7px 14px; font-size: 12px; font-weight: 700;">
                                     <i data-lucide="layers"></i>
                                     <span>مخزن قطع الغيار</span>
+                                </button>
+                                <button class="btn btn-secondary" id="btn-goto-time-machine" style="white-space:nowrap; flex-shrink:0; border-color: rgba(236, 72, 153, 0.4); background: rgba(236, 72, 153, 0.1); color: #f472b6; border-radius: var(--md-shape-corner-full); padding: 7px 14px; font-size: 12px; font-weight: 700;">
+                                    <i data-lucide="hourglass"></i>
+                                    <span>آلة الزمن المخزنية</span>
                                 </button>
                                 <button class="btn btn-secondary" id="btn-goto-maintenance" style="white-space:nowrap; flex-shrink:0; border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.08); color: #f59e0b; border-radius: var(--md-shape-corner-full); padding: 7px 14px; font-size: 12px; font-weight: 700;">
                                     <i data-lucide="wrench"></i>
@@ -2346,6 +2354,216 @@
                     </div>
                 </section>
 
+                <!-- ======================================================== -->
+                <!-- TIME MACHINE TAB (آلة الزمن المخزنية - جرد تاريخي)       -->
+                <!-- ======================================================== -->
+                <section class="tab-content" id="tab-time-machine">
+                    <div class="page-title-area" style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px;">
+                        <div>
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <div style="width:38px; height:38px; border-radius:12px; background:rgba(236,72,153,0.15); display:flex; align-items:center; justify-content:center; color:#ec4899;">
+                                    <i data-lucide="hourglass" style="width:20px; height:20px;"></i>
+                                </div>
+                                <div>
+                                    <h1 style="margin:0;">آلة الزمن المخزنية</h1>
+                                    <p style="margin:2px 0 0 0;">كشف واسترجاع رصيد مخزن الفرع في أي يوم أو تاريخ محدد في الماضي</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Date Controls -->
+                        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; background:var(--md-sys-color-surface-container); padding:10px 14px; border-radius:14px; border:1px solid var(--md-sys-color-outline-variant);">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <label for="tm-date-input" style="font-size:12px; font-weight:700; color:var(--text-secondary); white-space:nowrap;"><i data-lucide="calendar" style="width:13px; height:13px; vertical-align:middle;"></i> تاريخ الرصيد:</label>
+                                <input type="date" id="tm-date-input" style="padding:6px 12px; font-size:13px; border-radius:8px; border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface); color:var(--md-sys-color-on-surface); font-family:var(--font-en); font-weight:700;">
+                            </div>
+                            <button type="button" class="btn btn-primary" id="btn-tm-query" style="padding:7px 16px; font-size:12px; font-weight:700; display:inline-flex; align-items:center; gap:6px; background:linear-gradient(135deg, #ec4899, #db2777); border:none; box-shadow:0 4px 12px rgba(236,72,153,0.3);">
+                                <i data-lucide="play" style="width:13px; height:13px;"></i>
+                                <span>استرجاع الرصيد</span>
+                            </button>
+                            <button type="button" class="btn btn-secondary" id="btn-tm-print" style="padding:7px 14px; font-size:12px; display:inline-flex; align-items:center; gap:6px;">
+                                <i data-lucide="printer" style="width:13px; height:13px;"></i>
+                                <span>طباعة كشف الجرد</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Date Presets Bar -->
+                    <div style="display:flex; gap:8px; margin: 14px 0 20px 0; overflow-x:auto; padding-bottom:4px;">
+                        <button type="button" class="btn btn-secondary tm-preset-btn active" data-preset="today" style="font-size:11px; padding:5px 12px; border-radius:var(--md-shape-corner-full); font-weight:700;">اليوم الحالي (اللحظي)</button>
+                        <button type="button" class="btn btn-secondary tm-preset-btn" data-preset="end_last_month" style="font-size:11px; padding:5px 12px; border-radius:var(--md-shape-corner-full); font-weight:700;">نهاية الشهر الماضي</button>
+                        <button type="button" class="btn btn-secondary tm-preset-btn" data-preset="start_year_2026" style="font-size:11px; padding:5px 12px; border-radius:var(--md-shape-corner-full); font-weight:700;">بداية عام 2026</button>
+                        <button type="button" class="btn btn-secondary tm-preset-btn" data-preset="end_year_2025" style="font-size:11px; padding:5px 12px; border-radius:var(--md-shape-corner-full); font-weight:700;">نهاية عام 2025</button>
+                        <button type="button" class="btn btn-secondary tm-preset-btn" data-preset="mid_year_2025" style="font-size:11px; padding:5px 12px; border-radius:var(--md-shape-corner-full); font-weight:700;">منتصف عام 2025 (30 يونيو)</button>
+                    </div>
+
+                    <!-- Point-in-Time KPI Stats Banner -->
+                    <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:16px; margin-bottom: 24px;">
+                        <div class="wh-stat-card" style="border-top: 3px solid #ec4899;">
+                            <div class="wh-stat-header">
+                                <span>ماكينات الـ POS بالمخزن</span>
+                                <div class="wh-stat-icon" style="background: rgba(236,72,153,0.15); color: #ec4899;"><i data-lucide="boxes"></i></div>
+                            </div>
+                            <div class="wh-stat-val" id="tm-stat-pos-count" style="color: #ec4899;">-</div>
+                            <div class="wh-stat-sub" id="tm-stat-pos-sub">موزعة على الموديلات</div>
+                        </div>
+
+                        <div class="wh-stat-card" style="border-top: 3px solid #10b981;">
+                            <div class="wh-stat-header">
+                                <span>شرائح الاتصال بالمخزن</span>
+                                <div class="wh-stat-icon" style="background: rgba(16,185,129,0.15); color: #10b981;"><i data-lucide="signal"></i></div>
+                            </div>
+                            <div class="wh-stat-val" id="tm-stat-sims-count" style="color: #10b981;">-</div>
+                            <div class="wh-stat-sub" id="tm-stat-sims-sub">موزعة على 4 شبكات</div>
+                        </div>
+
+                        <div class="wh-stat-card" style="border-top: 3px solid #38bdf8;">
+                            <div class="wh-stat-header">
+                                <span>إجمالي قطع الغيار المتبقية</span>
+                                <div class="wh-stat-icon" style="background: rgba(56,189,248,0.15); color: #38bdf8;"><i data-lucide="layers"></i></div>
+                            </div>
+                            <div class="wh-stat-val" id="tm-stat-sp-units" style="color: #38bdf8;">-</div>
+                            <div class="wh-stat-sub" id="tm-stat-sp-sub">رصيد تراكمي صافي</div>
+                        </div>
+
+                        <div class="wh-stat-card" style="border-top: 3px solid #fbbf24;">
+                            <div class="wh-stat-header">
+                                <span>القيمة المالية لرصيد القطع</span>
+                                <div class="wh-stat-icon" style="background: rgba(251,191,36,0.15); color: #fbbf24;"><i data-lucide="calculator"></i></div>
+                            </div>
+                            <div class="wh-stat-val" id="tm-stat-sp-valuation" style="color: #fbbf24;">-</div>
+                            <div class="wh-stat-sub" id="tm-stat-valuation-sub">بالسعر الرسمي المعتمد</div>
+                        </div>
+                    </div>
+
+                    <!-- Interactive Subtabs -->
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--md-sys-color-outline-variant); margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+                        <div style="display:flex; gap:8px;">
+                            <button type="button" class="btn btn-secondary tm-subtab-btn active" data-subtab="sp" style="font-weight:700; padding:8px 16px; border-radius:10px 10px 0 0;">
+                                <i data-lucide="layers" style="width:14px; height:14px;"></i>
+                                <span>قطع الغيار والأرصدة (<span id="tm-subcount-sp">0</span>)</span>
+                            </button>
+                            <button type="button" class="btn btn-secondary tm-subtab-btn" data-subtab="pos" style="font-weight:700; padding:8px 16px; border-radius:10px 10px 0 0;">
+                                <i data-lucide="boxes" style="width:14px; height:14px;"></i>
+                                <span>ماكينات الـ POS بالموديلات (<span id="tm-subcount-pos">0</span>)</span>
+                            </button>
+                            <button type="button" class="btn btn-secondary tm-subtab-btn" data-subtab="sims" style="font-weight:700; padding:8px 16px; border-radius:10px 10px 0 0;">
+                                <i data-lucide="signal" style="width:14px; height:14px;"></i>
+                                <span>شرائح الاتصال (<span id="tm-subcount-sims">0</span>)</span>
+                            </button>
+                        </div>
+                        <div id="tm-as-of-badge" style="font-size:12px; font-weight:700; color:var(--text-muted); background:var(--md-sys-color-surface-container); padding:5px 12px; border-radius:var(--md-shape-corner-full);">
+                            كشف الرصيد حتى: <span id="tm-as-of-date-text" style="color:#ec4899; font-weight:800;">-</span>
+                        </div>
+                    </div>
+
+                    <!-- SUBTAB 1: SPARE PARTS -->
+                    <div class="tm-subpane" id="tm-pane-sp">
+                        <div class="panel">
+                            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                                <div>
+                                    <h3 style="margin:0;"><i data-lucide="layers"></i> رصيد قطع الغيار في التاريخ المحدد</h3>
+                                    <p style="margin:2px 0 0 0; font-size:12px; color:var(--text-muted);">حساب تراكمي لمعادلة [إجمالي الوارد حتى التاريخ - إجمالي المنصرف حتى التاريخ]</p>
+                                </div>
+                                <input type="text" id="tm-sp-search" placeholder="بحث باسم القطعة..." style="padding:6px 12px; font-size:12px; border-radius:var(--md-shape-corner-full); max-width:240px;">
+                            </div>
+                            <div class="panel-body">
+                                <div class="table-responsive" style="max-height:480px; overflow-y:auto; -webkit-overflow-scrolling:touch;">
+                                    <table class="data-table" style="width:100%; min-width:700px;">
+                                        <thead>
+                                            <tr>
+                                                <th style="width:45px;">#</th>
+                                                <th>نوع قطعة الغيار</th>
+                                                <th>السعر الرسمي</th>
+                                                <th>إجمالي الوارد</th>
+                                                <th>إجمالي المنصرف</th>
+                                                <th>الرصيد المتاح</th>
+                                                <th>إجمالي القيمة التقديرية</th>
+                                                <th>الحالة التقديرية</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tm-sp-table-body">
+                                            <tr><td colspan="8" style="text-align:center; padding:35px; color:var(--text-muted);">جاري تجهيز رصيد آلة الزمن لقطع الغيار...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SUBTAB 2: POS MACHINES -->
+                    <div class="tm-subpane" id="tm-pane-pos" style="display:none;">
+                        <!-- Models Breakdown Matrix -->
+                        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-bottom:20px;" id="tm-pos-models-grid">
+                            <!-- Populated dynamically -->
+                        </div>
+
+                        <div class="panel">
+                            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                                <div>
+                                    <h3 style="margin:0;"><i data-lucide="boxes"></i> سجل الماكينات الموجودة بالمخزن في هذا التاريخ</h3>
+                                    <p style="margin:2px 0 0 0; font-size:12px; color:var(--text-muted);">تشمل الماكينات الاحتياطية للفرع (S) والماكينات المتاحة</p>
+                                </div>
+                                <input type="text" id="tm-pos-search" placeholder="بحث بالسيريال أو الموديل..." style="padding:6px 12px; font-size:12px; border-radius:var(--md-shape-corner-full); max-width:240px;">
+                            </div>
+                            <div class="panel-body">
+                                <div class="table-responsive" style="max-height:480px; overflow-y:auto; -webkit-overflow-scrolling:touch;">
+                                    <table class="data-table" style="width:100%; min-width:650px;">
+                                        <thead>
+                                            <tr>
+                                                <th style="width:45px;">#</th>
+                                                <th>سيريال الماكينة</th>
+                                                <th>الشركة المصنعة والموديل</th>
+                                                <th>نوع الماكينة</th>
+                                                <th>الحالة الفنية</th>
+                                                <th>الملاحظات</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tm-pos-table-body">
+                                            <tr><td colspan="6" style="text-align:center; padding:35px; color:var(--text-muted);">جاري تحميل ماكينات المخزن...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SUBTAB 3: SIM CARDS -->
+                    <div class="tm-subpane" id="tm-pane-sims" style="display:none;">
+                        <!-- SIM Carriers Grid -->
+                        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin-bottom:20px;" id="tm-sims-carriers-grid">
+                            <!-- Populated dynamically -->
+                        </div>
+
+                        <div class="panel">
+                            <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                                <div>
+                                    <h3 style="margin:0;"><i data-lucide="signal"></i> سجل شرائح الاتصال المتاحة بالمخزن</h3>
+                                    <p style="margin:2px 0 0 0; font-size:12px; color:var(--text-muted);">رصيد الشرائح غير المربوطة والموجودة بعهدة الفرع</p>
+                                </div>
+                                <input type="text" id="tm-sims-search" placeholder="بحث برقم الشريحة..." style="padding:6px 12px; font-size:12px; border-radius:var(--md-shape-corner-full); max-width:240px;">
+                            </div>
+                            <div class="panel-body">
+                                <div class="table-responsive" style="max-height:480px; overflow-y:auto; -webkit-overflow-scrolling:touch;">
+                                    <table class="data-table" style="width:100%; min-width:600px;">
+                                        <thead>
+                                            <tr>
+                                                <th style="width:45px;">#</th>
+                                                <th>سيريال الشريحة (SIM)</th>
+                                                <th>الشبكة المشغلة</th>
+                                                <th>الملاحظات</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tm-sims-table-body">
+                                            <tr><td colspan="4" style="text-align:center; padding:35px; color:var(--text-muted);">جاري تحميل شرائح المخزن...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
             </div>
         </main>
     </div>
@@ -3023,6 +3241,6 @@
     </div>
 
     <!-- Main Client Application Script -->
-    <script src="app.js?v=3.2"></script>
+    <script src="app.js?v=3.3"></script>
 </body>
 </html>

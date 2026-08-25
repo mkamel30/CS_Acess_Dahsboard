@@ -2875,6 +2875,186 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
     }
 });
 
+// =========================================================================
+// POINT-IN-TIME INVENTORY TIME MACHINE API (آلة الزمن المخزنية)
+// =========================================================================
+app.get('/api/inventory/time-machine', async (req, res) => {
+    try {
+        const reqDateStr = req.query.date || req.query.as_of;
+        let targetDate;
+        if (reqDateStr) {
+            targetDate = new Date(reqDateStr);
+            if (isNaN(targetDate.getTime())) {
+                targetDate = new Date();
+            } else {
+                targetDate.setHours(23, 59, 59, 999);
+            }
+        } else {
+            targetDate = new Date();
+        }
+
+        const dateIso = targetDate.toISOString().slice(0, 10);
+
+        function parseDateHelper(dateStr) {
+            if (!dateStr || dateStr === '-' || dateStr === 'null') return null;
+            const clean = String(dateStr).trim();
+            const match = clean.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})/);
+            if (match) {
+                const months = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };
+                const m = months[match[2].toLowerCase()];
+                if (m !== undefined) {
+                    let yr = parseInt(match[3], 10);
+                    if (yr < 100) yr += (yr >= 70 ? 1900 : 2000);
+                    const day = parseInt(match[1], 10);
+                    return new Date(Date.UTC(yr, m, day, 12, 0, 0));
+                }
+            }
+            const d = new Date(clean);
+            return isNaN(d.getTime()) ? null : d;
+        }
+
+        // 1. Spare Parts Point-in-Time Inventory
+        const priceCatalogRows = await allQuery(`SELECT type, price FROM failure_points_raw WHERE price IS NOT NULL AND price != ''`);
+        const priceMap = new Map();
+        priceCatalogRows.forEach(p => {
+            if (p.type) priceMap.set(p.type.trim().toLowerCase(), parseFloat(p.price) || 0);
+        });
+
+        const spRows = await allQuery(`SELECT * FROM store_sp_raw`);
+        const partsMap = new Map();
+        let totalSpUnits = 0;
+        let totalSpValuation = 0;
+
+        spRows.forEach(r => {
+            const inD = parseDateHelper(r.in_date);
+            const outD = parseDateHelper(r.out_date);
+            const partType = (r.type || 'أخرى').trim();
+
+            if (!partsMap.has(partType)) {
+                let unitP = priceMap.get(partType.toLowerCase()) || 0;
+                if (unitP === 0) {
+                    for (const [k, v] of priceMap.entries()) {
+                        if (partType.toLowerCase().includes(k) || k.includes(partType.toLowerCase())) {
+                            unitP = v;
+                            break;
+                        }
+                    }
+                }
+                partsMap.set(partType, {
+                    type: partType,
+                    unit_price: unitP,
+                    cumulative_in: 0,
+                    cumulative_out: 0,
+                    current_balance: 0,
+                    total_value: 0
+                });
+            }
+
+            const item = partsMap.get(partType);
+            const inQty = Math.abs(parseInt(r.count_in, 10) || 0);
+            const outQty = Math.abs(parseInt(r.count_out || r.count_in, 10) || 0);
+
+            if (inD && inD <= targetDate) {
+                item.cumulative_in += inQty;
+            }
+            if (outD && outD <= targetDate) {
+                item.cumulative_out += outQty;
+            }
+            item.current_balance = item.cumulative_in - item.cumulative_out;
+            item.total_value = item.current_balance * item.unit_price;
+        });
+
+        const sparePartsList = Array.from(partsMap.values()).map(p => {
+            if (p.current_balance > 0) {
+                totalSpUnits += p.current_balance;
+                totalSpValuation += (p.current_balance * p.unit_price);
+            }
+            return p;
+        }).sort((a, b) => b.current_balance - a.current_balance);
+
+        // 2. POS Machines Point-in-Time Inventory
+        const storePosRows = await allQuery(`SELECT * FROM store_pos_raw`);
+        const posModelCounts = {};
+        let totalPosCount = 0;
+        let branchBackupCount = 0;
+        const posList = [];
+
+        for (const row of storePosRows) {
+            const serial = (row.Serial || '').trim();
+            if (!serial) continue;
+            const specs = resolveDeviceSpecs(serial, row);
+            const modelName = specs.model || 'S90';
+            const fullModel = `${specs.manufacturer} ${modelName}`;
+            posModelCounts[fullModel] = (posModelCounts[fullModel] || 0) + 1;
+            totalPosCount++;
+            if (specs.is_branch_backup) branchBackupCount++;
+
+            posList.push({
+                serial: serial,
+                manufacturer: specs.manufacturer,
+                model: modelName,
+                full_model: fullModel,
+                is_branch_backup: specs.is_branch_backup,
+                status: row.faulty === 'True' ? 'تالفة / صيانة' : 'سليمة وجاهزة',
+                notes: row.notes || row.status_note || '-'
+            });
+        }
+
+        // 3. SIMs Point-in-Time Inventory
+        const storeSimRows = await allQuery(`SELECT * FROM store_sim_raw`);
+        const simCarrierCounts = { Vodafone: 0, Orange: 0, WE: 0, Etisalat: 0, Other: 0 };
+        let totalSimsCount = 0;
+
+        storeSimRows.forEach(s => {
+            const rawType = (s.sim_type || s.network || '').toLowerCase();
+            let carrier = 'Other';
+            if (rawType.includes('voda')) carrier = 'Vodafone';
+            else if (rawType.includes('orange') || rawType.includes('اورانج') || rawType.includes('موبينيل')) carrier = 'Orange';
+            else if (rawType.includes('we') || rawType.includes('وي') || rawType.includes('te')) carrier = 'WE';
+            else if (rawType.includes('etisalat') || rawType.includes('اتصالات')) carrier = 'Etisalat';
+
+            simCarrierCounts[carrier] = (simCarrierCounts[carrier] || 0) + 1;
+            totalSimsCount++;
+        });
+
+        res.json({
+            success: true,
+            as_of_date: dateIso,
+            as_of_formatted: targetDate.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }),
+            summary: {
+                total_pos: totalPosCount,
+                total_pos_models: Object.keys(posModelCounts).length,
+                branch_backup_pos: branchBackupCount,
+                total_sims: totalSimsCount,
+                total_sp_units: totalSpUnits,
+                total_sp_valuation: totalSpValuation
+            },
+            pos_inventory: {
+                total: totalPosCount,
+                by_model: posModelCounts,
+                items: posList
+            },
+            sims_inventory: {
+                total: totalSimsCount,
+                by_carrier: simCarrierCounts,
+                items: storeSimRows.slice(0, 100).map(s => ({
+                    serial: s.sim_serial,
+                    carrier: s.sim_type || s.network || 'عام',
+                    notes: s.notes || '-'
+                }))
+            },
+            spare_parts_inventory: {
+                total_units: totalSpUnits,
+                total_valuation: totalSpValuation,
+                items: sparePartsList
+            }
+        });
+    } catch (err) {
+        console.error('Error in /api/inventory/time-machine:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // Universal Asset Search & Historical Timeline API
 app.get('/api/assets/timeline', async (req, res) => {
     try {
