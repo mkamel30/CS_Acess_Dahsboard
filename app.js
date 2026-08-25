@@ -5293,11 +5293,28 @@ window.loadSyncTelemetryLogs = loadSyncTelemetryLogs;
 // ==========================================================================
 // AVAILABLE SPARE PARTS INVENTORY MODAL (الرصيد المتاح > 0)
 // ==========================================================================
-function openAvailableSparePartsModal() {
+async function openAvailableSparePartsModal() {
     const modal = document.getElementById('modal-available-spare-parts');
     if (!modal) return;
 
-    modal.style.display = 'flex';
+    modal.classList.add('active');
+
+    if (!sparePartsDataCache || !sparePartsDataCache.parts_breakdown) {
+        const tbody = document.getElementById('modal-avail-sp-tbody');
+        if (tbody) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--text-muted);"><i data-lucide="refresh-cw" class="spin-animation" style="width:16px;height:16px;vertical-align:middle;"></i> جاري تحميل بيانات الرصيد من السيرفر...</td></tr>`;
+        if (typeof refreshIcons === 'function') refreshIcons();
+        
+        try {
+            const res = await fetch('/api/inventory/spare-parts-dashboard');
+            const data = await res.json();
+            if (data.success) {
+                sparePartsDataCache = data;
+            }
+        } catch (e) {
+            console.error("Error loading spare parts for modal:", e);
+        }
+    }
+
     renderAvailableSparePartsModalTable();
 
     // Bind listeners once
@@ -5317,7 +5334,9 @@ window.openAvailableSparePartsModal = openAvailableSparePartsModal;
 
 function closeAvailableSparePartsModal() {
     const modal = document.getElementById('modal-available-spare-parts');
-    if (modal) modal.style.display = 'none';
+    if (modal) {
+        modal.classList.remove('active');
+    }
 }
 window.closeAvailableSparePartsModal = closeAvailableSparePartsModal;
 
