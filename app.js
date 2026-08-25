@@ -6241,16 +6241,23 @@ function renderTimeMachinePos(filterText = '') {
     if (!timeMachineCurrentData) return;
     const { by_model, items } = timeMachineCurrentData.pos_inventory;
     
-    // 1. Models Matrix
+    // 1. Models Matrix (Standard System Card Design)
     const grid = document.getElementById('tm-pos-models-grid');
     if (grid && by_model) {
         grid.innerHTML = Object.entries(by_model).map(([modelName, count]) => `
-            <div style="background:var(--md-sys-color-surface-container); border:1px solid var(--md-sys-color-outline-variant); border-radius:12px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                    <span style="font-size:11px; color:var(--text-muted); display:block;">موديل الماكينة</span>
-                    <strong style="font-size:13px; color:var(--md-sys-color-primary); font-family:var(--font-en);">${modelName}</strong>
+            <div class="card" style="background:var(--md-sys-color-surface-container); border:1px solid var(--md-sys-color-outline-variant); border-radius:16px; padding:18px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--md-elevation-1);">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="width:40px; height:40px; border-radius:12px; background:rgba(56,189,248,0.15); display:flex; align-items:center; justify-content:center; color:var(--md-sys-color-primary);">
+                        <i data-lucide="cpu" style="width:22px; height:22px;"></i>
+                    </div>
+                    <div>
+                        <span style="font-size:11px; font-weight:700; color:var(--md-sys-color-on-surface-variant); display:block;">موديل الماكينة</span>
+                        <strong style="font-size:15px; color:var(--md-sys-color-on-surface); font-family:var(--font-en);">${modelName}</strong>
+                    </div>
                 </div>
-                <span class="badge inmerchant" style="font-family:var(--font-en); font-size:14px; font-weight:800;">${count}</span>
+                <div style="text-align:left;">
+                    <span class="badge inmerchant" style="font-family:var(--font-en); font-size:16px; font-weight:800; padding:4px 12px;">${count}</span>
+                </div>
             </div>
         `).join('');
     }
@@ -6289,26 +6296,36 @@ function renderTimeMachineSims(filterText = '') {
     if (!timeMachineCurrentData) return;
     const { by_carrier, items } = timeMachineCurrentData.sims_inventory;
 
-    // 1. Carriers Grid
+    // 1. Carriers Grid (Standard System Card Design)
     const grid = document.getElementById('tm-sims-carriers-grid');
     if (grid && by_carrier) {
-        const carrierColors = {
-            Vodafone: '#ef4444',
-            Orange: '#f97316',
-            WE: '#a855f7',
-            Etisalat: '#10b981',
-            Other: '#64748b'
+        const carrierConfigs = {
+            Vodafone: { color: '#ef4444', bg: 'rgba(239,68,68,0.15)', name: 'فودافون مصر' },
+            Orange: { color: '#f97316', bg: 'rgba(249,115,22,0.15)', name: 'أورانج مصر' },
+            WE: { color: '#a855f7', bg: 'rgba(168,85,247,0.15)', name: 'المصرية للاتصالات WE' },
+            Etisalat: { color: '#10b981', bg: 'rgba(16,185,129,0.15)', name: 'اتصالات مصر' },
+            Other: { color: '#64748b', bg: 'rgba(100,116,139,0.15)', name: 'شرائح عامة' }
         };
 
-        grid.innerHTML = Object.entries(by_carrier).map(([carrier, count]) => `
-            <div style="background:var(--md-sys-color-surface-container); border:1px solid var(--md-sys-color-outline-variant); border-radius:12px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center; border-right:3px solid ${carrierColors[carrier] || '#64748b'};">
-                <div>
-                    <span style="font-size:11px; color:var(--text-muted); display:block;">شبكة الاتصال</span>
-                    <strong style="font-size:13px; color:${carrierColors[carrier] || 'var(--text-primary)'}; font-family:var(--font-en);">${carrier}</strong>
+        grid.innerHTML = Object.entries(by_carrier).map(([carrier, count]) => {
+            const cfg = carrierConfigs[carrier] || carrierConfigs.Other;
+            return `
+            <div class="card" style="background:var(--md-sys-color-surface-container); border:1px solid var(--md-sys-color-outline-variant); border-radius:16px; padding:18px; display:flex; justify-content:space-between; align-items:center; box-shadow:var(--md-elevation-1);">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="width:40px; height:40px; border-radius:12px; background:${cfg.bg}; display:flex; align-items:center; justify-content:center; color:${cfg.color};">
+                        <i data-lucide="signal" style="width:22px; height:22px;"></i>
+                    </div>
+                    <div>
+                        <span style="font-size:11px; font-weight:700; color:var(--md-sys-color-on-surface-variant); display:block;">${cfg.name}</span>
+                        <strong style="font-size:15px; color:${cfg.color}; font-family:var(--font-en);">${carrier}</strong>
+                    </div>
                 </div>
-                <span class="badge inmerchant" style="font-family:var(--font-en); font-size:14px; font-weight:800;">${count}</span>
+                <div style="text-align:left;">
+                    <span class="badge inmerchant" style="font-family:var(--font-en); font-size:16px; font-weight:800; padding:4px 12px;">${count}</span>
+                </div>
             </div>
-        `).join('');
+        `;
+        }).join('');
     }
 
     // 2. Table Rows
