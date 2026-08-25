@@ -1722,8 +1722,8 @@
                         <div class="card" style="background:var(--md-sys-color-surface-container); border:1px solid var(--md-sys-color-outline); border-radius:16px; padding:22px; box-shadow:var(--md-elevation-1); margin-bottom:20px;">
                             <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px; border-bottom:1px solid var(--md-sys-color-outline-variant); padding-bottom:18px; margin-bottom:18px;">
                                 <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
-                                    <div style="width:50px; height:50px; border-radius:14px; background:linear-gradient(135deg, #2563eb, #3b82f6); color:#fff; display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:900; box-shadow:0 4px 14px rgba(37,99,235,0.35);">
-                                        <i data-lucide="store" style="width:26px; height:26px;"></i>
+                                    <div style="width:52px; height:52px; border-radius:14px; background:linear-gradient(135deg, #2563eb, #3b82f6); color:#fff; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:900; box-shadow:0 4px 14px rgba(37,99,235,0.35);">
+                                        <i data-lucide="store" style="width:28px; height:28px;"></i>
                                     </div>
                                     <div>
                                         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:4px;">
@@ -1736,70 +1736,106 @@
                                 </div>
                             </div>
 
-                            <!-- Detailed Metadata Grid -->
-                            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap:14px;">
-                                <div style="padding:10px 14px; background:var(--md-sys-color-surface-container-low); border-radius:10px; border:1px solid var(--md-sys-color-outline-variant);">
-                                    <span style="display:block; font-size:11px; color:var(--text-muted); font-weight:700; margin-bottom:3px;">الرقم القومي:</span>
-                                    <strong id="cust-profile-nid" style="font-family:var(--font-en); font-size:13px; color:var(--md-sys-color-primary);">-</strong>
+                            <!-- Detailed Metadata Grid (Clean 4 Core Fields) -->
+                            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:14px;">
+                                <div style="padding:12px 16px; background:var(--md-sys-color-surface-container-low); border-radius:12px; border:1px solid var(--md-sys-color-outline-variant);">
+                                    <span style="display:block; font-size:11px; color:var(--text-muted); font-weight:700; margin-bottom:4px;"><i data-lucide="id-card" style="width:13px;height:13px;vertical-align:middle;margin-left:4px;color:var(--md-sys-color-primary);"></i> الرقم القومي:</span>
+                                    <strong id="cust-profile-nid" style="font-family:var(--font-en); font-size:14px; color:var(--md-sys-color-primary);">-</strong>
                                 </div>
-                                <div style="padding:10px 14px; background:var(--md-sys-color-surface-container-low); border-radius:10px; border:1px solid var(--md-sys-color-outline-variant);">
-                                    <span style="display:block; font-size:11px; color:var(--text-muted); font-weight:700; margin-bottom:3px;">أرقام الهاتف:</span>
-                                    <strong id="cust-profile-phones" style="font-family:var(--font-en); font-size:13px;">-</strong>
+                                <div style="padding:12px 16px; background:var(--md-sys-color-surface-container-low); border-radius:12px; border:1px solid var(--md-sys-color-outline-variant);">
+                                    <span style="display:block; font-size:11px; color:var(--text-muted); font-weight:700; margin-bottom:4px;"><i data-lucide="phone" style="width:13px;height:13px;vertical-align:middle;margin-left:4px;color:#10b981;"></i> أرقام الهاتف:</span>
+                                    <strong id="cust-profile-phones" style="font-family:var(--font-en); font-size:14px;">-</strong>
                                 </div>
-                                <div style="padding:10px 14px; background:var(--md-sys-color-surface-container-low); border-radius:10px; border:1px solid var(--md-sys-color-outline-variant);">
-                                    <span style="display:block; font-size:11px; color:var(--text-muted); font-weight:700; margin-bottom:3px;">العنوان والموقع:</span>
+                                <div style="padding:12px 16px; background:var(--md-sys-color-surface-container-low); border-radius:12px; border:1px solid var(--md-sys-color-outline-variant);">
+                                    <span style="display:block; font-size:11px; color:var(--text-muted); font-weight:700; margin-bottom:4px;"><i data-lucide="building" style="width:13px;height:13px;vertical-align:middle;margin-left:4px;color:#f59e0b;"></i> الإدارة التموينية:</span>
+                                    <strong id="cust-profile-gov-field" style="font-size:13px; color:var(--md-sys-color-on-surface);">-</strong>
+                                </div>
+                                <div style="padding:12px 16px; background:var(--md-sys-color-surface-container-low); border-radius:12px; border:1px solid var(--md-sys-color-outline-variant);">
+                                    <span style="display:block; font-size:11px; color:var(--text-muted); font-weight:700; margin-bottom:4px;"><i data-lucide="map-pin" style="width:13px;height:13px;vertical-align:middle;margin-left:4px;color:#ef4444;"></i> العنوان والموقع:</span>
                                     <strong id="cust-profile-address" style="font-size:12px;">-</strong>
-                                </div>
-                                <div style="padding:10px 14px; background:var(--md-sys-color-surface-container-low); border-radius:10px; border:1px solid var(--md-sys-color-outline-variant);">
-                                    <span style="display:block; font-size:11px; color:var(--text-muted); font-weight:700; margin-bottom:3px;">البنك والحساب:</span>
-                                    <strong id="cust-profile-bank" style="font-size:12px;">-</strong>
-                                </div>
-                                <div style="padding:10px 14px; background:var(--md-sys-color-surface-container-low); border-radius:10px; border:1px solid var(--md-sys-color-outline-variant);">
-                                    <span style="display:block; font-size:11px; color:var(--text-muted); font-weight:700; margin-bottom:3px;">السجل التجاري والبطاقة الضريبية:</span>
-                                    <strong id="cust-profile-tax" style="font-size:12px;">-</strong>
-                                </div>
-                                <div style="padding:10px 14px; background:var(--md-sys-color-surface-container-low); border-radius:10px; border:1px solid var(--md-sys-color-outline-variant);">
-                                    <span style="display:block; font-size:11px; color:var(--text-muted); font-weight:700; margin-bottom:3px;">بوابات الصرف (Gates):</span>
-                                    <strong id="cust-profile-gate" style="font-size:12px;">-</strong>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- KPI Summary Row for this customer -->
-                        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap:14px; margin-bottom:24px;">
-                            <div class="stat-card" style="border-right: 3px solid var(--md-sys-color-primary);">
-                                <div class="stat-icon primary"><i data-lucide="boxes"></i></div>
-                                <div class="stat-details">
-                                    <span class="stat-label">الماكينات المسجلة</span>
-                                    <h3 id="cust-kpi-devices" style="font-family:var(--font-en); color:var(--md-sys-color-primary);">0</h3>
+                        <!-- Top KPI Summary Cards Row (Design System Compliant) -->
+                        <div class="warehouse-kpi-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap:16px; margin-bottom:24px;">
+                            <!-- POS Devices -->
+                            <div class="wh-stat-card wh-card-total" style="background: linear-gradient(135deg, rgba(56,189,248,0.12), rgba(14,165,233,0.05)); border: 1px solid rgba(56,189,248,0.3); border-radius: 16px; padding: 18px; position: relative; overflow: hidden; box-shadow: var(--md-elevation-1);">
+                                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                                    <div>
+                                        <span style="font-size:11px; font-weight:700; color:var(--md-sys-color-on-surface-variant); display:block; margin-bottom:4px;">الماكينات المسجلة</span>
+                                        <h2 id="cust-kpi-devices" style="font-size:28px; font-weight:800; font-family:var(--font-en); color:var(--md-sys-color-primary); margin:0;">0</h2>
+                                    </div>
+                                    <div style="width:40px; height:40px; border-radius:12px; background:rgba(56,189,248,0.2); display:flex; align-items:center; justify-content:center; color:var(--md-sys-color-primary);">
+                                        <i data-lucide="boxes" style="width:22px; height:22px;"></i>
+                                    </div>
+                                </div>
+                                <div style="margin-top:10px; font-size:11px;">
+                                    <span class="badge inmerchant" style="font-size:10px;">عهدة المخبز الميدانية</span>
                                 </div>
                             </div>
-                            <div class="stat-card" style="border-right: 3px solid #10b981;">
-                                <div class="stat-icon success"><i data-lucide="signal"></i></div>
-                                <div class="stat-details">
-                                    <span class="stat-label">الشرائح المسجلة</span>
-                                    <h3 id="cust-kpi-sims" style="font-family:var(--font-en); color:#10b981;">0</h3>
+
+                            <!-- SIM Cards -->
+                            <div class="wh-stat-card wh-card-ready" style="background: linear-gradient(135deg, rgba(16,185,129,0.12), rgba(5,150,105,0.05)); border: 1px solid rgba(16,185,129,0.3); border-radius: 16px; padding: 18px; position: relative; overflow: hidden; box-shadow: var(--md-elevation-1);">
+                                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                                    <div>
+                                        <span style="font-size:11px; font-weight:700; color:var(--md-sys-color-on-surface-variant); display:block; margin-bottom:4px;">الشرائح المسجلة (SIMs)</span>
+                                        <h2 id="cust-kpi-sims" style="font-size:28px; font-weight:800; font-family:var(--font-en); color:#10b981; margin:0;">0</h2>
+                                    </div>
+                                    <div style="width:40px; height:40px; border-radius:12px; background:rgba(16,185,129,0.2); display:flex; align-items:center; justify-content:center; color:#10b981;">
+                                        <i data-lucide="signal" style="width:22px; height:22px;"></i>
+                                    </div>
+                                </div>
+                                <div style="margin-top:10px; font-size:11px;">
+                                    <span class="badge inmerchant" style="font-size:10px;">كافة الخطوط المربوطة</span>
                                 </div>
                             </div>
-                            <div class="stat-card" style="border-right: 3px solid #a855f7;">
-                                <div class="stat-icon info"><i data-lucide="wrench"></i></div>
-                                <div class="stat-details">
-                                    <span class="stat-label">إجمالي البلاغات والصيانات</span>
-                                    <h3 id="cust-kpi-tickets" style="font-family:var(--font-en); color:#a855f7;">0</h3>
+
+                            <!-- Tickets Count -->
+                            <div class="wh-stat-card wh-card-newsale" style="background: linear-gradient(135deg, rgba(6,182,212,0.15), rgba(14,165,233,0.08)); border: 1px solid rgba(6,182,212,0.4); border-radius: 16px; padding: 18px; position: relative; overflow: hidden; box-shadow: var(--md-elevation-1);">
+                                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                                    <div>
+                                        <span style="font-size:11px; font-weight:700; color:#06b6d4; display:block; margin-bottom:4px;">إجمالي البلاغات والصيانات</span>
+                                        <h2 id="cust-kpi-tickets" style="font-size:28px; font-weight:900; font-family:var(--font-en); color:#06b6d4; margin:0;">0</h2>
+                                    </div>
+                                    <div style="width:40px; height:40px; border-radius:12px; background:rgba(6,182,212,0.25); display:flex; align-items:center; justify-content:center; color:#06b6d4;">
+                                        <i data-lucide="wrench" style="width:22px; height:22px;"></i>
+                                    </div>
+                                </div>
+                                <div style="margin-top:10px; font-size:11px;">
+                                    <span class="badge new-sale" style="font-size:10px;">سجل حركات الفرع</span>
                                 </div>
                             </div>
-                            <div class="stat-card" style="border-right: 3px solid #f59e0b;">
-                                <div class="stat-icon warning"><i data-lucide="layers"></i></div>
-                                <div class="stat-details">
-                                    <span class="stat-label">قطع الغيار المستبدلة</span>
-                                    <h3 id="cust-kpi-sp" style="font-family:var(--font-en); color:#f59e0b;">0</h3>
+
+                            <!-- Spare Parts Count -->
+                            <div class="wh-stat-card wh-card-branchuse" style="background: linear-gradient(135deg, rgba(245,158,11,0.12), rgba(217,119,6,0.05)); border: 1px solid rgba(245,158,11,0.3); border-radius: 16px; padding: 18px; position: relative; overflow: hidden; box-shadow: var(--md-elevation-1);">
+                                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                                    <div>
+                                        <span style="font-size:11px; font-weight:700; color:var(--md-sys-color-on-surface-variant); display:block; margin-bottom:4px;">قطع الغيار المستبدلة</span>
+                                        <h2 id="cust-kpi-sp" style="font-size:28px; font-weight:800; font-family:var(--font-en); color:#f59e0b; margin:0;">0</h2>
+                                    </div>
+                                    <div style="width:40px; height:40px; border-radius:12px; background:rgba(245,158,11,0.2); display:flex; align-items:center; justify-content:center; color:#f59e0b;">
+                                        <i data-lucide="layers" style="width:22px; height:22px;"></i>
+                                    </div>
+                                </div>
+                                <div style="margin-top:10px; font-size:11px;">
+                                    <span class="badge branch-use" style="font-size:10px;">منصرف من المخزن</span>
                                 </div>
                             </div>
-                            <div class="stat-card" style="border-right: 3px solid #ef4444;">
-                                <div class="stat-icon critical"><i data-lucide="calculator"></i></div>
-                                <div class="stat-details">
-                                    <span class="stat-label">مديونية الأقساط</span>
-                                    <h3 id="cust-kpi-debt" style="font-family:var(--font-en); color:#ef4444;">0 جم</h3>
+
+                            <!-- Debt -->
+                            <div class="wh-stat-card wh-card-faulty" style="background: linear-gradient(135deg, rgba(239,68,68,0.12), rgba(220,38,38,0.05)); border: 1px solid rgba(239,68,68,0.3); border-radius: 16px; padding: 18px; position: relative; overflow: hidden; box-shadow: var(--md-elevation-1);">
+                                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                                    <div>
+                                        <span style="font-size:11px; font-weight:700; color:var(--md-sys-color-on-surface-variant); display:block; margin-bottom:4px;">مديونية الأقساط</span>
+                                        <h2 id="cust-kpi-debt" style="font-size:26px; font-weight:800; font-family:var(--font-en); color:#ef4444; margin:0;">0 جم</h2>
+                                    </div>
+                                    <div style="width:40px; height:40px; border-radius:12px; background:rgba(239,68,68,0.2); display:flex; align-items:center; justify-content:center; color:#ef4444;">
+                                        <i data-lucide="calculator" style="width:22px; height:22px;"></i>
+                                    </div>
+                                </div>
+                                <div style="margin-top:10px; font-size:11px;">
+                                    <span class="badge faulty" style="font-size:10px;">عقود مسجلة</span>
                                 </div>
                             </div>
                         </div>
@@ -1827,7 +1863,7 @@
                                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid var(--md-sys-color-outline-variant); padding-bottom:10px;">
                                         <h3 style="font-size:15px; font-weight:800; margin:0; display:flex; align-items:center; gap:8px;">
                                             <i data-lucide="signal" style="color:#10b981; width:18px; height:18px;"></i>
-                                            شرائح الاتصال المسجلة (SIMs)
+                                            كافة شرائح الاتصال المربوطة (SIMs)
                                         </h3>
                                         <span class="badge" style="background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); font-weight:700;" id="cust-sims-count-badge">0 شريحة</span>
                                     </div>
@@ -2889,19 +2925,19 @@
                     </div>
                 </div>
 
-                <!-- SUB-TAB 2: Replacements Pane -->
+                <!-- SUB-TAB 2: Replacements Pane (from temp_transfer) -->
                 <div class="dev-subtab-pane" id="dev-pane-replacements" style="display:none;">
                     <div class="table-responsive" style="max-height:420px; overflow-y:auto;">
                         <table class="data-table" style="width:100%;">
                             <thead>
                                 <tr>
                                     <th style="width:40px;">#</th>
-                                    <th>التاريخ</th>
-                                    <th>كود المخبز</th>
-                                    <th>الفني</th>
-                                    <th>نوع الاستبدال</th>
-                                    <th>الشكوى</th>
-                                    <th>الإجراء المتخذ</th>
+                                    <th>تاريخ الاستبدال</th>
+                                    <th>الماكينة القديمة (Old POS)</th>
+                                    <th>الماكينة الجديدة (New POS)</th>
+                                    <th>الموديل والنوع</th>
+                                    <th>الفني المسؤول</th>
+                                    <th>الملاحظات وسبب التغيير</th>
                                 </tr>
                             </thead>
                             <tbody id="dev-table-replacements-body">
@@ -2978,6 +3014,6 @@
     </div>
 
     <!-- Main Client Application Script -->
-    <script src="app.js?v=2.3"></script>
+    <script src="app.js?v=2.4"></script>
 </body>
 </html>

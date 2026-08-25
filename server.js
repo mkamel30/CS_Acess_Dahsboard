@@ -2347,31 +2347,45 @@ app.get('/api/customers/profile/:code', async (req, res) => {
         });
 
         // 3. Resolve all SIM cards
-        const simCards = [];
-        if (asset.Cell_Serial && asset.Cell_Serial !== '-') {
-            simCards.push({
-                serial: asset.Cell_Serial,
-                slot: 'الشريحة 1',
-                carrier: asset.Cell_type || 'غير محدد',
-                phone: asset.telephone_1 || '-'
-            });
+        // 3. Resolve all SIM cards (All possible SIMs linked to customer)
+        const simMap = new Map();
+        
+        function addSim(ser, slot, carrier, phone) {
+            if (!ser || ser === '-' || ser === 'null' || ser === 'undefined') return;
+            const cleanSer = String(ser).trim();
+            if (!cleanSer || cleanSer.length < 5) return;
+            if (!simMap.has(cleanSer)) {
+                simMap.set(cleanSer, {
+                    serial: cleanSer,
+                    slot: slot || `شريحة #${simMap.size + 1}`,
+                    carrier: carrier || 'غير محدد',
+                    phone: phone && phone !== '-' && phone !== 'null' ? phone : '-'
+                });
+            }
         }
-        if (asset['cell_2-ser'] && asset['cell_2-ser'] !== '-') {
-            simCards.push({
-                serial: asset['cell_2-ser'],
-                slot: 'الشريحة 2',
-                carrier: asset['Cell_type-2'] || 'غير محدد',
-                phone: asset.telephone_2 || '-'
+
+        if (asset.Cell_Serial) addSim(asset.Cell_Serial, 'الشريحة الرئيسية (SIM 1)', asset.Cell_type, asset.telephone_1);
+        if (asset['cell_2-ser']) addSim(asset['cell_2-ser'], 'الشريحة الثانية (SIM 2)', asset['Cell_type-2'], asset.telephone_2);
+        if (asset.Cell_Serial3) addSim(asset.Cell_Serial3, 'الشريحة الثالثة (SIM 3)', asset.Cell_type3, asset.telephone_3);
+        if (asset.Cell_Serial4) addSim(asset.Cell_Serial4, 'الشريحة الرابعة (SIM 4)', asset.Cell_type4, null);
+        if (asset.Cell_Serial5) addSim(asset.Cell_Serial5, 'الشريحة الخامسة (SIM 5)', asset.Cell_type5, null);
+
+        // Also look up any additional SIMs from sim_cards and merchant_assets or store_sim_raw
+        try {
+            const extraSims = await allQuery(`
+                SELECT s.serial, s.carrier, s.status, m.merchant_code
+                FROM sim_cards s
+                LEFT JOIN merchant_assets ma ON ma.sim_card_id = s.id
+                LEFT JOIN merchants m ON m.merchant_code = ma.merchant_code
+                WHERE m.merchant_code = ? OR m.merchant_code = ?
+            `, [merchantCode, cleanCode]);
+
+            extraSims.forEach((es, idx) => {
+                addSim(es.serial, `شريحة مربوطة (#${simMap.size + 1})`, es.carrier, null);
             });
-        }
-        if (asset.Cell_Serial3 && asset.Cell_Serial3 !== '-') {
-            simCards.push({
-                serial: asset.Cell_Serial3,
-                slot: 'الشريحة 3',
-                carrier: asset.Cell_type3 || 'غير محدد',
-                phone: '-'
-            });
-        }
+        } catch (e) {}
+
+        const simCards = Array.from(simMap.values());
 
         // 4. Installments info
         const allPosSerials = Array.from(posSet.keys());
@@ -2428,14 +2442,7 @@ app.get('/api/customers/profile/:code', async (req, res) => {
                 phone_2: asset.telephone_2 || '-',
                 address: asset.Address || '-',
                 city: asset.City || '-',
-                contact_person: asset.Contact_person || '-',
-                commercial_register: asset.Commercial_register || '-',
-                tax_card: asset.Tax_Card || '-',
-                bank_name: asset.banknm || '-',
-                bank_account: asset.bankacc || '-',
-                gate_no: asset.GateNo || '-',
-                has_gates: asset.hasgates || '-',
-                notes: asset.notes || asset.Comments || '-'
+                contact_person: asset.Contact_person || '-'
             },
             devices: Array.from(posSet.values()),
             sim_cards: simCards,
@@ -2459,7 +2466,7 @@ app.get('/api/customers/profile/:code', async (req, res) => {
     }
 });
 
-// 3. Device Deep-Dive 360 (4 Tabs: Replacements, Maintenance In/Out, Spare Parts, HQ Central Cycles)
+// 3. Device Deep-Dive 360 (4 Tabs: Replacements from temp_transfer, Maintenance In/Out, Spare Parts, HQ Central Cycles)
 app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
     try {
         const { serial } = req.params;
@@ -2491,19 +2498,45 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
             condition: rawAsset?.Condition || 'سليمة بالميدان'
         };
 
-        // 2. TAB 1: Replacements & Swaps History
-        const replacements = await allQuery(`
-            SELECT t.ID, t.IssueDate as date, t.GrocerName as merchant_code,
-                   t.Procedure as technician, t.ActionType as action_type,
-                   t.NoteG as complaint, t.NoteD as action_taken,
-                   t.Fees as fees, t.Paid as paid
-            FROM transactions_raw t
-            WHERE t.POSN = ? AND (
-                t.ActionType LIKE '%استبدال%' OR t.ActionType LIKE '%تغيير%' OR
-                t.NoteD LIKE '%استبدال%' OR t.NoteD LIKE '%تغيير ماكينة%' OR t.NoteD LIKE '%صرف ماكينة%'
-            )
-            ORDER BY t.ID DESC
-        `, [s]);
+        // 2. TAB 1: Replacements & Swaps History strictly from temp_transfer_raw (and temp_transfer)
+        const transferRows = await allQuery(`
+            SELECT t.rowid as id,
+                   COALESCE(t.Transfer_Date, '-') as transfer_date,
+                   COALESCE(t.bkCode, '-') as merchant_code,
+                   COALESCE(t.POSCode, '-') as merchant_name,
+                   COALESCE(t.OldPOS, '-') as old_serial,
+                   COALESCE(t.NewPOS, '-') as new_serial,
+                   COALESCE(t.OldType, '-') as old_type,
+                   COALESCE(t.NewType, '-') as new_type,
+                   COALESCE(t.procedure, 'فني الصيانة') as technician,
+                   COALESCE(t.Notes, '-') as notes
+            FROM temp_transfer_raw t
+            WHERE t.OldPOS = ? OR t.NewPOS = ? OR t.OldPOS LIKE ? OR t.NewPOS LIKE ?
+            ORDER BY t.rowid DESC
+        `, [s, s, `%${s}%`, `%${s}%`]);
+
+        const replacements = transferRows.map(r => {
+            let role = 'استبدال ماكينة';
+            if (String(r.old_serial).toUpperCase() === s.toUpperCase()) {
+                role = 'ماكينة قديمة مستبدلة (تم سحبها)';
+            } else if (String(r.new_serial).toUpperCase() === s.toUpperCase()) {
+                role = 'ماكينة بديلة منصرفة (تم تسليمها)';
+            }
+
+            return {
+                id: r.id,
+                date: r.transfer_date,
+                merchant_code: r.merchant_code,
+                merchant_name: r.merchant_name,
+                old_serial: r.old_serial,
+                new_serial: r.new_serial,
+                old_type: r.old_type,
+                new_type: r.new_type,
+                role: role,
+                technician: r.technician,
+                notes: r.notes
+            };
+        });
 
         // 3. TAB 2: Branch Maintenance Tickets (with Entry Date/Time & Exit Date/Time)
         const maintenanceTickets = await allQuery(`

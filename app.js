@@ -5661,14 +5661,13 @@ function renderCustomerProfileView(data) {
     document.getElementById('cust-profile-gov-badge').textContent = customer.government || 'الإدارة غير محددة';
     document.getElementById('cust-profile-contact-person').textContent = customer.contact_person ? `المسؤول: ${customer.contact_person}` : `كود المخبز: ${customer.merchant_code}`;
 
-    // 2. Metadata Grid
+    // 2. Metadata Grid (Clean 4 Core Fields)
     document.getElementById('cust-profile-nid').textContent = customer.national_id || '-';
     const phones = [customer.phone_1, customer.phone_2].filter(p => p && p !== '-' && p !== 'null').join(' / ');
     document.getElementById('cust-profile-phones').textContent = phones || '-';
+    const govEl = document.getElementById('cust-profile-gov-field');
+    if (govEl) govEl.textContent = customer.government || '-';
     document.getElementById('cust-profile-address').textContent = customer.address || '-';
-    document.getElementById('cust-profile-bank').textContent = customer.bank_name !== '-' ? `${customer.bank_name} (${customer.bank_account})` : '-';
-    document.getElementById('cust-profile-tax').textContent = customer.tax_card !== '-' ? `سجل: ${customer.commercial_register} | بطاقة: ${customer.tax_card}` : '-';
-    document.getElementById('cust-profile-gate').textContent = customer.gate_no !== '-' ? `بوابة #${customer.gate_no}` : (customer.has_gates === '1' ? 'يوجد بوابات' : '-');
 
     // 3. Stats KPIs
     document.getElementById('cust-kpi-devices').textContent = stats.total_devices;
@@ -5685,45 +5684,59 @@ function renderCustomerProfileView(data) {
         devList.innerHTML = `<div style="text-align:center; padding:25px; color:var(--text-muted); font-size:12px;">لا توجد ماكينات مسجلة حالياً على هذا العميل</div>`;
     } else {
         devList.innerHTML = devices.map(d => `
-            <div style="background:var(--md-sys-color-surface-container-low); border:1px solid var(--md-sys-color-outline-variant); border-radius:12px; padding:14px 16px; transition:transform 0.15s ease, box-shadow 0.15s ease;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div style="background:var(--md-sys-color-surface-container-low); border:1px solid var(--md-sys-color-outline-variant); border-radius:14px; padding:16px; transition:transform 0.15s ease, box-shadow 0.15s ease; box-shadow:var(--md-elevation-1);" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='none'">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                     <span class="badge inmerchant" style="font-weight:700; font-size:11px;">${d.slot}</span>
                     <span class="badge" style="background:rgba(56,189,248,0.15); color:var(--md-sys-color-primary); font-size:11px; font-weight:700;">${d.condition}</span>
                 </div>
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                     <div>
-                        <strong style="font-size:17px; font-family:var(--font-en); color:var(--md-sys-color-primary); letter-spacing:0.5px;">${d.serial}</strong>
+                        <strong style="font-size:18px; font-family:var(--font-en); color:var(--md-sys-color-primary); letter-spacing:0.5px;">${d.serial}</strong>
                         <span style="display:block; font-size:11px; color:var(--text-muted); margin-top:2px;">الموديل: ${d.manufacturer} ${d.model} ${d.pinpad !== '-' ? `| Pinpad: ${d.pinpad}` : ''}</span>
                     </div>
                 </div>
-                <button type="button" class="btn btn-primary" onclick="openDevice360Modal('${d.serial}')" style="width:100%; padding:8px 12px; font-size:12px; display:flex; align-items:center; justify-content:center; gap:8px; margin-top:8px; border-radius:8px; box-shadow:0 2px 8px rgba(37,99,235,0.25);">
-                    <i data-lucide="search" style="width:14px; height:14px;"></i>
+                <button type="button" class="btn btn-primary" onclick="openDevice360Modal('${d.serial}')" style="width:100%; padding:9px 12px; font-size:12px; display:flex; align-items:center; justify-content:center; gap:8px; margin-top:8px; border-radius:10px; box-shadow:0 2px 10px rgba(37,99,235,0.25);">
+                    <i data-lucide="search" style="width:15px; height:15px;"></i>
                     <span>فحص سجل وتاريخ الماكينة الكامل (360°)</span>
                 </button>
             </div>
         `).join('');
     }
 
-    // 5. SIM Cards List
+    // 5. SIM Cards List (All SIMs linked)
     const simsList = document.getElementById('cust-sims-list');
-    document.getElementById('cust-sims-count-badge').textContent = `${sim_cards.length} شريحة`;
+    const simsCountBadge = document.getElementById('cust-sims-count-badge');
+    if (simsCountBadge) simsCountBadge.textContent = `${sim_cards.length} شريحة`;
 
     if (sim_cards.length === 0) {
         simsList.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size:12px;">لا توجد شرائح مسجلة</div>`;
     } else {
-        simsList.innerHTML = sim_cards.map(s => `
-            <div style="background:var(--md-sys-color-surface-container-low); border:1px solid var(--md-sys-color-outline-variant); border-radius:10px; padding:10px 14px; display:flex; justify-content:space-between; align-items:center;">
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <div style="width:28px; height:28px; border-radius:8px; background:rgba(16,185,129,0.15); color:#10b981; display:flex; align-items:center; justify-content:center; font-size:11px;">
-                        <i data-lucide="signal" style="width:15px; height:15px;"></i>
-                    </div>
-                    <div>
-                        <strong style="font-size:13px; font-family:var(--font-en); color:var(--md-sys-color-on-surface);">${s.serial}</strong>
-                        <span style="display:block; font-size:11px; color:var(--text-muted);">${s.slot} • ${s.carrier} ${s.phone !== '-' ? `• هاتف: ${s.phone}` : ''}</span>
+        simsList.innerHTML = sim_cards.map(s => {
+            let carrierColor = '#10b981';
+            const cLower = String(s.carrier || '').toLowerCase();
+            if (cLower.includes('orange')) carrierColor = '#f97316';
+            else if (cLower.includes('vodafone')) carrierColor = '#ef4444';
+            else if (cLower.includes('we') || cLower.includes('te')) carrierColor = '#a855f7';
+            else if (cLower.includes('etisalat')) carrierColor = '#84cc16';
+
+            return `
+                <div style="background:var(--md-sys-color-surface-container-low); border:1px solid var(--md-sys-color-outline-variant); border-radius:12px; padding:12px 16px; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <div style="width:34px; height:34px; border-radius:10px; background:rgba(16,185,129,0.15); color:${carrierColor}; display:flex; align-items:center; justify-content:center;">
+                            <i data-lucide="signal" style="width:18px; height:18px;"></i>
+                        </div>
+                        <div>
+                            <strong style="font-size:13px; font-family:var(--font-en); color:var(--md-sys-color-on-surface); letter-spacing:0.3px;">${s.serial}</strong>
+                            <span style="display:block; font-size:11px; color:var(--text-muted); margin-top:2px;">
+                                <span class="badge inmerchant" style="font-size:10px; padding:2px 8px; margin-left:4px;">${s.slot}</span>
+                                <strong style="color:${carrierColor};">${s.carrier}</strong>
+                                ${s.phone !== '-' ? `• هاتف: <span style="font-family:var(--font-en); font-weight:700;">${s.phone}</span>` : ''}
+                            </span>
+                        </div>
                     </div>
                 </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
     }
 
     // 6. Installments List
@@ -5734,14 +5747,14 @@ function renderCustomerProfileView(data) {
         instList.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size:12px;">لا توجد عقود أقساط مسجلة على هذه الماكينات</div>`;
     } else {
         instList.innerHTML = installments.contracts.map(c => `
-            <div style="background:var(--md-sys-color-surface-container-low); border:1px solid var(--md-sys-color-outline-variant); border-radius:10px; padding:12px 14px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <div style="background:var(--md-sys-color-surface-container-low); border:1px solid var(--md-sys-color-outline-variant); border-radius:12px; padding:14px 16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                     <strong style="font-size:13px; font-family:var(--font-en); color:#f59e0b;">عقد ماكينة #${c.pos}</strong>
-                    <span class="badge inmerchant" style="font-family:var(--font-en); font-weight:800;">${Number(c.finalunitprice || c.unitprice || 0).toLocaleString('ar-EG')} جم</span>
+                    <span class="badge inmerchant" style="font-family:var(--font-en); font-weight:800; font-size:12px;">${Number(c.finalunitprice || c.unitprice || 0).toLocaleString('ar-EG')} جم</span>
                 </div>
                 <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-muted);">
-                    <span>عدد الأقساط: ${c.installments || 0} شهر</span>
-                    <span>القسط الشهري: ${Number(c.monthlyinstallmentprice || 0).toLocaleString('ar-EG')} جم</span>
+                    <span>عدد الأقساط: <strong>${c.installments || 0} شهر</strong></span>
+                    <span>القسط الشهري: <strong style="color:var(--md-sys-color-primary); font-family:var(--font-en);">${Number(c.monthlyinstallmentprice || 0).toLocaleString('ar-EG')} جم</strong></span>
                 </div>
             </div>
         `).join('');
@@ -5888,20 +5901,26 @@ function renderDeviceDeepdiveContent(data) {
         `).join('');
     }
 
-    // TAB 2: Replacements & Swaps
+    // TAB 2: Replacements & Swaps (from temp_transfer)
     const repBody = document.getElementById('dev-table-replacements-body');
     if (replacements.length === 0) {
-        repBody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:35px; color:var(--text-muted);">لا توجد حركات استبدال مسجلة لهذه الماكينة</td></tr>`;
+        repBody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:35px; color:var(--text-muted);">لا توجد حركات استبدال مسجلة لهذه الماكينة في جدول الاستبدالات</td></tr>`;
     } else {
         repBody.innerHTML = replacements.map((r, idx) => `
             <tr>
                 <td style="font-family:var(--font-en); font-weight:700; color:var(--text-muted);">${idx + 1}</td>
                 <td>${formatDateTimeCell(r.date)}</td>
-                <td><span class="badge inmerchant" style="font-family:var(--font-en); font-weight:700;">#${r.merchant_code}</span></td>
-                <td><strong style="font-size:12px;">${r.technician || 'فني الصيانة'}</strong></td>
-                <td><span class="badge warning" style="font-weight:700;">${r.action_type || 'استبدال ماكينة'}</span></td>
-                <td style="font-size:12px;">${r.complaint || '-'}</td>
-                <td style="font-size:12px; color:var(--md-sys-color-on-surface);">${r.action_taken || '-'}</td>
+                <td>
+                    <strong style="font-family:var(--font-en); color:#ef4444; font-size:13px;">${r.old_serial}</strong>
+                    ${r.old_type && r.old_type !== '-' ? `<span style="display:block; font-size:10px; color:var(--text-muted);">${r.old_type}</span>` : ''}
+                </td>
+                <td>
+                    <strong style="font-family:var(--font-en); color:#10b981; font-size:13px;">${r.new_serial}</strong>
+                    ${r.new_type && r.new_type !== '-' ? `<span style="display:block; font-size:10px; color:var(--text-muted);">${r.new_type}</span>` : ''}
+                </td>
+                <td><span class="badge inmerchant" style="font-size:11px; font-weight:700;">${r.new_type || r.old_type || 'PAX - S90'}</span></td>
+                <td><strong style="font-size:12px; color:var(--md-sys-color-primary);">${r.technician || 'فني الصيانة'}</strong></td>
+                <td style="font-size:11px; color:var(--md-sys-color-on-surface); max-width:220px; word-break:break-word;">${r.notes || '-'}</td>
             </tr>
         `).join('');
     }
