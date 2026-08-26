@@ -137,13 +137,24 @@ async function initDatabase() {
     }
 }
 
-// CLI usage: node updater.js check | update | version | init-db
+// CLI usage: node updater.js check | update | version | init-db | update-silent
 if (require.main === module) {
     const action = process.argv[2] || 'version';
     if (action === 'check') {
         checkForUpdates().then(r => console.log(JSON.stringify(r, null, 2)));
     } else if (action === 'update') {
         performUpdate().then(r => console.log(JSON.stringify(r, null, 2)));
+    } else if (action === 'update-silent') {
+        (async () => {
+            try {
+                const chk = await checkForUpdates();
+                if (chk && chk.has_update) {
+                    console.log('[*] New GitHub update detected. Applying update...');
+                    await performUpdate();
+                }
+            } catch (e) {}
+            process.exit(0);
+        })();
     } else if (action === 'init-db') {
         initDatabase().then(() => process.exit(0));
     } else {
