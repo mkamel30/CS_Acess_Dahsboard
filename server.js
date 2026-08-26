@@ -4380,7 +4380,7 @@ app.post('/api/sync/full-seed', express.json({ limit: '100mb' }), async (req, re
 
                 const placeholders = cols.map(() => '?').join(', ');
                 const quotedCols = cols.map(c => `"${c}"`).join(', ');
-                const insertSql = `INSERT INTO "${tbl}" (${quotedCols}) VALUES (${placeholders});`;
+                const insertSql = `INSERT OR REPLACE INTO "${tbl}" (${quotedCols}) VALUES (${placeholders});`;
 
                 await runQuery('BEGIN TRANSACTION;');
                 try {
