@@ -1,4 +1,5 @@
 @echo off
+set "PATH=%SystemRoot%\System32;%SystemRoot%\System32\WindowsPowerShell\v1.0;%ProgramFiles%\nodejs;%ProgramFiles%\Git\cmd;%PATH%"
 title SmartCS Dashboard - Central Operations System
 color 0b
 
