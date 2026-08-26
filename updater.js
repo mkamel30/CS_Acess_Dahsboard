@@ -120,13 +120,32 @@ async function performUpdate() {
     }
 }
 
-// CLI usage: node updater.js check | update | version
+async function initDatabase() {
+    try {
+        const sqlite3 = require('sqlite3');
+        const { initSyncDatabase } = require('./sync_engine');
+        const dbPath = path.join(__dirname, 'branch_database.db');
+        const db = new sqlite3.Database(dbPath);
+        db.run('PRAGMA journal_mode = WAL;');
+        await initSyncDatabase(db);
+        console.log('  [+] App Database Schema Created and Ready!');
+        db.close();
+        return { success: true };
+    } catch (err) {
+        console.error('  [!] Database init error:', err.message);
+        return { success: false, error: err.message };
+    }
+}
+
+// CLI usage: node updater.js check | update | version | init-db
 if (require.main === module) {
     const action = process.argv[2] || 'version';
     if (action === 'check') {
         checkForUpdates().then(r => console.log(JSON.stringify(r, null, 2)));
     } else if (action === 'update') {
         performUpdate().then(r => console.log(JSON.stringify(r, null, 2)));
+    } else if (action === 'init-db') {
+        initDatabase().then(() => process.exit(0));
     } else {
         getVersionInfo().then(r => console.log(JSON.stringify(r, null, 2)));
     }
@@ -135,5 +154,6 @@ if (require.main === module) {
 module.exports = {
     getVersionInfo,
     checkForUpdates,
-    performUpdate
+    performUpdate,
+    initDatabase
 };

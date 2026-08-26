@@ -110,7 +110,7 @@ if %errorlevel% equ 0 (
 echo.
 echo [*] Configuring application settings and database path...
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$cfgPath = Join-Path '%TARGET_DIR%' 'config.json'; $dbPath = '%FINAL_DB_PATH%'; $hasAccess = Test-Path $dbPath; $cfg = @{ port = 8970; syncSecret = 'smartcs-cloud-secret-2026'; accessDbPath = $dbPath; vpsSyncUrl = 'https://smartcs.m-kamel.workers.dev' }; $cfg | ConvertTo-Json -Depth 4 | Set-Content $cfgPath -Encoding UTF8; if ($hasAccess) { Write-Host '  [+] MS Access Database file detected and linked successfully!' -ForegroundColor Green } else { Write-Host '  [!] Notice: Database file not reachable at this moment. Cloud VPS mode will act as primary.' -ForegroundColor Yellow }"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$cfgPath = Join-Path '%TARGET_DIR%' 'config.json'; $dbPath = '%FINAL_DB_PATH%'; $hasAccess = Test-Path $dbPath; $cfg = [ordered]@{ port = 8970; syncSecret = 'smartcs-cloud-secret-2026'; accessDbPath = $dbPath; vpsSyncUrl = 'https://smartcs.m-kamel.workers.dev' }; $cfg | ConvertTo-Json -Depth 4 | Out-File -FilePath $cfgPath -Encoding utf8; if ($hasAccess) { Write-Host '  [+] MS Access Database file detected and linked successfully!' -ForegroundColor Green } else { Write-Host '  [!] Notice: Database file not reachable now. Cloud VPS mode enabled.' -ForegroundColor Yellow }"
 
 :: -------------------------------------------------------------------------
 :: 7. INSTALL NPM DEPENDENCIES
@@ -124,43 +124,31 @@ call npm install --omit=dev --no-audit --no-fund
 :: -------------------------------------------------------------------------
 echo.
 echo [*] Initializing internal high-speed database schema (branch_database.db)...
-node -e "
-const sqlite3 = require('sqlite3');
-const { initSyncDatabase } = require('./sync_engine');
-const db = new sqlite3.Database('branch_database.db', (err) => {
-    if (err) {
-        console.error('  [!] Error opening SQLite DB:', err.message);
-        process.exit(1);
-    }
-    db.run('PRAGMA journal_mode = WAL;');
-    initSyncDatabase(db).then(() => {
-        console.log('  [+] App Database (SQLite WAL) Schema Created and Ready!');
-        db.close();
-    }).catch(e => {
-        console.error('  [!] Schema init error:', e.message);
-        db.close();
-    });
-});
-"
+node updater.js init-db
 
 :: -------------------------------------------------------------------------
 :: 9. CREATE DESKTOP SHORTCUT & WINDOWS STARTUP AUTO-BOOT
 :: -------------------------------------------------------------------------
 echo.
 echo [*] Creating Desktop Shortcut (SmartCS Dashboard)...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $desk = [Environment]::GetFolderPath('Desktop'); $s = $ws.CreateShortcut([System.IO.Path]::Combine($desk, 'SmartCS Dashboard.lnk')); $s.TargetPath = '%TARGET_DIR%\run_smartcs.bat'; $s.WorkingDirectory = '%TARGET_DIR%'; $s.WindowStyle = 1; $s.Description = 'SmartCS Customer Support Operations Dashboard'; $s.Save()"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $desk = [Environment]::GetFolderPath('Desktop'); $s = $ws.CreateShortcut([System.IO.Path]::Combine($desk, 'SmartCS Dashboard.lnk')); $s.TargetPath = '%TARGET_DIR%\run_smartcs.bat'; $s.WorkingDirectory = '%TARGET_DIR%'; $s.WindowStyle = 1; $s.Description = 'SmartCS Customer Support Operations Dashboard'; $s.Save()"
 
 echo [*] Enabling Automatic Launch on Windows Boot (Startup)...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $startup = [Environment]::GetFolderPath('Startup'); $auto = $ws.CreateShortcut([System.IO.Path]::Combine($startup, 'SmartCS AutoStart.lnk')); $auto.TargetPath = 'wscript.exe'; $auto.Arguments = '\"%TARGET_DIR%\start_background.vbs\"'; $auto.WorkingDirectory = '%TARGET_DIR%'; $auto.WindowStyle = 7; $auto.Description = 'SmartCS Automated Background Launch on Boot'; $auto.Save()"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $startup = [Environment]::GetFolderPath('Startup'); $auto = $ws.CreateShortcut([System.IO.Path]::Combine($startup, 'SmartCS AutoStart.lnk')); $auto.TargetPath = 'wscript.exe'; $auto.Arguments = '\"%TARGET_DIR%\start_background.vbs\"'; $auto.WorkingDirectory = '%TARGET_DIR%'; $auto.WindowStyle = 7; $auto.Description = 'SmartCS Automated Background Launch on Boot'; $auto.Save()"
 
 echo [OK] Shortcuts and Auto-Boot configured successfully!
 
 echo.
 echo =======================================================================
-echo    Installation Complete! Launching SmartCS Dashboard...
+echo    🎉 Installation Completed Successfully!
 echo =======================================================================
 echo.
-timeout /t 2 >nul
+echo  [+] SmartCS Dashboard is starting in your browser...
+echo  [+] Local URL: http://localhost:8970
+echo.
 
 start "" "%TARGET_DIR%\run_smartcs.bat"
+
+echo  Press any key to exit this installer...
+pause >nul
 exit /b 0
