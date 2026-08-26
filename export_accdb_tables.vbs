@@ -113,8 +113,15 @@ Function ExportTableToJson(tableName, outputPath)
     WScript.Echo "Exported " & tableName & " (" & rowCount & " rows) -> " & outputPath
 End Function
 
+Dim scriptDir
+scriptDir = fso.GetParentFolderName(WScript.ScriptFullName)
+
 Dim exportDir
-exportDir = "h:\Programming\Br_DB\webapp\data_sync"
+exportDir = scriptDir & "\data_sync"
+If WScript.Arguments.Count > 1 Then
+    exportDir = WScript.Arguments(1)
+End If
+
 If Not fso.FolderExists(exportDir) Then
     fso.CreateFolder(exportDir)
 End If

@@ -454,7 +454,7 @@ function runAccessExporter() {
     return new Promise((resolve, reject) => {
         const cscriptPath = 'C:\\Windows\\System32\\cscript.exe';
         const activePath = getAccessFilePath();
-        const cmd = `"${cscriptPath}" //nologo "${VBS_EXPORTER_PATH}" "${activePath}"`;
+        const cmd = `"${cscriptPath}" //nologo "${VBS_EXPORTER_PATH}" "${activePath}" "${DATA_SYNC_DIR}"`;
         
         console.log(`[SYNC ENGINE] Starting Access Database Export from: ${activePath}`);
         const startTime = Date.now();
