@@ -2687,10 +2687,10 @@ async function loadSparePartsInventory() {
             finListEl.innerHTML = `
                 <div style="padding:12px 14px; border-radius:10px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.25); cursor:pointer;" onclick="filterSparePartsByStatus('PAID')">
                     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:4px;">
-                        <span style="font-size:12px; font-weight:700; color:#10b981;"><i data-lucide="check-circle" style="width:14px;height:14px;vertical-align:middle;"></i> مسدد بمقابل رسمي:</span>
+                        <span style="font-size:12px; font-weight:700; color:#10b981;"><i data-lucide="check-circle" style="width:14px;height:14px;vertical-align:middle;"></i> مسدد بمقابل (إيصال إيداع):</span>
                         <strong style="font-size:14px; font-family:var(--font-en); color:#10b981; white-space:nowrap;">${Number(s.total_paid_amount || 0).toLocaleString('ar-EG')} جم</strong>
                     </div>
-                    <span style="font-size:11px; color:var(--text-secondary);">عدد القطع المسددة بإيصالات: <strong>${Number(s.total_paid_pieces || 0).toLocaleString('ar-EG')}</strong> قطعة</span>
+                    <span style="font-size:11px; color:var(--text-secondary);">عدد القطع المسددة بإيصالات إيداع: <strong>${Number(s.total_paid_pieces || 0).toLocaleString('ar-EG')}</strong> قطعة</span>
                 </div>
                 <div style="padding:12px 14px; border-radius:10px; background:rgba(6,182,212,0.08); border:1px solid rgba(6,182,212,0.25); cursor:pointer;" onclick="filterSparePartsByStatus('FREE')">
                     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:4px;">
@@ -3476,8 +3476,9 @@ async function searchAssetTimeline(query) {
                 if (isInitialMaint) {
                     costBadgeHtml = `<span class="badge" style="background:rgba(14,165,233,0.15); color:#0284c7; border:1px solid rgba(14,165,233,0.3); font-size:10px; font-weight:700; margin-left:6px;"><i data-lucide="sparkles" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> صيانة أولية (خدمة فحص وتنظيف)</span>`;
                 } else if (ev.cost_status === 'PAID') {
-                    const rNum = ev.receipt_number ? `<strong style="font-family:var(--font-en); font-weight:800; text-decoration:underline; cursor:pointer;" onclick="openPrintMemo('receipt', '${ev.receipt_number}')" title="انقر لطباعة الإيصال الرسمي">#${ev.receipt_number}</strong>` : (parseFloat(ev.fees_amount) > 0 ? `${ev.fees_amount} جم` : 'مسدد');
-                    costBadgeHtml = `<span class="badge inmerchant" style="background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); font-size:10px; font-weight:700; margin-left:6px;"><i data-lucide="receipt" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> قطعة مسددة بمقابل (${rNum}) ✅</span>`;
+                    const channelLabel = ev.spare_part?.payment_channel && ev.spare_part?.payment_channel !== '-' ? ` - ${ev.spare_part.payment_channel}` : (ev.payment_channel && ev.payment_channel !== '-' ? ` - ${ev.payment_channel}` : '');
+                    const rNum = ev.receipt_number ? `<strong style="font-family:var(--font-en); font-weight:800; text-decoration:underline; cursor:pointer;" onclick="openPrintMemo('receipt', '${ev.receipt_number}')" title="انقر لطباعة إيصال الإيداع">#${ev.receipt_number}</strong>` : (parseFloat(ev.fees_amount) > 0 ? `${ev.fees_amount} جم` : 'مسدد');
+                    costBadgeHtml = `<span class="badge inmerchant" style="background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); font-size:10px; font-weight:700; margin-left:6px;"><i data-lucide="receipt" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> قطعة مسددة بمقابل (${rNum}${channelLabel}) ✅</span>`;
                 } else if (ev.cost_status === 'DEFERRED') {
                     costBadgeHtml = `<span class="badge" style="background:rgba(239,68,68,0.15); color:#ef4444; border:1px solid rgba(239,68,68,0.3); font-size:10px; font-weight:700; margin-left:6px;"><i data-lucide="clock" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> تحصيل مؤجل ⚠️</span>`;
                 } else if (ev.replaced_part) {
@@ -3516,7 +3517,7 @@ async function searchAssetTimeline(query) {
                                     </div>
                                     <div>
                                         ${ev.cost_status === 'PAID' 
-                                            ? `<span style="color:#10b981; font-weight:700;"><i data-lucide="check-circle" style="width:11px;height:11px;vertical-align:middle;"></i> مسددة بمقابل ${ev.receipt_number ? `(إيصال سداد رسمي رقم: <a href="javascript:void(0)" onclick="openPrintMemo('receipt', '${ev.receipt_number}')" style="color:#10b981; font-family:var(--font-en); font-weight:800; text-decoration:underline;">#${ev.receipt_number}</a>)` : ''}</span>` 
+                                            ? `<span style="color:#10b981; font-weight:700;"><i data-lucide="check-circle" style="width:11px;height:11px;vertical-align:middle;"></i> مسددة بمقابل ${ev.receipt_number ? `(إيصال إيداع رقم: <a href="javascript:void(0)" onclick="openPrintMemo('receipt', '${ev.receipt_number}')" style="color:#10b981; font-family:var(--font-en); font-weight:800; text-decoration:underline;">#${ev.receipt_number}</a>${(ev.spare_part?.payment_channel && ev.spare_part?.payment_channel !== '-') ? ` - جهة الدفع: <strong>${ev.spare_part.payment_channel}</strong>` : (ev.payment_channel && ev.payment_channel !== '-' ? ` - جهة الدفع: <strong>${ev.payment_channel}</strong>` : '')})` : ''}</span>` 
                                             : `<span style="color:#06b6d4; font-weight:700;"><i data-lucide="check" style="width:11px;height:11px;vertical-align:middle;"></i> صرف مجاني (بدون مقابل)</span>`}
                                     </div>
                                 </div>
@@ -3703,7 +3704,7 @@ async function openPrintMemo(type, id) {
                     <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 2px solid #0f172a; padding-bottom: 15px; margin-bottom: 20px;">
                         <div>
                             <h2 style="margin:0; font-size:18px; color:#1e3a8a;">شركة سمارت كارد لنظم المعلومات</h2>
-                            <p style="margin:2px 0 0; font-size:12px; color:#475569;">إيصال تحصيل وسداد نقدي رسمي</p>
+                            <p style="margin:2px 0 0; font-size:12px; color:#475569;">إيصال إيداع وتحصيل وسداد نقدي</p>
                         </div>
                         <div style="text-align:left;">
                             <strong style="font-size:14px; font-family:'Roboto', sans-serif; color:#dc2626;">${doc.doc_number}</strong>
@@ -3731,8 +3732,8 @@ async function openPrintMemo(type, id) {
                                 <td colspan="3" style="border:1px solid #cbd5e1; padding:8px 12px; font-weight:bold;">${d.reason || 'سداد مقابل صيانة / استبدال قطع غيار'}</td>
                             </tr>
                             <tr>
-                                <td style="border:1px solid #cbd5e1; padding:8px 12px; background:#f8fafc; font-weight:bold;">جهة وخزينة التحصيل</td>
-                                <td style="border:1px solid #cbd5e1; padding:8px 12px;">${d.payment_place || 'خزينة الفرع'}</td>
+                                <td style="border:1px solid #cbd5e1; padding:8px 12px; background:#f8fafc; font-weight:bold;">جهة الدفع والتحصيل</td>
+                                <td style="border:1px solid #cbd5e1; padding:8px 12px; font-weight:bold; color:#15803d;">${d.payment_place || 'ضامن'}</td>
                                 <td style="border:1px solid #cbd5e1; padding:8px 12px; background:#f8fafc; font-weight:bold;">الماكينة المعنية</td>
                                 <td style="border:1px solid #cbd5e1; padding:8px 12px; font-family:'Roboto', sans-serif;">${d.pos_serial || '-'}</td>
                             </tr>

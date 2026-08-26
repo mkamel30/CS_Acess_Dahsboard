@@ -2744,14 +2744,14 @@ function resolveMaintenanceServiceDetails(t, allSp = [], allPayments = [], price
             channel = 'فرع الشركة';
         } else if (receiptNum) {
             payStatus = 'PAID';
-            payStatusLabel = `مسدد بمقابل (إيصال #${receiptNum})`;
             amount = matchedPayment ? parseFloat(matchedPayment.payment_amount) : (priceMap.get(partName.toLowerCase()) || 0);
-            channel = matchedPayment?.payment_place || 'ضامن / فوري';
+            channel = matchedPayment?.payment_place || 'ضامن';
+            payStatusLabel = `مسدد بمقابل (إيصال إيداع #${receiptNum}${channel && channel !== '-' ? ` - جهة الدفع: ${channel}` : ''})`;
         } else if (matchedPayment && matchedPayment.ref_num) {
             payStatus = 'PAID';
-            payStatusLabel = `مسدد بمقابل (إيصال #${matchedPayment.ref_num})`;
             amount = parseFloat(matchedPayment.payment_amount);
-            channel = matchedPayment.payment_place || 'ضامن / فوري';
+            channel = matchedPayment.payment_place || 'ضامن';
+            payStatusLabel = `مسدد بمقابل (إيصال إيداع #${matchedPayment.ref_num}${channel && channel !== '-' ? ` - جهة الدفع: ${channel}` : ''})`;
         } else if (serialRaw.includes('مؤجل')) {
             payStatus = 'DEFERRED';
             payStatusLabel = 'تحصيل مؤجل ⚠️';
@@ -3056,7 +3056,13 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
                 paidAmount = (!isNaN(fPrice) && fPrice > 0) ? fPrice : catalogPrice;
             }
 
-            let paymentLabel = isFree ? 'مجاني (بدون مقابل)' : (isDeferred ? 'تحصيل مؤجل ⚠️' : 'مسدد بمقابل ✅');
+            let paymentChannel = '';
+            if (!isFree && receiptNo !== '-' && receiptNo !== 'صرف مجاني (بدون مقابل)' && devicePayments) {
+                const matchP = devicePayments.find(p => p.ref_num && receiptNo.includes(p.ref_num));
+                if (matchP && matchP.payment_place) paymentChannel = matchP.payment_place;
+            }
+
+            let paymentLabel = isFree ? 'صرف مجاني (بدون مقابل)' : (isDeferred ? 'تحصيل مؤجل ⚠️' : (receiptNo !== '-' ? `مسدد بمقابل (إيصال إيداع #${receiptNo}${paymentChannel ? ` - جهة الدفع: ${paymentChannel}` : ''}) ✅` : 'مسدد بمقابل ✅'));
 
             return {
                 id: sp.id,
@@ -3070,6 +3076,7 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
                 payment_status_label: paymentLabel,
                 is_free: isFree,
                 receipt_number: receiptNo,
+                payment_channel: paymentChannel || (isFree ? 'فرع الشركة' : 'ضامن'),
                 notes: sp.notes || serialRaw || '-'
             };
         });
