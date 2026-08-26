@@ -3471,20 +3471,14 @@ async function searchAssetTimeline(query) {
                 const nameToShow = ev.merchant_name || mer?.name || '';
 
                 let costBadgeHtml = '';
-                const isInitialMaint = (ev.action_type || '').includes('صيانة أولية') || (ev.title || '').includes('صيانة أولية');
+                const isInitialMaint = (ev.action_type || '').includes('صيانة أولية') || (ev.title || '').includes('صيانة أولية') || ev.is_initial_maintenance;
 
                 if (isInitialMaint) {
-                    costBadgeHtml = `<span class="badge" style="background:rgba(14,165,233,0.15); color:#0284c7; border:1px solid rgba(14,165,233,0.3); font-size:10px; font-weight:700; margin-left:6px;"><i data-lucide="sparkles" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> صيانة أولية (خدمة فحص وتنظيف)</span>`;
-                } else if (ev.cost_status === 'PAID') {
-                    const channelLabel = ev.spare_part?.payment_channel && ev.spare_part?.payment_channel !== '-' ? ` - ${ev.spare_part.payment_channel}` : (ev.payment_channel && ev.payment_channel !== '-' ? ` - ${ev.payment_channel}` : '');
-                    const rNum = ev.receipt_number ? `<strong style="font-family:var(--font-en); font-weight:800; text-decoration:underline; cursor:pointer;" onclick="openPrintMemo('receipt', '${ev.receipt_number}')" title="انقر لطباعة إيصال الإيداع">#${ev.receipt_number}</strong>` : (parseFloat(ev.fees_amount) > 0 ? `${ev.fees_amount} جم` : 'مسدد');
-                    costBadgeHtml = `<span class="badge inmerchant" style="background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); font-size:10px; font-weight:700; margin-left:6px;"><i data-lucide="receipt" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> قطعة مسددة بمقابل (${rNum}${channelLabel}) ✅</span>`;
-                } else if (ev.cost_status === 'DEFERRED') {
-                    costBadgeHtml = `<span class="badge" style="background:rgba(239,68,68,0.15); color:#ef4444; border:1px solid rgba(239,68,68,0.3); font-size:10px; font-weight:700; margin-left:6px;"><i data-lucide="clock" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> تحصيل مؤجل ⚠️</span>`;
-                } else if (ev.replaced_part) {
-                    costBadgeHtml = `<span class="badge" style="background:rgba(6,182,212,0.15); color:#06b6d4; border:1px solid rgba(6,182,212,0.3); font-size:10px; font-weight:700; margin-left:6px;"><i data-lucide="check" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> قطعة منصرفة مجاناً (بدون مقابل)</span>`;
-                } else {
-                    costBadgeHtml = `<span class="badge" style="background:rgba(100,116,139,0.15); color:#64748b; border:1px solid rgba(100,116,139,0.3); font-size:10px; font-weight:700; margin-left:6px;"><i data-lucide="wrench" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> صيانة بالفرع (بدون قطع غيار)</span>`;
+                    costBadgeHtml = `<span class="badge" style="background:rgba(14,165,233,0.15); color:#0284c7; border:1px solid rgba(14,165,233,0.3); font-size:10px; font-weight:700;"><i data-lucide="sparkles" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> صيانة أولية</span>`;
+                } else if (ev.has_spare_part || ev.replaced_part) {
+                    costBadgeHtml = `<span class="badge inmerchant" style="font-size:10px; font-weight:700;"><i data-lucide="cpu" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> استبدال قطع غيار</span>`;
+                } else if (ev.type === 'MAINTENANCE') {
+                    costBadgeHtml = `<span class="badge" style="background:rgba(100,116,139,0.15); color:#64748b; border:1px solid rgba(100,116,139,0.3); font-size:10px; font-weight:700;"><i data-lucide="wrench" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> صيانة بالفرع</span>`;
                 }
 
                 const item = document.createElement('div');
@@ -3494,31 +3488,37 @@ async function searchAssetTimeline(query) {
                         <i data-lucide="${iconName}" style="width:18px; height:18px;"></i>
                     </div>
                     <div style="flex:1;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; flex-wrap:wrap; gap:6px;">
-                            <div class="timeline-item-title">
-                                <span style="color:var(--text-muted); font-size:11px; margin-left:4px; font-family:var(--font-en);">#${events.length - idx}</span>
-                                ${isHqMaint ? '<span class="badge" style="background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3); font-size:10px; margin-left:6px;"><i data-lucide="wrench" style="width:10px;height:10px;"></i> صيانة رئيسي (HQ)</span>' : ''}
-                                ${isBranchSp ? '<span class="badge" style="background:rgba(6,182,212,0.15); color:#06b6d4; border:1px solid rgba(6,182,212,0.3); font-size:10px; margin-left:6px;"><i data-lucide="layers" style="width:10px;height:10px;"></i> قطع غيار بالفرع</span>' : ''}
-                                ${isTransfer ? '<span class="badge" style="background:rgba(168,85,247,0.15); color:#a855f7; border:1px solid rgba(168,85,247,0.3); font-size:10px; margin-left:6px;"><i data-lucide="truck" style="width:10px;height:10px;"></i> نقل وتبديل</span>' : ''}
-                                ${isPayment ? '<span class="badge" style="background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); font-size:10px; margin-left:6px;"><i data-lucide="receipt" style="width:10px;height:10px;"></i> سداد مالي</span>' : ''}
-                                ${isBoardTrace ? '<span class="badge" style="background:rgba(168,85,247,0.15); color:#a855f7; border:1px solid rgba(168,85,247,0.3); font-size:10px; margin-left:6px;"><i data-lucide="cpu" style="width:10px;height:10px;"></i> مسارات بوردة</span>' : ''}
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px;">
+                            <div class="timeline-item-title" style="display:flex; align-items:center; flex-wrap:wrap; gap:6px;">
+                                <span style="color:var(--text-muted); font-size:11px; font-family:var(--font-en); font-weight:700;">#${events.length - idx}</span>
+                                ${isHqMaint ? '<span class="badge" style="background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3); font-size:10px;"><i data-lucide="wrench" style="width:10px;height:10px;"></i> صيانة رئيسي (HQ)</span>' : ''}
+                                ${isBranchSp ? '<span class="badge" style="background:rgba(6,182,212,0.15); color:#06b6d4; border:1px solid rgba(6,182,212,0.3); font-size:10px;"><i data-lucide="layers" style="width:10px;height:10px;"></i> صرف قطع غيار</span>' : ''}
+                                ${isTransfer ? '<span class="badge" style="background:rgba(168,85,247,0.15); color:#a855f7; border:1px solid rgba(168,85,247,0.3); font-size:10px;"><i data-lucide="truck" style="width:10px;height:10px;"></i> نقل وتبديل</span>' : ''}
+                                ${isPayment ? '<span class="badge" style="background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); font-size:10px;"><i data-lucide="receipt" style="width:10px;height:10px;"></i> سداد مالي</span>' : ''}
+                                ${isBoardTrace ? '<span class="badge" style="background:rgba(168,85,247,0.15); color:#a855f7; border:1px solid rgba(168,85,247,0.3); font-size:10px;"><i data-lucide="cpu" style="width:10px;height:10px;"></i> مسارات بوردة</span>' : ''}
                                 ${costBadgeHtml}
-                                <span>${ev.title}</span>
+                                <span style="font-weight:700; color:var(--text-primary);">${ev.title}</span>
                             </div>
                             <span class="timeline-item-date">${formatDateDDMMYYYY(ev.date, true, true)}</span>
                         </div>
                         <div class="timeline-item-detail">
-                            <div>${ev.detail}</div>
+                            <div style="display:flex; flex-direction:column; gap:4px; font-size:12px; line-height:1.6;">
+                                ${ev.complaint ? `<div style="color:var(--text-secondary);"><strong style="color:var(--text-primary);"><i data-lucide="alert-circle" style="width:12px;height:12px;vertical-align:middle;margin-left:3px;color:#f59e0b;"></i> الشكوى:</strong> ${ev.complaint}</div>` : ''}
+                                ${ev.resolution ? `<div style="color:var(--text-secondary);"><strong style="color:var(--text-primary);"><i data-lucide="wrench" style="width:12px;height:12px;vertical-align:middle;margin-left:3px;color:#0284c7;"></i> الإجراء الفني:</strong> ${ev.resolution}</div>` : ''}
+                                ${!ev.complaint && !ev.resolution && ev.detail ? `<div>${ev.detail}</div>` : ''}
+                            </div>
                             ${ev.replaced_part ? `
-                                <div style="margin-top:6px; padding:6px 12px; background:rgba(6,182,212,0.06); border:1px solid rgba(6,182,212,0.2); border-radius:6px; font-size:11px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px;">
+                                <div style="margin-top:8px; padding:8px 12px; background:rgba(6,182,212,0.06); border:1px solid rgba(6,182,212,0.25); border-radius:8px; font-size:11.5px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
                                     <div>
-                                        <strong style="color:#06b6d4;"><i data-lucide="cpu" style="width:12px;height:12px;vertical-align:middle;margin-left:3px;"></i> قطعة الغيار المسحوبة من المخزن:</strong>
+                                        <strong style="color:#06b6d4;"><i data-lucide="cpu" style="width:13px;height:13px;vertical-align:middle;margin-left:3px;"></i> قطعة الغيار المسحوبة من المخزن:</strong>
                                         <span style="font-weight:700; color:var(--text-primary); margin-right:4px;">${ev.replaced_part}</span>
                                     </div>
                                     <div>
                                         ${ev.cost_status === 'PAID' 
-                                            ? `<span style="color:#10b981; font-weight:700;"><i data-lucide="check-circle" style="width:11px;height:11px;vertical-align:middle;"></i> مسددة بمقابل ${ev.receipt_number ? `(إيصال إيداع رقم: <a href="javascript:void(0)" onclick="openPrintMemo('receipt', '${ev.receipt_number}')" style="color:#10b981; font-family:var(--font-en); font-weight:800; text-decoration:underline;">#${ev.receipt_number}</a>${(ev.spare_part?.payment_channel && ev.spare_part?.payment_channel !== '-') ? ` - جهة الدفع: <strong>${ev.spare_part.payment_channel}</strong>` : (ev.payment_channel && ev.payment_channel !== '-' ? ` - جهة الدفع: <strong>${ev.payment_channel}</strong>` : '')})` : ''}</span>` 
-                                            : `<span style="color:#06b6d4; font-weight:700;"><i data-lucide="check" style="width:11px;height:11px;vertical-align:middle;"></i> صرف مجاني (بدون مقابل)</span>`}
+                                            ? `<span style="color:#10b981; font-weight:700;"><i data-lucide="check-circle" style="width:12px;height:12px;vertical-align:middle;"></i> مسددة بمقابل ${ev.receipt_number ? `(إيصال إيداع: <a href="javascript:void(0)" onclick="openPrintMemo('receipt', '${ev.receipt_number}')" style="color:#10b981; font-family:var(--font-en); font-weight:800; text-decoration:underline;">#${ev.receipt_number}</a>${((ev.spare_part?.payment_channel && ev.spare_part?.payment_channel !== '-') || (ev.payment_channel && ev.payment_channel !== '-')) ? ` - جهة الدفع: <strong>${ev.spare_part?.payment_channel || ev.payment_channel}</strong>` : ''}${parseFloat(ev.fees_amount) > 0 ? ` - بمبلغ: <strong>${Number(ev.fees_amount).toLocaleString('ar-EG')} جم</strong>` : ''})` : ''}</span>` 
+                                            : (ev.cost_status === 'DEFERRED'
+                                                ? `<span style="color:#ef4444; font-weight:700;"><i data-lucide="clock" style="width:12px;height:12px;vertical-align:middle;"></i> تحصيل مؤجل ⚠️</span>`
+                                                : `<span style="color:#06b6d4; font-weight:700;"><i data-lucide="shield-check" style="width:12px;height:12px;vertical-align:middle;"></i> صرف مجاني (بدون مقابل)</span>`)}
                                     </div>
                                 </div>
                             ` : ''}
@@ -3526,6 +3526,7 @@ async function searchAssetTimeline(query) {
                         <div class="timeline-item-meta">
                             <span><strong style="color:var(--color-primary);">كود العميل:</strong> <code style="font-family:var(--font-en); font-weight:bold; color:var(--color-primary); background:var(--md-sys-color-primary-container); padding:2px 6px; border-radius:4px;">${codeToShow}</code></span>
                             ${nameToShow ? `<span><strong style="color:var(--color-success);">اسم العميل:</strong> <span style="font-weight:600; color:var(--text-primary);">${nameToShow}</span></span>` : ''}
+                            ${ev.pos_serial ? `<span><strong style="color:var(--text-secondary);">الماكينة:</strong> <code style="font-family:var(--font-en); font-weight:bold; color:var(--text-primary);">${ev.pos_serial}</code></span>` : ''}
                             <span><strong style="color:var(--text-secondary);">الفني المسؤول:</strong> <span style="font-weight:600; color:var(--text-primary);">${ev.technician}</span></span>
                         </div>
                     </div>

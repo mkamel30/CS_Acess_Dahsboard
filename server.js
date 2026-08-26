@@ -3493,7 +3493,7 @@ app.get('/api/assets/timeline', async (req, res) => {
 
                 timelineEvents.push({
                     type: 'MAINTENANCE',
-                    title: `بلاغ وإجراء صيانة #${t.ID}: ${t.ActionType || 'إصلاح عطل'}`,
+                    title: `بلاغ صيانة #${t.ID}: ${t.ActionType || 'إصلاح عطل'}`,
                     date: t.IssueDate || t.ActionDate || 'تاريخ غير محدد',
                     technician: tech,
                     merchant_code: evMerchantCode,
@@ -3512,7 +3512,6 @@ app.get('/api/assets/timeline', async (req, res) => {
                     cost_badge: resolved.spare_part ? resolved.spare_part.payment_status_label : (resolved.is_initial_maintenance ? 'صيانة أولية (فحص وتنظيف مجاني)' : 'صيانة بالفرع (بدون قطع غيار)'),
                     receipt_number: resolved.spare_part?.receipt_number || null,
                     fees_amount: resolved.spare_part?.amount || 0,
-                    detail: `الشكوى: ${noteG || 'عطل ماكينة'} | ما تم إنجازه: ${noteD || 'تم الفحص والإصلاح'} | الماكينة: ${t.POSN || '-'}`,
                     icon: 'wrench'
                 });
             });
