@@ -1,4 +1,11 @@
 {
+  "name": "smartcs-operations",
+  "version": "4.1.0",
+  "description": "SmartCS Central Operations & Multi-Device Auto-Update Engine",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
   "dependencies": {
     "@ngrok/ngrok": "^1.7.0",
     "compression": "^1.8.1",

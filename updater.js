@@ -52,38 +52,68 @@ async function getVersionInfo() {
 
 async function checkForUpdates() {
     try {
-        // Fetch remote without merging
-        const fetchRes = await runCommand('git fetch --prune origin main');
-        if (!fetchRes.success) {
-            return { has_update: false, error: 'تعذر الاتصال بـ GitHub: ' + (fetchRes.error || fetchRes.stderr) };
+        // 1. Try Git if available and repository is present
+        const isGit = fs.existsSync(path.join(__dirname, '.git'));
+        if (isGit) {
+            const fetchRes = await runCommand('git fetch --prune origin main');
+            if (fetchRes.success) {
+                const localHash = (await runCommand('git rev-parse HEAD')).stdout;
+                const remoteHash = (await runCommand('git rev-parse origin/main')).stdout;
+
+                if (localHash && remoteHash && localHash !== remoteHash) {
+                    const commitsBehindRes = await runCommand('git log HEAD..origin/main --oneline');
+                    const remoteCommitMsg = await runCommand('git log -1 origin/main --format=%s');
+                    const remoteCommitDate = await runCommand('git log -1 origin/main --format=%cd --date=format:"%Y-%m-%d %H:%M"');
+
+                    const commitsList = commitsBehindRes.success && commitsBehindRes.stdout 
+                        ? commitsBehindRes.stdout.split('\n').filter(Boolean) 
+                        : [];
+
+                    return {
+                        has_update: true,
+                        local_commit: localHash.substring(0, 7),
+                        remote_commit: remoteHash.substring(0, 7),
+                        remote_message: remoteCommitMsg.stdout || '-',
+                        remote_date: remoteCommitDate.stdout || '-',
+                        commits_behind: commitsList.length || 1,
+                        commits_summary: commitsList
+                    };
+                }
+
+                return {
+                    has_update: false,
+                    current_commit: localHash ? localHash.substring(0, 7) : 'latest',
+                    message: 'أنت تعمل على أحدث إصدار معتمد من GitHub ✅'
+                };
+            }
         }
 
-        const localHash = (await runCommand('git rev-parse HEAD')).stdout;
-        const remoteHash = (await runCommand('git rev-parse origin/main')).stdout;
-
-        if (localHash && remoteHash && localHash !== remoteHash) {
-            const commitsBehindRes = await runCommand('git log HEAD..origin/main --oneline');
-            const remoteCommitMsg = await runCommand('git log -1 origin/main --format=%s');
-            const remoteCommitDate = await runCommand('git log -1 origin/main --format=%cd --date=format:"%Y-%m-%d %H:%M"');
-
-            const commitsList = commitsBehindRes.success && commitsBehindRes.stdout 
-                ? commitsBehindRes.stdout.split('\n').filter(Boolean) 
-                : [];
-
-            return {
-                has_update: true,
-                local_commit: localHash.substring(0, 7),
-                remote_commit: remoteHash.substring(0, 7),
-                remote_message: remoteCommitMsg.stdout || '-',
-                remote_date: remoteCommitDate.stdout || '-',
-                commits_behind: commitsList.length || 1,
-                commits_summary: commitsList
-            };
+        // 2. Fallback: Query GitHub API directly over HTTPS
+        const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
+        const apiRes = await fetchFn('https://raw.githubusercontent.com/mkamel30/CS_Acess_Dahsboard/main/package.json', {
+            headers: { 'User-Agent': 'SmartCS-Updater' }
+        });
+        if (apiRes.ok) {
+            const remotePkg = await apiRes.json();
+            let localPkg = { version: '4.0.0' };
+            try { localPkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')); } catch(e){}
+            
+            if (remotePkg.version && remotePkg.version !== localPkg.version) {
+                return {
+                    has_update: true,
+                    local_commit: localPkg.version,
+                    remote_commit: 'v' + remotePkg.version,
+                    remote_message: `إصدار جديد متاح على GitHub (v${remotePkg.version})`,
+                    remote_date: new Date().toLocaleDateString('ar-EG'),
+                    commits_behind: 1,
+                    commits_summary: [`ترقية من v${localPkg.version} إلى v${remotePkg.version}`]
+                };
+            }
         }
 
         return {
             has_update: false,
-            current_commit: localHash ? localHash.substring(0, 7) : 'latest',
+            current_commit: 'latest',
             message: 'أنت تعمل على أحدث إصدار معتمد من GitHub ✅'
         };
     } catch (err) {
@@ -93,18 +123,23 @@ async function checkForUpdates() {
 
 async function performUpdate() {
     try {
-        console.log('[AUTO-UPDATER] Fetching and applying updates from origin/main...');
-        const fetchRes = await runCommand('git fetch --prune origin main');
-        if (!fetchRes.success) throw new Error('فشل جلب التحديثات: ' + (fetchRes.error || fetchRes.stderr));
+        const isGit = fs.existsSync(path.join(__dirname, '.git'));
+        if (isGit) {
+            console.log('[AUTO-UPDATER] Fetching and applying updates from origin/main via Git...');
+            await runCommand('git fetch --prune origin main');
+            const resetRes = await runCommand('git reset --hard origin/main');
+            if (!resetRes.success) throw new Error('فشل تطبيق التحديثات عبر Git: ' + (resetRes.error || resetRes.stderr));
+        } else {
+            console.log('[AUTO-UPDATER] Updating files via PowerShell GitHub Release ZIP...');
+            const destDir = __dirname.replace(/\\/g, '\\\\');
+            const psCmd = `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$ext = Join-Path $env:TEMP 'smartcs_upd'; if (Test-Path $ext) { Remove-Item $ext -Recurse -Force -ErrorAction SilentlyContinue }; $zip = Join-Path $env:TEMP 'smartcs_upd.zip'; if (Test-Path $zip) { Remove-Item $zip -Force -ErrorAction SilentlyContinue }; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://github.com/mkamel30/CS_Acess_Dahsboard/archive/refs/heads/main.zip' -OutFile $zip; Expand-Archive -Path $zip -DestinationPath $ext -Force; Get-ChildItem -Path (Join-Path $ext 'CS_Acess_Dahsboard-main') | Copy-Item -Destination '${destDir}' -Recurse -Force; Remove-Item $zip, $ext -Recurse -Force -ErrorAction SilentlyContinue"`;
+            const psRes = await runCommand(psCmd);
+            if (!psRes.success) throw new Error('فشل تحميل التحديث عبر ZIP: ' + (psRes.error || psRes.stderr));
+        }
 
-        const resetRes = await runCommand('git reset --hard origin/main');
-        if (!resetRes.success) throw new Error('فشل تطبيق التحديثات: ' + (resetRes.error || resetRes.stderr));
-
-        // Check if package.json has updates to install dependencies
         await runCommand('npm install --omit=dev');
-
         const newVersion = await getVersionInfo();
-        console.log('[AUTO-UPDATER] Update completed successfully! New Commit:', newVersion.commit);
+        console.log('[AUTO-UPDATER] Update completed successfully! New Version:', newVersion.version, newVersion.commit);
 
         return {
             success: true,
