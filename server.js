@@ -4364,61 +4364,53 @@ app.post('/api/sync/full-seed', express.json({ limit: '100mb' }), async (req, re
         return res.status(401).json({ success: false, error: 'Unauthorized: Invalid sync secret' });
     }
 
-    const { tablesData } = req.body || {};
-    if (!tablesData || typeof tablesData !== 'object') {
-        return res.status(400).json({ success: false, error: 'Missing tablesData payload' });
-    }
-
+    const { tablesData, isAppend } = req.body || {};
     const startTime = Date.now();
     let totalImported = 0;
 
     try {
-        for (const [tbl, rows] of Object.entries(tablesData)) {
-            if (!Array.isArray(rows) || rows.length === 0) continue;
+        if (tablesData && typeof tablesData === 'object') {
+            for (const [tbl, rows] of Object.entries(tablesData)) {
+                if (!Array.isArray(rows) || rows.length === 0) continue;
 
-            const sample = rows[0];
-            const cols = Object.keys(sample);
-            const createCols = cols.map(c => `"${c}" TEXT`).join(', ');
-            await runQuery(`CREATE TABLE IF NOT EXISTS "${tbl}" (${createCols});`);
+                const sample = rows[0];
+                const cols = Object.keys(sample);
+                const createCols = cols.map(c => `"${c}" TEXT`).join(', ');
+                await runQuery(`CREATE TABLE IF NOT EXISTS "${tbl}" (${createCols});`);
 
-            const placeholders = cols.map(() => '?').join(', ');
-            const quotedCols = cols.map(c => `"${c}"`).join(', ');
-            const insertSql = `INSERT INTO "${tbl}" (${quotedCols}) VALUES (${placeholders});`;
+                const placeholders = cols.map(() => '?').join(', ');
+                const quotedCols = cols.map(c => `"${c}"`).join(', ');
+                const insertSql = `INSERT INTO "${tbl}" (${quotedCols}) VALUES (${placeholders});`;
 
-            await runQuery('BEGIN TRANSACTION;');
-            try {
-                await runQuery(`DELETE FROM "${tbl}";`);
-                const stmt = db.prepare(insertSql);
-                for (const row of rows) {
-                    const vals = cols.map(c => {
-                        const v = row[c];
-                        if (v === null || v === undefined) return '';
-                        if (typeof v === 'object') return JSON.stringify(v);
-                        return String(v);
-                    });
-                    stmt.run(vals);
+                await runQuery('BEGIN TRANSACTION;');
+                try {
+                    if (!isAppend) {
+                        await runQuery(`DELETE FROM "${tbl}";`);
+                    }
+                    const stmt = db.prepare(insertSql);
+                    for (const row of rows) {
+                        const vals = cols.map(c => {
+                            const v = row[c];
+                            if (v === null || v === undefined) return '';
+                            if (typeof v === 'object') return JSON.stringify(v);
+                            return String(v);
+                        });
+                        stmt.run(vals);
+                    }
+                    await new Promise(r => stmt.finalize(r));
+                    await runQuery('COMMIT;');
+                    totalImported += rows.length;
+                } catch (e) {
+                    await runQuery('ROLLBACK;');
+                    throw e;
                 }
-                await new Promise(r => stmt.finalize(r));
-                await runQuery('COMMIT;');
-                totalImported += rows.length;
-            } catch (e) {
-                await runQuery('ROLLBACK;');
-                throw e;
             }
         }
 
         // Rebuild domain entities
-        if (syncEngine && typeof syncEngine.syncHighLevelDomainEntities === 'function') {
+        if (req.body.rebuildDomain !== false && syncEngine && typeof syncEngine.syncHighLevelDomainEntities === 'function') {
             await syncEngine.syncHighLevelDomainEntities(db);
         }
-
-        // Broadcast event
-        broadcastSseEvent('sync_completed', {
-            type: 'full_seed_applied',
-            totalRecords: totalImported,
-            durationMs: Date.now() - startTime,
-            timestamp: new Date().toISOString()
-        });
 
         res.json({
             success: true,
@@ -4440,50 +4432,78 @@ app.post('/api/diagnostics/reseed-vps', requireAdmin, async (req, res) => {
             return res.status(400).json({ success: false, error: 'Cannot reseed cloud from cloud itself.' });
         }
 
-        console.log('[DIAGNOSTICS] Starting 1-Click Full Cloud Reseed from Local SQLite...');
+        console.log('[DIAGNOSTICS] Starting 1-Click Batched Cloud Reseed from Local SQLite...');
         const startTime = Date.now();
-        const exportData = {};
         let totalCount = 0;
-
-        for (const item of CORE_RECONCILIATION_TABLES) {
-            try {
-                const rows = await allQuery(`SELECT * FROM "${item.table}"`);
-                exportData[item.table] = rows || [];
-                totalCount += (rows || []).length;
-            } catch (e) {
-                exportData[item.table] = [];
-            }
-        }
 
         const cloudUrl = (config.cloudEndpoint || 'https://smartcs.m-kamel.workers.dev/api/sync/delta').replace(/\/api\/sync\/delta.*$/, '/api/sync/full-seed');
         const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
 
-        const cloudResp = await fetchFn(cloudUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-sync-secret': SYNC_SECRET
-            },
-            body: JSON.stringify({
-                tablesData: exportData,
-                timestamp: new Date().toISOString()
-            })
-        });
+        for (const item of CORE_RECONCILIATION_TABLES) {
+            let rows = [];
+            try {
+                rows = await allQuery(`SELECT * FROM "${item.table}"`) || [];
+            } catch(e) {
+                rows = [];
+            }
+            if (rows.length === 0) continue;
 
-        const cloudResult = await cloudResp.json();
-        const duration = Date.now() - startTime;
+            const CHUNK_SIZE = 1500;
+            for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+                const chunk = rows.slice(i, i + CHUNK_SIZE);
+                const isFirst = (i === 0);
 
-        if (cloudResult.success) {
-            console.log(`[DIAGNOSTICS] Full Reseed Successful: ${totalCount} records synced to Cloud VPS in ${duration}ms!`);
-            res.json({
-                success: true,
-                total_records: totalCount,
-                duration_ms: duration,
-                message: `تمت المزامنة وإعادة التأسيس الشامل بنجاح لجميع الجداول (${totalCount} سجل) على السيرفر السحابي ⚡`
-            });
-        } else {
-            throw new Error(cloudResult.error || 'Cloud VPS failed to apply seed payload');
+                const cloudResp = await fetchFn(cloudUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-sync-secret': SYNC_SECRET
+                    },
+                    body: JSON.stringify({
+                        tablesData: { [item.table]: chunk },
+                        isAppend: !isFirst,
+                        rebuildDomain: false,
+                        timestamp: new Date().toISOString()
+                    })
+                });
+
+                const rawText = await cloudResp.text();
+                let cloudResult = {};
+                try { cloudResult = JSON.parse(rawText); } catch(e) {
+                    throw new Error(`تعذر معالجة استجابة السيرفر السحابي لجدول ${item.name_ar}`);
+                }
+                if (!cloudResult.success) {
+                    throw new Error(cloudResult.error || `خطأ في مزامنة جدول ${item.name_ar}`);
+                }
+            }
+            totalCount += rows.length;
         }
+
+        // Final trigger to rebuild domain entities on cloud
+        try {
+            await fetchFn(cloudUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-sync-secret': SYNC_SECRET
+                },
+                body: JSON.stringify({
+                    tablesData: {},
+                    rebuildDomain: true,
+                    timestamp: new Date().toISOString()
+                })
+            });
+        } catch(e){}
+
+        const duration = Date.now() - startTime;
+        console.log(`[DIAGNOSTICS] Full Reseed Successful: ${totalCount} records synced to Cloud VPS in ${duration}ms!`);
+
+        res.json({
+            success: true,
+            total_records: totalCount,
+            duration_ms: duration,
+            message: `تمت المزامنة وإعادة التأسيس الشامل بنجاح لجميع الجداول (${totalCount} سجل) على السيرفر السحابي ⚡`
+        });
     } catch (err) {
         logSystemError('RESEED_VPS', '/api/diagnostics/reseed-vps', err, req);
         res.status(500).json({ success: false, error: err.message });
