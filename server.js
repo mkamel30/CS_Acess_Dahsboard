@@ -3244,15 +3244,22 @@ app.get('/api/assets/timeline', async (req, res) => {
         const placeholders = allPossibleCodes.map(() => '?').join(',');
         const timelineEvents = [];
 
-        // 0. Pre-fetch branch spare parts records to correlate with maintenance tickets
+        // 0. Pre-fetch branch spare parts and payments records to correlate with maintenance tickets
         let allSpForAsset = [];
+        let allPaymentsForAsset = [];
         if (allPossibleCodes.length > 0) {
             allSpForAsset = await allQuery(`
                 SELECT s.rowid as id, s.type, s.count_in, s.Serial as serial_raw, s.notes, s.out_date
                 FROM store_sp_raw s
                 WHERE s.count_in LIKE '-%' OR CAST(s.count_in AS INTEGER) < 0
                 ORDER BY s.rowid DESC
-            `);
+            `).catch(() => []);
+
+            allPaymentsForAsset = await allQuery(`
+                SELECT p.ID, p.payment_date, p.payment_amount, p.payment_reason, p.ref_num, p.pos_number, p.policy, p.payer
+                FROM payments_raw p
+                ORDER BY p.ID DESC
+            `).catch(() => []);
         }
 
         // 1. Events from transactions_raw (Complete Service History)
@@ -3281,21 +3288,62 @@ app.get('/api/assets/timeline', async (req, res) => {
                 // Check if this action involved a spare part replacement
                 const isPartReplacement = /(?:تغير|تغيير|استبدال|تركيب)\s+([^\s,]+(?:\s+[^\s,]+)?)/i.test(noteD) && !/تنظيف|سوفت|تحديث|فحص|برمجة/.test(noteD);
 
+                function normalizePartText(str) {
+                    return String(str || '')
+                        .replace(/[أإآ]/g, 'ا')
+                        .replace(/ة/g, 'ه')
+                        .replace(/ى/g, 'ي')
+                        .replace(/تغير|تغيير|استبدال|تركيب|صيانة|اصلاح/g, '')
+                        .replace(/\s+/g, ' ')
+                        .trim();
+                }
+
                 let matchedSp = null;
                 if (isPartReplacement && allSpForAsset.length > 0) {
+                    const normNote = normalizePartText(noteD);
+                    const noteKeywords = normNote.split(' ').map(w => w.replace(/^ال/, '')).filter(w => w.length >= 3);
+
                     matchedSp = allSpForAsset.find(sp => {
                         const s = String(sp.serial_raw || '');
                         const n = String(sp.notes || '');
                         const posMatch = (t.POSN && (n.includes(t.POSN) || s.includes(t.POSN)));
+                        const grocerMatch = (t.GrocerName && (s.includes(t.GrocerName) || n.includes(t.GrocerName)));
+
+                        const normType = normalizePartText(sp.type);
+                        const typeKeywords = normType.split(' ').map(w => w.replace(/^ال/, '')).filter(w => w.length >= 3);
+
+                        const typeMatch = noteKeywords.some(kw => normType.includes(kw)) ||
+                                          typeKeywords.some(kw => normNote.includes(kw));
+
                         const d1 = sp.out_date ? sp.out_date.substring(0, 9).toLowerCase() : '';
                         const d2 = t.IssueDate ? t.IssueDate.substring(0, 9).toLowerCase() : (t.ActionDate ? t.ActionDate.substring(0, 9).toLowerCase() : '');
                         const dateMatch = d1 && d2 && d1 === d2;
-                        const typeMatch = sp.type && (noteD.includes(sp.type) || sp.type.includes(noteD.replace(/تغير|تغيير|استبدال|تركيب/g, '').trim()));
+
+                        if (posMatch && (typeMatch || dateMatch)) return true;
+                        if (grocerMatch && typeMatch) return true;
+                        return false;
+                    });
+                }
+
+                // Also correlate payments_raw
+                let matchedPayment = null;
+                if (allPaymentsForAsset.length > 0) {
+                    const tDate = t.IssueDate || t.ActionDate || '';
+                    matchedPayment = allPaymentsForAsset.find(p => {
+                        const pPos = String(p.pos_number || '');
+                        const pPolicy = String(p.policy || '');
+                        const pPayer = String(p.payer || '');
+                        const pReason = String(p.payment_reason || '');
+                        const pDate = String(p.payment_date || '');
+
+                        const posMatch = t.POSN && pPos.includes(t.POSN);
+                        const grocerMatch = t.GrocerName && (pPolicy.includes(t.GrocerName) || pPayer.includes(t.GrocerName));
                         
-                        // Exact match: POS + (Same Date OR Same Part Type)
-                        if (posMatch && (dateMatch || typeMatch)) return true;
-                        // Merchant match if date and part type match
-                        if (dateMatch && typeMatch && (s.includes(t.GrocerName) || n.includes(t.GrocerName))) return true;
+                        if (posMatch || grocerMatch) {
+                            if (matchedSp && matchedSp.serial_raw && p.ref_num && matchedSp.serial_raw.includes(p.ref_num)) return true;
+                            if (pDate && tDate && (pDate.substring(0, 9).toLowerCase() === tDate.substring(0, 9).toLowerCase() || tDate.toLowerCase().includes(pDate.toLowerCase()))) return true;
+                            if (isPartReplacement && pReason.includes('$')) return true;
+                        }
                         return false;
                     });
                 }
@@ -3313,6 +3361,10 @@ app.get('/api/assets/timeline', async (req, res) => {
                         receipt_number = rMatch[1];
                         cost_status = 'PAID';
                         cost_badge = `مسدد بمقابل (إيصال #${receipt_number})`;
+                    } else if (matchedPayment && matchedPayment.ref_num) {
+                        receipt_number = matchedPayment.ref_num;
+                        cost_status = 'PAID';
+                        cost_badge = `مسدد بمقابل (إيصال #${receipt_number})`;
                     } else if (s.includes('مؤجل')) {
                         cost_status = 'DEFERRED';
                         cost_badge = 'تحصيل مؤجل ⚠️';
@@ -3320,6 +3372,11 @@ app.get('/api/assets/timeline', async (req, res) => {
                         cost_status = 'FREE';
                         cost_badge = 'مجاني (بدون مقابل)';
                     }
+                } else if (matchedPayment && matchedPayment.ref_num) {
+                    replaced_part = noteD.replace(/تغير|تغيير|استبدال|تركيب/g, '').trim();
+                    receipt_number = matchedPayment.ref_num;
+                    cost_status = 'PAID';
+                    cost_badge = `مسدد بمقابل (إيصال #${receipt_number})`;
                 } else if (isPartReplacement) {
                     replaced_part = noteD.replace(/تغير|تغيير|استبدال|تركيب/g, '').trim();
                     if (t.Fees === 'True' || parseFloat(t.FeesAmount) > 0 || t.Paid === 'True') {
