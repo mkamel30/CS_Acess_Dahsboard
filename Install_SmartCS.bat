@@ -49,82 +49,90 @@ echo.
 :: -------------------------------------------------------------------------
 where git >nul 2>nul
 if %errorlevel% neq 0 (
-    echo [!] Git is not installed. Attempting automated installation via winget...
-    where winget >nul 2>nul
-    if %errorlevel% equ 0 (
-        echo [*] Installing Git silently via winget...
-        winget install --id Git.Git -e --source winget --accept-source-agreements --accept-package-agreements --silent
-    )
+    echo [!] Git is not installed. Automated updater will use cloud sync.
 )
 
 :: -------------------------------------------------------------------------
-:: 4. CHECK / INSTALL NODE.JS (via winget or fallback)
+:: 4. CHECK / INSTALL NODE.JS
 :: -------------------------------------------------------------------------
 where node >nul 2>nul
 if %errorlevel% neq 0 (
-    echo [!] Node.js is not installed. Attempting automated installation via winget...
+    echo [!] Node.js is not installed. Attempting automated installation...
     where winget >nul 2>nul
     if %errorlevel% equ 0 (
         echo [*] Installing Node.js LTS silently via winget...
         winget install --id OpenJS.NodeJS.LTS -e --source winget --accept-source-agreements --accept-package-agreements --silent
     ) else (
         echo [*] Downloading Node.js LTS installer via PowerShell...
-        powershell -NoProfile -ExecutionPolicy Bypass -Command "$msi = [System.IO.Path]::Combine($env:TEMP, 'node_setup.msi'); [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi' -OutFile $msi; Start-Process msiexec.exe -ArgumentList '/i', $msi, '/qn', '/norestart' -Wait"
+        powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$msi = [System.IO.Path]::Combine($env:TEMP, 'node_setup.msi'); [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.18.0/node-v20.18.0-x64.msi' -OutFile $msi; Start-Process msiexec.exe -ArgumentList '/i', $msi, '/qn', '/norestart' -Wait"
     )
 )
 
-:: Refresh PATH in current cmd session
+:: Refresh PATH
 set "PATH=%ProgramFiles%\nodejs;%ProgramFiles%\Git\cmd;%PATH%"
 
 :: -------------------------------------------------------------------------
-:: 5. DOWNLOAD & DEPLOY FILES INTO CURRENT FOLDER
+:: 5. DOWNLOAD FRESH FILES FROM GITHUB (FORCE OVERWRITE)
 :: -------------------------------------------------------------------------
 echo.
-echo [*] Downloading and preparing SmartCS application files into current folder...
-
-where git >nul 2>nul
-if %errorlevel% equ 0 (
-    if exist "%TARGET_DIR%\.git" (
-        echo [*] Git repository detected. Fetching latest updates from GitHub...
-        git fetch --prune origin main
-        git reset --hard origin/main
-    ) else (
-        echo [*] Initializing Git repository in current folder...
-        git init
-        git remote add origin https://github.com/mkamel30/CS_Acess_Dahsboard.git
-        git fetch --prune origin main
-        git reset --hard origin/main
-    )
-) else (
-    echo [*] Git not in PATH. Downloading fresh application release from GitHub...
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$ext = Join-Path $env:TEMP 'smartcs_extract'; if (Test-Path $ext) { Remove-Item $ext -Recurse -Force }; $zip = Join-Path $env:TEMP 'smartcs_latest.zip'; if (Test-Path $zip) { Remove-Item $zip -Force }; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://github.com/mkamel30/CS_Acess_Dahsboard/archive/refs/heads/main.zip' -OutFile $zip; Expand-Archive -Path $zip -DestinationPath $ext -Force; Get-ChildItem -Path (Join-Path $ext 'CS_Acess_Dahsboard-main') | Copy-Item -Destination '%TARGET_DIR%' -Recurse -Force; Remove-Item $zip, $ext -Recurse -Force"
-    echo [OK] Files downloaded and updated to latest version!
-)
+echo [*] Downloading fresh application release from GitHub...
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$ext = Join-Path $env:TEMP 'smartcs_ext'; if (Test-Path $ext) { Remove-Item $ext -Recurse -Force -ErrorAction SilentlyContinue }; $zip = Join-Path $env:TEMP 'smartcs_pkg.zip'; if (Test-Path $zip) { Remove-Item $zip -Force -ErrorAction SilentlyContinue }; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://github.com/mkamel30/CS_Acess_Dahsboard/archive/refs/heads/main.zip' -OutFile $zip; Expand-Archive -Path $zip -DestinationPath $ext -Force; Get-ChildItem -Path (Join-Path $ext 'CS_Acess_Dahsboard-main') | Copy-Item -Destination '%TARGET_DIR%' -Recurse -Force; Remove-Item $zip, $ext -Recurse -Force -ErrorAction SilentlyContinue"
+echo [OK] Files downloaded and updated to latest version!
 
 :: -------------------------------------------------------------------------
 :: 6. SAVE CONFIG.JSON WITH CHOSEN DATABASE PATH
 :: -------------------------------------------------------------------------
 echo.
 echo [*] Configuring application settings and database path...
-
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$cfgPath = Join-Path '%TARGET_DIR%' 'config.json'; $dbPath = '%FINAL_DB_PATH%'; $hasAccess = Test-Path $dbPath; $cfg = [ordered]@{ port = 8970; syncSecret = 'smartcs-cloud-secret-2026'; accessDbPath = $dbPath; vpsSyncUrl = 'https://smartcs.m-kamel.workers.dev' }; $cfg | ConvertTo-Json -Depth 4 | Out-File -FilePath $cfgPath -Encoding utf8; if ($hasAccess) { Write-Host '  [+] MS Access Database file detected and linked successfully!' -ForegroundColor Green } else { Write-Host '  [!] Notice: Database file not reachable now. Cloud VPS mode enabled.' -ForegroundColor Yellow }"
 
 :: -------------------------------------------------------------------------
-:: 7. INSTALL NPM DEPENDENCIES
+:: 7. GENERATE ROCK-SOLID RUN_SMARTCS.BAT LOCALLY
+:: -------------------------------------------------------------------------
+echo.
+echo [*] Generating clean daily launcher (run_smartcs.bat)...
+(
+echo @echo off
+echo set "PATH=%%SystemRoot%%\System32;%%SystemRoot%%\System32\WindowsPowerShell\v1.0;%%ProgramFiles%%\nodejs;%%ProgramFiles%%\Git\cmd;%%PATH%%"
+echo title SmartCS Dashboard - Central Operations System
+echo color 0b
+echo cd /d "%%~dp0"
+echo where node >nul 2>nul
+echo if %%errorlevel%% neq 0 (
+echo     echo [ERROR] Node.js is not installed!
+echo     pause
+echo     exit /b 1
+echo ^)
+echo node updater.js update-silent 2>nul
+echo start "" "http://localhost:8970"
+echo :run_server
+echo echo =======================================================================
+echo echo  [+] Local Host Access   : http://localhost:8970
+echo echo  [+] Press Ctrl+C to stop the server
+echo echo =======================================================================
+echo echo.
+echo node server.js
+echo echo [!] Server restarted.
+echo timeout /t 2 /nobreak >nul
+echo goto run_server
+) > "%TARGET_DIR%\run_smartcs.bat"
+
+:: -------------------------------------------------------------------------
+:: 8. INSTALL NPM DEPENDENCIES
 :: -------------------------------------------------------------------------
 echo.
 echo [*] Installing production application dependencies...
 call npm install --omit=dev --no-audit --no-fund
 
 :: -------------------------------------------------------------------------
-:: 8. INITIALIZE INTERNAL APPLICATION DATABASE SCHEMA (branch_database.db)
+:: 9. INITIALIZE INTERNAL DATABASE SCHEMA (branch_database.db)
 :: -------------------------------------------------------------------------
 echo.
 echo [*] Initializing internal high-speed database schema (branch_database.db)...
 node updater.js init-db
 
 :: -------------------------------------------------------------------------
-:: 9. CREATE DESKTOP SHORTCUT & WINDOWS STARTUP AUTO-BOOT
+:: 10. CREATE DESKTOP SHORTCUT & WINDOWS STARTUP AUTO-BOOT
 :: -------------------------------------------------------------------------
 echo.
 echo [*] Creating Desktop Shortcut (SmartCS Dashboard)...
@@ -144,8 +152,5 @@ echo  [+] SmartCS Dashboard is starting in your browser...
 echo  [+] Local URL: http://localhost:8970
 echo.
 
-start "" "%TARGET_DIR%\run_smartcs.bat"
-
-echo  Press any key to exit this installer...
-pause >nul
-exit /b 0
+start "" "http://localhost:8970"
+call "%TARGET_DIR%\run_smartcs.bat"
