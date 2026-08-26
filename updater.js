@@ -27,16 +27,23 @@ async function getVersionInfo() {
         const branch = await runCommand('git rev-parse --abbrev-ref HEAD');
 
         let packageVer = '4.0.0';
+        let verMeta = {};
         try {
             const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
             if (pkg.version) packageVer = pkg.version;
         } catch (e) {}
 
+        try {
+            if (fs.existsSync(path.join(__dirname, '.version.json'))) {
+                verMeta = JSON.parse(fs.readFileSync(path.join(__dirname, '.version.json'), 'utf8')) || {};
+            }
+        } catch(e) {}
+
         return {
             version: packageVer,
-            commit: localCommit.success ? localCommit.stdout : 'unknown',
-            date: commitDate.success ? commitDate.stdout : '-',
-            message: commitMsg.success ? commitMsg.stdout : '-',
+            commit: localCommit.success ? localCommit.stdout : (verMeta.commit || 'latest'),
+            date: commitDate.success ? commitDate.stdout : (verMeta.date || '-'),
+            message: commitMsg.success ? commitMsg.stdout : (verMeta.message || 'Standard Release Build'),
             branch: branch.success ? branch.stdout : 'main',
             platform: process.platform,
             node_version: process.version
