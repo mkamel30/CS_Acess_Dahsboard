@@ -4382,7 +4382,7 @@ app.post('/api/sync/full-seed', express.json({ limit: '100mb' }), async (req, re
                 const quotedCols = cols.map(c => `"${c}"`).join(', ');
                 const insertSql = `INSERT OR REPLACE INTO "${tbl}" (${quotedCols}) VALUES (${placeholders});`;
 
-                await runQuery('BEGIN TRANSACTION;');
+                await runQuery('SAVEPOINT sp_full_seed;');
                 try {
                     if (!isAppend) {
                         await runQuery(`DELETE FROM "${tbl}";`);
@@ -4398,10 +4398,10 @@ app.post('/api/sync/full-seed', express.json({ limit: '100mb' }), async (req, re
                         stmt.run(vals);
                     }
                     await new Promise(r => stmt.finalize(r));
-                    await runQuery('COMMIT;');
+                    await runQuery('RELEASE SAVEPOINT sp_full_seed;');
                     totalImported += rows.length;
                 } catch (e) {
-                    await runQuery('ROLLBACK;');
+                    await runQuery('ROLLBACK TO SAVEPOINT sp_full_seed;').catch(() => {});
                     throw e;
                 }
             }
