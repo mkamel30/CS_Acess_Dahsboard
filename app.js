@@ -3132,13 +3132,16 @@ async function fetchAndRenderAuditLogs() {
             const typeLabel = log.change_type === 'INSERT' ? 'إضافة (+)' : log.change_type === 'UPDATE' ? 'تعديل (~)' : 'حذف (-)';
             const time = formatCairoDateTime(log.timestamp);
 
+            const cleanRecordId = formatAuditRecordId(log.table_name, log.record_id);
+            const cleanSummary = formatAuditSummary(log);
+
             tr.innerHTML = `
                 <td style="font-family: var(--font-en);">${offset + idx + 1}</td>
                 <td style="font-family: var(--font-en); white-space: nowrap;">${time}</td>
                 <td><strong style="color: var(--color-primary); font-family: var(--font-en);">${log.table_name}</strong></td>
                 <td><span class="change-type-badge ${typeBadgeClass}">${typeLabel}</span></td>
-                <td><code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-family: var(--font-en);">${log.record_id || '-'}</code></td>
-                <td style="max-width: 320px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;" title="${log.summary || ''}">${log.summary || '-'}</td>
+                <td><code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-family: var(--font-en); font-weight:700; font-size:11px;" title="${log.record_id || ''}">${cleanRecordId}</code></td>
+                <td style="max-width: 320px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;" title="${cleanSummary}">${cleanSummary}</td>
                 <td>
                     <button type="button" class="btn btn-secondary" onclick="openDiffViewerModal(${log.id})" style="padding: 4px 10px; font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">
                         <i data-lucide="git-compare" style="width:12px;height:12px;"></i> معاينة الفروقات
@@ -3159,6 +3162,38 @@ async function fetchAndRenderAuditLogs() {
         console.error("Audit log error:", err);
         tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--color-critical); padding: 25px;">خطأ: ${err.message}</td></tr>`;
     }
+}
+
+function formatAuditRecordId(tableName, recordId) {
+    if (!recordId || recordId === '-') return '-';
+    if (!recordId.includes('|')) return recordId;
+
+    const parts = recordId.split('|').map(p => p.trim()).filter(Boolean);
+    if (tableName === 'store_sp_raw' || tableName === 'store_sp_maintenance_raw') {
+        const rawFirst = parts[0] || '';
+        const rMatch = rawFirst.match(/(\d{10,})/);
+        const posMatch = recordId.match(/\b(3H\d+|S\d+|[A-Z0-9]{8,10})\b/);
+        
+        let label = rMatch ? `#${rMatch[1]}` : (rawFirst.includes('مجاني') ? 'صرف مجاني' : rawFirst.split('-')[0].trim());
+        const partName = parts[1] || '';
+        const posSerial = posMatch ? ` • ${posMatch[1]}` : '';
+
+        return `${label}${partName ? ` (${partName})` : ''}${posSerial}`;
+    }
+    return parts.slice(0, 2).join(' - ');
+}
+
+function formatAuditSummary(log) {
+    if (!log) return '-';
+    let summary = log.summary || '';
+    if (summary.includes('إضافة سجل جديد بالمعرف:')) {
+        const cleanId = formatAuditRecordId(log.table_name, log.record_id);
+        return `إضافة سجل جديد (${cleanId})`;
+    }
+    if (summary.includes('|')) {
+        summary = summary.split('|')[0].trim();
+    }
+    return summary;
 }
 
 async function openDiffViewerModal(logId) {
@@ -3183,9 +3218,9 @@ async function openDiffViewerModal(logId) {
         let formattedTime = formatDateDDMMYYYY(log.timestamp, true);
 
         document.getElementById('diff-modal-table').textContent = log.table_name;
-        document.getElementById('diff-modal-record-id').textContent = log.record_id || '-';
+        document.getElementById('diff-modal-record-id').textContent = formatAuditRecordId(log.table_name, log.record_id);
         document.getElementById('diff-modal-time').textContent = formattedTime;
-        document.getElementById('diff-modal-summary-text').textContent = log.summary || 'لا يوجد ملخص';
+        document.getElementById('diff-modal-summary-text').textContent = formatAuditSummary(log);
 
         const typeBadge = document.getElementById('diff-modal-type');
         const typeBadgeClass = log.change_type === 'INSERT' ? 'insert' : log.change_type === 'UPDATE' ? 'update' : 'delete';

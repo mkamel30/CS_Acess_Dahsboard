@@ -531,11 +531,12 @@ async function syncTableWithDiff(db, tableName, primaryKey, jsonRecords) {
         if (!existingMap.has(key)) {
             // NEW INSERTION
             insertedCount++;
+            const cleanKeyPreview = key.includes('|') ? (key.split('|')[0] || 'حركة جديدة') : key;
             changeLogs.push({
                 table_name: tableName,
                 record_id: key,
                 change_type: 'INSERT',
-                summary: `إضافة سجل جديد بالمعرف: ${key}`,
+                summary: `إضافة سجل جديد (${cleanKeyPreview})`,
                 old_data: null,
                 new_data: JSON.stringify(item),
                 source: 'MS_ACCESS_SYNC'
@@ -574,11 +575,12 @@ async function syncTableWithDiff(db, tableName, primaryKey, jsonRecords) {
         for (const [key, oldRow] of existingMap.entries()) {
             if (!currentMap.has(key)) {
                 deletedCount++;
+                const cleanKeyPreview = key.includes('|') ? (key.split('|')[0] || 'سجل') : key;
                 changeLogs.push({
                     table_name: tableName,
                     record_id: key,
                     change_type: 'DELETE',
-                    summary: `حذف السجل بالمعرف: ${key} من قاعدة بيانات الآكسيس`,
+                    summary: `حذف السجل (${cleanKeyPreview}) من قاعدة بيانات الآكسيس`,
                     old_data: JSON.stringify(oldRow),
                     new_data: null,
                     source: 'MS_ACCESS_SYNC'
