@@ -59,7 +59,40 @@ async function getVersionInfo() {
 
 async function checkForUpdates() {
     try {
-        // 1. Try Git if available and repository is present
+        const localVersion = await getVersionInfo();
+        const localCommit = (localVersion.commit || '').trim();
+
+        // 1. Fetch latest commit metadata directly from GitHub API (works with or without Git)
+        const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
+        try {
+            const apiRes = await fetchFn('https://api.github.com/repos/mkamel30/CS_Acess_Dahsboard/commits/main', {
+                headers: { 'User-Agent': 'SmartCS-App' }
+            });
+            if (apiRes.ok) {
+                const data = await apiRes.json();
+                const remoteCommit = (data.sha || '').substring(0, 7);
+                const remoteMsg = data.commit?.message || 'تحديث جديد معتمد على GitHub';
+                const remoteDate = data.commit?.committer?.date 
+                    ? new Date(data.commit.committer.date).toLocaleString('ar-EG') 
+                    : new Date().toLocaleDateString('ar-EG');
+
+                if (remoteCommit && remoteCommit !== localCommit) {
+                    return {
+                        has_update: true,
+                        local_commit: localCommit === 'unknown' ? `v${localVersion.version}` : localCommit,
+                        remote_commit: remoteCommit,
+                        remote_message: remoteMsg,
+                        remote_date: remoteDate,
+                        commits_behind: 1,
+                        commits_summary: [remoteMsg]
+                    };
+                }
+            }
+        } catch (apiErr) {
+            console.warn('[UPDATER] GitHub API check fallback to git:', apiErr.message);
+        }
+
+        // 2. Fallback: Check via Git if repository is present
         const isGit = fs.existsSync(path.join(__dirname, '.git'));
         if (isGit) {
             const fetchRes = await runCommand('git fetch --prune origin main');
@@ -68,13 +101,8 @@ async function checkForUpdates() {
                 const remoteHash = (await runCommand('git rev-parse origin/main')).stdout;
 
                 if (localHash && remoteHash && localHash !== remoteHash) {
-                    const commitsBehindRes = await runCommand('git log HEAD..origin/main --oneline');
                     const remoteCommitMsg = await runCommand('git log -1 origin/main --format=%s');
                     const remoteCommitDate = await runCommand('git log -1 origin/main --format=%cd --date=format:"%Y-%m-%d %H:%M"');
-
-                    const commitsList = commitsBehindRes.success && commitsBehindRes.stdout 
-                        ? commitsBehindRes.stdout.split('\n').filter(Boolean) 
-                        : [];
 
                     return {
                         has_update: true,
@@ -82,45 +110,16 @@ async function checkForUpdates() {
                         remote_commit: remoteHash.substring(0, 7),
                         remote_message: remoteCommitMsg.stdout || '-',
                         remote_date: remoteCommitDate.stdout || '-',
-                        commits_behind: commitsList.length || 1,
-                        commits_summary: commitsList
+                        commits_behind: 1,
+                        commits_summary: [remoteCommitMsg.stdout || '-']
                     };
                 }
-
-                return {
-                    has_update: false,
-                    current_commit: localHash ? localHash.substring(0, 7) : 'latest',
-                    message: 'أنت تعمل على أحدث إصدار معتمد من GitHub ✅'
-                };
-            }
-        }
-
-        // 2. Fallback: Query GitHub API directly over HTTPS
-        const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
-        const apiRes = await fetchFn('https://raw.githubusercontent.com/mkamel30/CS_Acess_Dahsboard/main/package.json', {
-            headers: { 'User-Agent': 'SmartCS-Updater' }
-        });
-        if (apiRes.ok) {
-            const remotePkg = await apiRes.json();
-            let localPkg = { version: '4.0.0' };
-            try { localPkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')); } catch(e){}
-            
-            if (remotePkg.version && remotePkg.version !== localPkg.version) {
-                return {
-                    has_update: true,
-                    local_commit: localPkg.version,
-                    remote_commit: 'v' + remotePkg.version,
-                    remote_message: `إصدار جديد متاح على GitHub (v${remotePkg.version})`,
-                    remote_date: new Date().toLocaleDateString('ar-EG'),
-                    commits_behind: 1,
-                    commits_summary: [`ترقية من v${localPkg.version} إلى v${remotePkg.version}`]
-                };
             }
         }
 
         return {
             has_update: false,
-            current_commit: 'latest',
+            current_commit: localCommit,
             message: 'أنت تعمل على أحدث إصدار معتمد من GitHub ✅'
         };
     } catch (err) {
