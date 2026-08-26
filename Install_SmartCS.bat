@@ -96,8 +96,8 @@ if %errorlevel% equ 0 (
         git reset --hard origin/main
     )
 ) else (
-    echo [*] Git not in PATH. Downloading latest application release from GitHub...
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$zip = [System.IO.Path]::Combine($env:TEMP, 'smartcs_latest.zip'); [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://github.com/mkamel30/CS_Acess_Dahsboard/archive/refs/heads/main.zip' -OutFile $zip; Expand-Archive -Path $zip -DestinationPath $env:TEMP\smartcs_extract -Force; Copy-Item -Path $env:TEMP\smartcs_extract\CS_Acess_Dahsboard-main\* -Destination '%TARGET_DIR%' -Recurse -Force; Remove-Item -Path $zip, $env:TEMP\smartcs_extract -Recurse -Force"
+    echo [*] Git not in PATH. Downloading fresh application release from GitHub...
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$ext = Join-Path $env:TEMP 'smartcs_extract'; if (Test-Path $ext) { Remove-Item $ext -Recurse -Force }; $zip = Join-Path $env:TEMP 'smartcs_latest.zip'; if (Test-Path $zip) { Remove-Item $zip -Force }; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://github.com/mkamel30/CS_Acess_Dahsboard/archive/refs/heads/main.zip' -OutFile $zip; Expand-Archive -Path $zip -DestinationPath $ext -Force; Get-ChildItem -Path (Join-Path $ext 'CS_Acess_Dahsboard-main') | Copy-Item -Destination '%TARGET_DIR%' -Recurse -Force; Remove-Item $zip, $ext -Recurse -Force"
     echo [OK] Files downloaded and updated to latest version!
 )
 
