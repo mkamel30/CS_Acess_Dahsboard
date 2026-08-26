@@ -4136,6 +4136,19 @@ function initLiveSyncStream() {
         };
 
         sse.addEventListener('sync_completed', (e) => handleSyncEvent(e.data));
+        sse.addEventListener('app_updated', (e) => {
+            try {
+                const data = JSON.parse(e.data);
+                if (typeof showLiveSyncToast === 'function') {
+                    showLiveSyncToast({
+                        title: '🚀 تحديث منظومة SmartCS',
+                        summary: data.message || 'تم تحديث البرنامج بنجاح من GitHub! جاري إعادة التحميل...',
+                        sync_type: 'SYSTEM_UPDATE'
+                    });
+                }
+                setTimeout(() => window.location.reload(), 2000);
+            } catch (err) {}
+        });
         sse.onmessage = (e) => handleSyncEvent(e.data);
 
         sse.onerror = () => {
@@ -5192,6 +5205,7 @@ function switchSettingsSubtab(subtabId) {
         'settings-db': 'pane-settings-db',
         'settings-fonts': 'pane-settings-fonts',
         'settings-sync-logs': 'pane-settings-sync-logs',
+        'settings-updates': 'pane-settings-updates',
         'settings-diagnostics': 'pane-settings-diagnostics'
     };
 
@@ -5207,11 +5221,13 @@ function switchSettingsSubtab(subtabId) {
         }
     });
 
-    // If switching to logs, fetch fresh data
+    // If switching to subtab, fetch fresh data
     if (subtabId === 'settings-sync-logs') {
         loadSyncTelemetryLogs();
     } else if (subtabId === 'settings-fonts') {
         renderFontSelectionCards();
+    } else if (subtabId === 'settings-updates') {
+        loadSystemVersionInfo();
     } else if (subtabId === 'settings-diagnostics') {
         loadDiagnosticsDashboard();
     }
@@ -5219,6 +5235,139 @@ function switchSettingsSubtab(subtabId) {
     refreshIcons();
 }
 window.switchSettingsSubtab = switchSettingsSubtab;
+
+async function loadSystemVersionInfo() {
+    try {
+        const res = await fetch('/api/system/version');
+        const data = await res.json();
+        if (data.success) {
+            const verEl = document.getElementById('settings-app-version');
+            const commitEl = document.getElementById('settings-app-commit');
+            const dateEl = document.getElementById('settings-app-date');
+            const branchEl = document.getElementById('settings-app-branch');
+            const msgEl = document.getElementById('settings-app-msg');
+
+            if (verEl) verEl.textContent = `v${data.version}`;
+            if (commitEl) commitEl.textContent = `#${data.commit}`;
+            if (dateEl) dateEl.textContent = data.date || '-';
+            if (branchEl) branchEl.textContent = data.branch || 'main';
+            if (msgEl) msgEl.textContent = data.message || '-';
+        }
+    } catch (err) {
+        console.warn('Error loading system version:', err);
+    }
+}
+window.loadSystemVersionInfo = loadSystemVersionInfo;
+
+async function checkGitHubUpdates(manual = false) {
+    const spinIcon = document.getElementById('icon-check-updates-spin');
+    const resultMsg = document.getElementById('settings-update-result-msg');
+    const applyBtn = document.getElementById('btn-apply-github-update');
+    const badgeEl = document.getElementById('settings-git-status-badge');
+
+    if (spinIcon) spinIcon.classList.add('spin-animation');
+    if (resultMsg) {
+        resultMsg.style.display = 'block';
+        resultMsg.innerHTML = '<span style="color:var(--md-sys-color-primary);"><i data-lucide="loader-2" class="spin-animation" style="width:12px;height:12px;vertical-align:middle;"></i> جاري الاتصال بمستودع GitHub للتحقق من التحديثات...</span>';
+    }
+    refreshIcons();
+
+    try {
+        const res = await fetch('/api/system/check-updates');
+        const data = await res.json();
+
+        if (spinIcon) spinIcon.classList.remove('spin-animation');
+
+        if (!data.success) {
+            if (resultMsg) resultMsg.innerHTML = `<span style="color:#ef4444;"><i data-lucide="alert-circle" style="width:12px;height:12px;vertical-align:middle;"></i> ${data.error || 'تعذر التحقق من التحديثات'}</span>`;
+            return;
+        }
+
+        if (data.has_update) {
+            if (badgeEl) {
+                badgeEl.className = 'badge warning';
+                badgeEl.innerHTML = `<i data-lucide="download" style="width:12px;height:12px;vertical-align:middle;"></i> يتوفر تحديث جديد (#${data.remote_commit})`;
+            }
+            if (applyBtn) applyBtn.style.display = 'inline-flex';
+            if (resultMsg) {
+                resultMsg.innerHTML = `
+                    <div style="padding:12px; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3); border-radius:8px;">
+                        <strong style="color:#10b981; display:block; margin-bottom:4px;">🌟 يوجد تحديث جديد متاح على GitHub!</strong>
+                        <div style="font-size:11.5px; color:var(--text-primary);">
+                            <span>الكوميت الأخير: <code style="font-family:var(--font-en); font-weight:bold;">#${data.remote_commit}</code></span> | 
+                            <span>التاريخ: ${data.remote_date}</span>
+                        </div>
+                        <div style="font-size:11px; color:var(--text-secondary); margin-top:3px;">
+                            ${data.remote_message}
+                        </div>
+                    </div>
+                `;
+            }
+        } else {
+            if (badgeEl) {
+                badgeEl.className = 'badge inmerchant';
+                badgeEl.innerHTML = `<i data-lucide="check-circle" style="width:12px; height:12px; vertical-align:middle;"></i> الإصدار الأحدث ✅`;
+            }
+            if (applyBtn) applyBtn.style.display = 'none';
+            if (resultMsg) {
+                resultMsg.innerHTML = `<span style="color:#10b981; font-weight:bold;"><i data-lucide="check" style="width:13px;height:13px;vertical-align:middle;"></i> ${data.message || 'أنت تعمل على أحدث إصدار معتمد من GitHub ✅'}</span>`;
+            }
+        }
+    } catch (err) {
+        if (spinIcon) spinIcon.classList.remove('spin-animation');
+        if (resultMsg) resultMsg.innerHTML = `<span style="color:#ef4444;"><i data-lucide="alert-circle" style="width:12px;height:12px;vertical-align:middle;"></i> خطأ بالاتصال: ${err.message}</span>`;
+    }
+
+    refreshIcons();
+}
+window.checkGitHubUpdates = checkGitHubUpdates;
+
+async function applyGitHubUpdate() {
+    const applyBtn = document.getElementById('btn-apply-github-update');
+    const resultMsg = document.getElementById('settings-update-result-msg');
+
+    if (!confirm('هل تريد تطبيق التحديث الآن من GitHub؟ سيتم سحب أحدث كود وإعادة تشغيل المنظومة تلقائياً.')) return;
+
+    if (applyBtn) {
+        applyBtn.disabled = true;
+        applyBtn.innerHTML = '<i data-lucide="loader-2" class="spin-animation"></i> <span>جاري سحب التحديث وتثبيته...</span>';
+    }
+    if (resultMsg) {
+        resultMsg.innerHTML = '<span style="color:var(--color-primary);"><i data-lucide="loader-2" class="spin-animation"></i> جاري تحديث الملفات وتثبيت الحزم... يرجى الانتظار</span>';
+    }
+    refreshIcons();
+
+    try {
+        const res = await fetch('/api/system/auto-update', { method: 'POST' });
+        const data = await res.json();
+
+        if (data.success) {
+            if (resultMsg) {
+                resultMsg.innerHTML = '<span style="color:#10b981; font-weight:bold;"><i data-lucide="check-circle"></i> تم التحديث بنجاح! جاري إعادة تحميل الصفحة...</span>';
+            }
+            setTimeout(() => {
+                window.location.reload();
+            }, 2500);
+        } else {
+            if (applyBtn) {
+                applyBtn.disabled = false;
+                applyBtn.innerHTML = '<i data-lucide="download-cloud"></i> <span>إعادة المحاولة 🚀</span>';
+            }
+            if (resultMsg) {
+                resultMsg.innerHTML = `<span style="color:#ef4444;"><i data-lucide="alert-circle"></i> فشل التحديث: ${data.error}</span>`;
+            }
+        }
+    } catch (err) {
+        if (resultMsg) {
+            resultMsg.innerHTML = '<span style="color:#10b981; font-weight:bold;"><i data-lucide="refresh-cw" class="spin-animation"></i> تم إرسال أمر التحديث! جاري إعادة إقلاع السيرفر...</span>';
+        }
+        setTimeout(() => {
+            window.location.reload();
+        }, 3000);
+    }
+    refreshIcons();
+}
+window.applyGitHubUpdate = applyGitHubUpdate;
 
 async function loadSyncTelemetryLogs() {
     const tableBody = document.getElementById('sync-telemetry-table-body');

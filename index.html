@@ -2164,6 +2164,9 @@
                         <button type="button" class="btn btn-secondary settings-subtab-btn" data-subtab="settings-sync-logs" id="btn-subtab-settings-sync-logs" onclick="switchSettingsSubtab('settings-sync-logs')">
                             <i data-lucide="activity"></i> <span>سجل (لوج) المزامنة اللوكال والـ VPS 📜</span>
                         </button>
+                        <button type="button" class="btn btn-secondary settings-subtab-btn" data-subtab="settings-updates" id="btn-subtab-settings-updates" onclick="switchSettingsSubtab('settings-updates')" style="background:rgba(56, 189, 248, 0.08); border-color:rgba(56, 189, 248, 0.3); color:#38bdf8;">
+                            <i data-lucide="git-branch"></i> <span>التحديث التلقائي وإصدار GitHub 🚀</span>
+                        </button>
                         <button type="button" class="btn btn-secondary settings-subtab-btn" data-subtab="settings-diagnostics" id="btn-subtab-settings-diagnostics" onclick="switchSettingsSubtab('settings-diagnostics')" style="background:rgba(239, 68, 68, 0.08); border-color:rgba(239, 68, 68, 0.3); color:#f87171;">
                             <i data-lucide="stethoscope"></i> <span>مركز التشخيص وتتبع الأخطاء والتطابق 🩺⚡</span>
                         </button>
@@ -2581,6 +2584,98 @@
                                         <tr><td colspan="7" style="text-align:center; padding:30px; color:#64748b;"><i data-lucide="loader-2" class="spin-animation"></i> جاري جلب سجل الأخطاء...</td></tr>
                                     </tbody>
                                 </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ======================================================== -->
+                    <!-- SUBTAB 5: GITHUB AUTO-UPDATES & VERSION                  -->
+                    <!-- ======================================================== -->
+                    <div class="settings-subtab-pane" id="pane-settings-updates" style="display:none;">
+                        <div class="responsive-2col-grid equal">
+                            <!-- Version Card & Controls -->
+                            <div class="glass-panel">
+                                <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
+                                    <h3><i data-lucide="git-branch"></i> إصدار المنظومة والتحديث التلقائي</h3>
+                                    <span class="badge inmerchant" id="settings-git-status-badge" style="font-size:11px;">
+                                        <i data-lucide="check-circle" style="width:12px; height:12px; vertical-align:middle;"></i> متصل بـ GitHub
+                                    </span>
+                                </div>
+                                <div class="panel-body">
+                                    <!-- Current Version Box -->
+                                    <div style="margin-bottom:16px; padding:16px; background:rgba(56,189,248,0.08); border:1px solid rgba(56,189,248,0.25); border-radius:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                                        <div>
+                                            <span style="font-size:11px; color:var(--text-muted); display:block;">إصدار التطبيق (Version)</span>
+                                            <strong id="settings-app-version" style="font-size:20px; font-family:var(--font-en); color:var(--md-sys-color-primary);">v4.0.0</strong>
+                                        </div>
+                                        <div>
+                                            <span style="font-size:11px; color:var(--text-muted); display:block;">رقم الكوميت (Commit)</span>
+                                            <code id="settings-app-commit" style="font-size:14px; font-family:var(--font-en); font-weight:800; color:#10b981; background:rgba(16,185,129,0.15); padding:2px 8px; border-radius:6px;">-</code>
+                                        </div>
+                                        <div>
+                                            <span style="font-size:11px; color:var(--text-muted); display:block;">تاريخ آخر تعديل</span>
+                                            <span id="settings-app-date" style="font-size:12px; font-family:var(--font-en); font-weight:700; color:var(--text-primary);">-</span>
+                                        </div>
+                                    </div>
+
+                                    <div style="display:flex; flex-direction:column; gap:12px; font-size:13px; margin-bottom:16px;">
+                                        <div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border-color); padding-bottom:8px;">
+                                            <span style="color:var(--text-secondary);">مستودع GitHub المربوط:</span>
+                                            <a href="https://github.com/mkamel30/CS_Acess_Dahsboard" target="_blank" style="font-family:var(--font-en); font-weight:700; color:var(--md-sys-color-primary); text-decoration:underline;">mkamel30/CS_Acess_Dahsboard</a>
+                                        </div>
+                                        <div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border-color); padding-bottom:8px;">
+                                            <span style="color:var(--text-secondary);">فرع المزامنة (Branch):</span>
+                                            <strong style="color:var(--text-primary); font-family:var(--font-en);" id="settings-app-branch">main</strong>
+                                        </div>
+                                        <div style="display:flex; justify-content:space-between; border-bottom:1px solid var(--border-color); padding-bottom:8px;">
+                                            <span style="color:var(--text-secondary);">رسالة آخر تحديث:</span>
+                                            <span style="color:var(--text-primary); font-size:12px; max-width:280px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;" id="settings-app-msg">-</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Update Action Buttons -->
+                                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                                        <button type="button" class="btn btn-primary" id="btn-check-github-updates" onclick="checkGitHubUpdates(true)" style="padding:10px 18px; font-size:12px; display:flex; align-items:center; gap:6px;">
+                                            <i data-lucide="refresh-cw" id="icon-check-updates-spin"></i>
+                                            <span>فحص وجود تحديثات من GitHub</span>
+                                        </button>
+                                        <button type="button" class="btn btn-secondary" id="btn-apply-github-update" onclick="applyGitHubUpdate()" style="padding:10px 18px; font-size:12px; display:none; align-items:center; gap:6px; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; box-shadow:0 2px 8px rgba(16,185,129,0.3);">
+                                            <i data-lucide="download-cloud"></i>
+                                            <span>تثبيت التحديث الآن وإعادة التشغيل 🚀</span>
+                                        </button>
+                                    </div>
+                                    <div id="settings-update-result-msg" style="margin-top:12px; font-size:12px; display:none;"></div>
+                                </div>
+                            </div>
+
+                            <!-- Packaging & Setup Instructions for other PCs -->
+                            <div class="glass-panel">
+                                <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
+                                    <h3><i data-lucide="package"></i> تشغيل البرنامج على أي جهاز آخر (Packaging)</h3>
+                                    <span class="badge instore" style="font-size:11px;">تثبيت فوري 📦</span>
+                                </div>
+                                <div class="panel-body">
+                                    <p style="font-size:12px; color:var(--text-secondary); line-height:1.6; margin-top:0;">
+                                        تم تزويد المنظومة بملفات تشغيل وتثبيت ذكية لتشغيلها على أي جهاز كمبيوتر بالفرع أو المنزل بسهولة فائقة:
+                                    </p>
+
+                                    <div style="display:flex; flex-direction:column; gap:12px; font-size:12px;">
+                                        <div style="padding:12px; background:var(--md-sys-color-surface-container-low); border:1px solid var(--md-sys-color-outline-variant); border-radius:10px;">
+                                            <strong style="color:var(--md-sys-color-primary); display:block; margin-bottom:4px;">1. تشغيل البرنامج اليومي بنقرة واحدة (Run):</strong>
+                                            <span style="color:var(--text-secondary);">قم بتشغيل ملف <code style="font-family:var(--font-en); font-weight:700; color:#38bdf8;">run_smartcs.bat</code>. سيقوم تلقائياً بفحص وسحب أي تحديثات جديدة من GitHub، ثم تشغيل السيرفر وفتح المتصفح مباشرة.</span>
+                                        </div>
+
+                                        <div style="padding:12px; background:var(--md-sys-color-surface-container-low); border:1px solid var(--md-sys-color-outline-variant); border-radius:10px;">
+                                            <strong style="color:#10b981; display:block; margin-bottom:4px;">2. تثبيت البرنامج على جهاز كمبيوتر جديد (Setup):</strong>
+                                            <span style="color:var(--text-secondary);">انسخ مجلد المشروع إلى الجهاز الجديد وشغّل ملف <code style="font-family:var(--font-en); font-weight:700; color:#10b981;">setup_smartcs.bat</code> لإنشاء اختصار تلقائي على سطح المكتب وتثبيت كافة الحزم.</span>
+                                        </div>
+
+                                        <div style="padding:12px; background:var(--md-sys-color-surface-container-low); border:1px solid var(--md-sys-color-outline-variant); border-radius:10px;">
+                                            <strong style="color:#f59e0b; display:block; margin-bottom:4px;">3. التحديث التلقائي التام (Auto-Sync):</strong>
+                                            <span style="color:var(--text-secondary);">بمجرد أن تقوم برفع أي تعديل أو إصلاح إلى مستودع GitHub، ستستقبل كافة الأجهزة المربوطة التحديث تلقائياً وبشكل فوري تماماً مثل سيرفر الـ VPS.</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>

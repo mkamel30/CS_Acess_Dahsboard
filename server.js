@@ -3886,6 +3886,52 @@ app.get('/api/tunnel/status', (req, res) => {
     });
 });
 
+// ==========================================
+// 4.1 SYSTEM VERSION & GITHUB AUTO-UPDATER
+// ==========================================
+const updater = require('./updater');
+
+app.get('/api/system/version', async (req, res) => {
+    try {
+        const info = await updater.getVersionInfo();
+        res.json({ success: true, ...info });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.get('/api/system/check-updates', async (req, res) => {
+    try {
+        const updateStatus = await updater.checkForUpdates();
+        res.json({ success: true, ...updateStatus });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.post('/api/system/auto-update', async (req, res) => {
+    try {
+        const result = await updater.performUpdate();
+        if (result.success) {
+            broadcastSSE('app_updated', {
+                message: 'تم تحديث المنظومة بنجاح إلى أحدث إصدار من GitHub!',
+                version: result.new_version
+            });
+
+            res.json({ success: true, ...result });
+
+            setTimeout(() => {
+                console.log('[AUTO-UPDATER] Restarting application process after update...');
+                process.exit(0);
+            }, 1000);
+        } else {
+            res.status(500).json(result);
+        }
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 app.post('/api/tunnel/start', requireAdmin, async (req, res) => {
     res.json({ success: true, running: false, message: 'Direct Oracle Cloud VPS active' });
 });
