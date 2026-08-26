@@ -96,12 +96,9 @@ if %errorlevel% equ 0 (
         git reset --hard origin/main
     )
 ) else (
-    if not exist "%TARGET_DIR%\server.js" (
-        echo [*] Git unavailable. Downloading repository zip archive via PowerShell...
-        powershell -NoProfile -ExecutionPolicy Bypass -Command "$zip = [System.IO.Path]::Combine($env:TEMP, 'smartcs_latest.zip'); [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://github.com/mkamel30/CS_Acess_Dahsboard/archive/refs/heads/main.zip' -OutFile $zip; Expand-Archive -Path $zip -DestinationPath $env:TEMP\smartcs_extract -Force; Copy-Item -Path $env:TEMP\smartcs_extract\CS_Acess_Dahsboard-main\* -Destination '%TARGET_DIR%' -Recurse -Force; Remove-Item -Path $zip, $env:TEMP\smartcs_extract -Recurse -Force"
-    ) else (
-        echo [*] Application files already present in current folder.
-    )
+    echo [*] Git not in PATH. Downloading latest application release from GitHub...
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$zip = [System.IO.Path]::Combine($env:TEMP, 'smartcs_latest.zip'); [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://github.com/mkamel30/CS_Acess_Dahsboard/archive/refs/heads/main.zip' -OutFile $zip; Expand-Archive -Path $zip -DestinationPath $env:TEMP\smartcs_extract -Force; Copy-Item -Path $env:TEMP\smartcs_extract\CS_Acess_Dahsboard-main\* -Destination '%TARGET_DIR%' -Recurse -Force; Remove-Item -Path $zip, $env:TEMP\smartcs_extract -Recurse -Force"
+    echo [OK] Files downloaded and updated to latest version!
 )
 
 :: -------------------------------------------------------------------------
