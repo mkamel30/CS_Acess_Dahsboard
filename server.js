@@ -3918,10 +3918,12 @@ app.post('/api/system/auto-update', async (req, res) => {
     try {
         const result = await updater.performUpdate();
         if (result.success) {
-            broadcastSSE('app_updated', {
-                message: 'تم تحديث المنظومة بنجاح إلى أحدث إصدار من GitHub!',
-                version: result.new_version
-            });
+            if (typeof broadcastSseEvent === 'function') {
+                broadcastSseEvent('app_updated', {
+                    message: 'تم تحديث المنظومة بنجاح إلى أحدث إصدار من GitHub!',
+                    version: result.new_version
+                });
+            }
 
             res.json({ success: true, ...result });
 
