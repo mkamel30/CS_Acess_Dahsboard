@@ -99,6 +99,14 @@ echo.
 echo [*] Creating Desktop Shortcut (SmartCS Dashboard)...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $desk = [Environment]::GetFolderPath('Desktop'); $s = $ws.CreateShortcut([System.IO.Path]::Combine($desk, 'SmartCS Dashboard.lnk')); $s.TargetPath = '%TARGET_DIR%\run_smartcs.bat'; $s.WorkingDirectory = '%TARGET_DIR%'; $s.WindowStyle = 1; $s.Description = 'SmartCS Customer Support Operations Dashboard'; $s.Save()"
 
+:: -------------------------------------------------------------------------
+:: 7. ENABLE AUTOMATIC STARTUP ON WINDOWS BOOT
+:: -------------------------------------------------------------------------
+echo [*] Enabling Automatic Launch on Windows Boot (Startup)...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $startup = [Environment]::GetFolderPath('Startup'); $auto = $ws.CreateShortcut([System.IO.Path]::Combine($startup, 'SmartCS AutoStart.lnk')); $auto.TargetPath = 'wscript.exe'; $auto.Arguments = '\"%TARGET_DIR%\start_background.vbs\"'; $auto.WorkingDirectory = '%TARGET_DIR%'; $auto.WindowStyle = 7; $auto.Description = 'SmartCS Automated Background Launch on Boot'; $auto.Save()"
+
+echo [OK] Windows Auto-Boot Startup configured successfully!
+
 echo.
 echo =======================================================================
 echo    🎉 Installation Complete! Launching SmartCS Dashboard...
