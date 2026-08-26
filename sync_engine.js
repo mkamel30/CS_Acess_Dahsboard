@@ -404,7 +404,6 @@ async function initSyncDatabase(db) {
             OldType TEXT,
             NewType TEXT,
             new_type TEXT,
-            Notes TEXT,
             notes TEXT
         );
     `);

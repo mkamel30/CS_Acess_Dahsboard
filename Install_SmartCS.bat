@@ -137,7 +137,7 @@ echo [OK] Shortcuts and Auto-Boot configured successfully!
 
 echo.
 echo =======================================================================
-echo    🎉 Installation Completed Successfully!
+echo    Installation Completed Successfully!
 echo =======================================================================
 echo.
 echo  [+] SmartCS Dashboard is starting in your browser...
