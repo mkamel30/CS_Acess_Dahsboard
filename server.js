@@ -731,17 +731,22 @@ app.get('/api/notifications/alerts', async (req, res) => {
         `);
 
         // 3. Installment Contracts & Plans
-        const dueInstallments = await allQuery(`
-            SELECT i.id, i.pos as device_serial, i.installments as plan_months, 
-                   i.monthlyinstallmentprice, i.finalunitprice, i.unitprice,
-                   m.name as merchant_name, m.merchant_code, m.government
-            FROM installments_raw i
-            LEFT JOIN devices d ON d.serial = i.pos
-            LEFT JOIN merchant_assets ma ON ma.device_id = d.id
-            LEFT JOIN merchants m ON m.merchant_code = ma.merchant_code
-            ORDER BY i.id ASC
-            LIMIT 50
-        `);
+        let dueInstallments = [];
+        try {
+            dueInstallments = await allQuery(`
+                SELECT i.id, i.pos as device_serial, i.installments as plan_months, 
+                       i.monthlyinstallmentprice, i.finalunitprice, i.unitprice,
+                       m.name as merchant_name, m.merchant_code, m.government
+                FROM installments_raw i
+                LEFT JOIN devices d ON d.serial = i.pos
+                LEFT JOIN merchant_assets ma ON ma.device_id = d.id
+                LEFT JOIN merchants m ON m.merchant_code = ma.merchant_code
+                ORDER BY i.id ASC
+                LIMIT 50
+            `);
+        } catch(e) {
+            dueInstallments = [];
+        }
 
         // 4. Faulty Unassigned Devices
         const unassignedFaultyDevices = await allQuery(`

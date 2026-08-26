@@ -24,8 +24,9 @@ function readConfigSafely() {
 
 function getAccessFilePath() {
     const config = readConfigSafely();
-    if (config && config.accessFilePath && typeof config.accessFilePath === 'string') {
-        return config.accessFilePath.trim();
+    const p = config.accessFilePath || config.accessDbPath || config.dbPath;
+    if (p && typeof p === 'string' && p.trim()) {
+        return p.trim();
     }
     return DEFAULT_ACCESS_FILE_PATH;
 }
@@ -428,6 +429,17 @@ async function initSyncDatabase(db) {
             type TEXT,
             amount REAL,
             notes TEXT
+        );
+    `);
+
+    await dbRun(db, `
+        CREATE TABLE IF NOT EXISTS installments_raw (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pos TEXT,
+            installments TEXT,
+            monthlyinstallmentprice REAL,
+            finalunitprice REAL,
+            unitprice REAL
         );
     `);
 
