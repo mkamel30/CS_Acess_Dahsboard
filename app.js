@@ -1207,8 +1207,14 @@ function renderWarehouseDevicesTable() {
                 <td><strong style="color:var(--md-sys-color-on-surface); font-family:var(--font-en);">${d.model}</strong></td>
                 <td><span class="badge ${badgeClass}">${badgeText}</span></td>
                 <td style="max-width:280px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; font-size:12px; color:var(--md-sys-color-on-surface-variant);">
-                    ${d.notes ? `<span style="font-weight:700; color:var(--md-sys-color-primary);">${d.notes}</span> - ` : ''}
-                    ${d.faulty_details}
+                    ${(() => {
+                        const n = String(d.notes || '').trim();
+                        const f = String(d.faulty_details || '').trim();
+                        if (n && f && n !== f) return `<span style="font-weight:700; color:var(--md-sys-color-primary);">${n}</span> - ${f}`;
+                        if (n) return `<span style="font-weight:700; color:var(--md-sys-color-primary);">${n}</span>`;
+                        if (f) return f;
+                        return '<span style="color:var(--text-muted);">-</span>';
+                    })()}
                 </td>
                 <td>
                     <button type="button" class="btn btn-secondary" onclick="openAssetTimeline('${d.serial}')" style="padding:4px 10px; font-size:11px; border-radius:var(--md-shape-corner-full); display:flex; align-items:center; gap:4px;">
@@ -3839,11 +3845,11 @@ async function openEODDayDetails(rawDate, isoDate) {
         const tbParts = document.getElementById('eod-table-body-parts');
         if (data.spare_parts && data.spare_parts.length > 0) {
             tbParts.innerHTML = data.spare_parts.map(p => {
-                let statusBadge = '<span class="badge instore">مجاني</span>';
+                let statusBadge = '<span class="badge" style="background:rgba(6,182,212,0.15); color:#06b6d4; font-weight:700;"><i data-lucide="shield-check" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> صرف مجاني</span>';
                 if (p.payment_status === 'DEFERRED') {
-                    statusBadge = '<span class="badge" style="background:rgba(239,68,68,0.2); color:#f87171; border:1px solid #ef4444; font-weight:bold;">تحصيلات مؤجلة ⚠️</span>';
+                    statusBadge = '<span class="badge" style="background:rgba(239,68,68,0.15); color:#ef4444; font-weight:700;"><i data-lucide="clock" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> تحصيل مؤجل ⚠️</span>';
                 } else if (p.payment_status === 'PAID') {
-                    statusBadge = '<span class="badge inmerchant">مسدد بإيصال ✅</span>';
+                    statusBadge = '<span class="badge" style="background:rgba(16,185,129,0.15); color:#10b981; font-weight:700;"><i data-lucide="check-circle" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> مسدد بمقابل ✅</span>';
                 }
 
                 return `
@@ -5656,7 +5662,7 @@ function renderCustomerProfileView(data) {
     document.getElementById('cust-profile-name').textContent = customer.name;
     document.getElementById('cust-profile-code-badge').textContent = `#${customer.merchant_code}`;
     document.getElementById('cust-profile-gov-badge').textContent = customer.government || 'الإدارة غير محددة';
-    document.getElementById('cust-profile-contact-person').textContent = customer.contact_person ? `المسؤول: ${customer.contact_person}` : `كود المخبز: ${customer.merchant_code}`;
+    document.getElementById('cust-profile-contact-person').textContent = customer.contact_person ? `المسؤول: ${customer.contact_person}` : 'التاجر / صاحب المخبز';
 
     // 2. Metadata Grid (Clean 4 Core Fields)
     document.getElementById('cust-profile-nid').textContent = customer.national_id || '-';
@@ -5895,7 +5901,23 @@ function renderDeviceDeepdiveContent(data) {
     if (maintenance.length === 0) {
         maintBody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:35px; color:var(--text-muted);">لا توجد صيانات مسجلة لهذه الماكينة بالفرع</td></tr>`;
     } else {
-        maintBody.innerHTML = maintenance.map((m, idx) => `
+        maintBody.innerHTML = maintenance.map((m, idx) => {
+            let feeBadge = '';
+            if (m.has_spare_part && m.spare_part) {
+                if (m.spare_part.payment_status === 'PAID') {
+                    feeBadge = `<span class="badge inmerchant" style="font-size:11px; font-weight:700;"><i data-lucide="check-circle" style="width:11px;height:11px;vertical-align:middle;margin-left:3px;"></i> مسدد (${m.spare_part.receipt_number ? `#${m.spare_part.receipt_number}` : ''}${m.spare_part.payment_channel ? ` - ${m.spare_part.payment_channel}` : ''})</span>`;
+                } else if (m.spare_part.payment_status === 'DEFERRED') {
+                    feeBadge = `<span class="badge" style="background:rgba(239,68,68,0.15); color:#ef4444; font-size:11px; font-weight:700;"><i data-lucide="clock" style="width:11px;height:11px;vertical-align:middle;margin-left:3px;"></i> مؤجل</span>`;
+                } else {
+                    feeBadge = `<span class="badge" style="background:rgba(6,182,212,0.15); color:#06b6d4; font-size:11px; font-weight:700;"><i data-lucide="shield-check" style="width:11px;height:11px;vertical-align:middle;margin-left:3px;"></i> مجاني</span>`;
+                }
+            } else if (m.is_initial_maintenance) {
+                feeBadge = `<span class="badge" style="background:rgba(14,165,233,0.15); color:#0284c7; font-size:11px; font-weight:700;">صيانة أولية</span>`;
+            } else {
+                feeBadge = `<span class="badge" style="background:rgba(100,116,139,0.15); color:#64748b; font-size:11px; font-weight:700;">صيانة فرع</span>`;
+            }
+
+            return `
             <tr>
                 <td style="font-family:var(--font-en); font-weight:700; color:var(--text-muted);">${idx + 1}</td>
                 <td>${formatDateTimeCell(m.entry_datetime)}</td>
@@ -5903,13 +5925,10 @@ function renderDeviceDeepdiveContent(data) {
                 <td><strong style="color:var(--md-sys-color-primary); font-size:12px;">${m.technician}</strong></td>
                 <td style="max-width:200px; word-break:break-word; font-size:12px;">${m.complaint}</td>
                 <td style="max-width:220px; word-break:break-word; font-size:12px; color:var(--md-sys-color-on-surface);">${m.action_taken}</td>
-                <td>
-                    <span class="badge ${m.fees_type === 'مجاني' ? 'inmerchant' : 'warning'}" style="font-size:11px; font-weight:700;">
-                        ${m.fees_type} ${m.fees_amount > 0 ? `(${Number(m.fees_amount).toLocaleString('ar-EG')} جم)` : ''}
-                    </span>
-                </td>
+                <td>${feeBadge}</td>
             </tr>
-        `).join('');
+        `;
+        }).join('');
     }
 
     // TAB 2: Replacements & Swaps (from temp_transfer)
@@ -5921,15 +5940,9 @@ function renderDeviceDeepdiveContent(data) {
             <tr>
                 <td style="font-family:var(--font-en); font-weight:700; color:var(--text-muted);">${idx + 1}</td>
                 <td>${formatDateTimeCell(r.date)}</td>
-                <td>
-                    <strong style="font-family:var(--font-en); color:#ef4444; font-size:13px;">${r.old_serial}</strong>
-                    ${r.old_type && r.old_type !== '-' ? `<span style="display:block; font-size:10px; color:var(--text-muted);">${r.old_type}</span>` : ''}
-                </td>
-                <td>
-                    <strong style="font-family:var(--font-en); color:#10b981; font-size:13px;">${r.new_serial}</strong>
-                    ${r.new_type && r.new_type !== '-' ? `<span style="display:block; font-size:10px; color:var(--text-muted);">${r.new_type}</span>` : ''}
-                </td>
-                <td><span class="badge inmerchant" style="font-size:11px; font-weight:700;">${r.new_type || r.old_type || 'PAX - S90'}</span></td>
+                <td><strong style="font-family:var(--font-en); color:#ef4444; font-size:13px;">${r.old_serial}</strong></td>
+                <td><strong style="font-family:var(--font-en); color:#10b981; font-size:13px;">${r.new_serial}</strong></td>
+                <td><span class="badge inmerchant" style="font-size:11px; font-weight:700;">${(r.old_type && r.new_type && r.old_type !== r.new_type) ? `${r.old_type} ⬅️ ${r.new_type}` : (r.new_type || r.old_type || 'PAX - S90')}</span></td>
                 <td><strong style="font-size:12px; color:var(--md-sys-color-primary);">${r.technician || 'فني الصيانة'}</strong></td>
                 <td style="font-size:11px; color:var(--md-sys-color-on-surface); max-width:220px; word-break:break-word;">${r.notes || '-'}</td>
             </tr>
@@ -5944,15 +5957,15 @@ function renderDeviceDeepdiveContent(data) {
         spBody.innerHTML = spare_parts.map((sp, idx) => {
             const hasReceipt = sp.receipt_number && sp.receipt_number !== '-' && !sp.receipt_number.includes('مجاني');
             const receiptHtml = hasReceipt
-                ? `<span class="badge inmerchant" style="font-family:var(--font-en); font-weight:800; font-size:11px; padding:2px 8px; border:1px solid rgba(56,189,248,0.4);"><i data-lucide="receipt" style="width:11px; height:11px; vertical-align:middle; margin-left:3px;"></i>${sp.receipt_number}</span>`
-                : `<span style="font-size:11px; color:var(--text-muted);">${sp.receipt_number}</span>`;
+                ? `<a href="javascript:void(0)" onclick="openPrintMemo('receipt', '${sp.receipt_number}')" class="badge inmerchant" style="font-family:var(--font-en); font-weight:800; font-size:11px; padding:2px 8px; border:1px solid rgba(56,189,248,0.4); text-decoration:underline;" title="انقر لطباعة إيصال الإيداع"><i data-lucide="receipt" style="width:11px; height:11px; vertical-align:middle; margin-left:3px;"></i>#${sp.receipt_number}</a>`
+                : `<span style="font-size:11px; color:var(--text-muted);">-</span>`;
 
             const paidColor = sp.paid_amount > 0 ? '#10b981' : 'var(--text-muted)';
             const statusBadge = sp.is_free
-                ? `<span class="badge inmerchant" style="font-size:11px; font-weight:700;">${sp.payment_status_label}</span>`
-                : (sp.payment_status_label.includes('مؤجل')
-                    ? `<span class="badge" style="background:rgba(245,158,11,0.15); color:#f59e0b; font-size:11px; font-weight:700;">${sp.payment_status_label}</span>`
-                    : `<span class="badge" style="background:rgba(16,185,129,0.15); color:#10b981; font-size:11px; font-weight:700;">${sp.payment_status_label}</span>`);
+                ? `<span class="badge" style="background:rgba(6,182,212,0.15); color:#06b6d4; font-size:11px; font-weight:700;"><i data-lucide="shield-check" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> صرف مجاني</span>`
+                : (String(sp.payment_status_label || '').includes('مؤجل')
+                    ? `<span class="badge" style="background:rgba(239,68,68,0.15); color:#ef4444; font-size:11px; font-weight:700;"><i data-lucide="clock" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> تحصيل مؤجل ⚠️</span>`
+                    : `<span class="badge" style="background:rgba(16,185,129,0.15); color:#10b981; font-size:11px; font-weight:700;"><i data-lucide="check-circle" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> مسدد بمقابل${sp.payment_channel && sp.payment_channel !== '-' ? ` (${sp.payment_channel})` : ''}</span>`);
 
             return `
             <tr>

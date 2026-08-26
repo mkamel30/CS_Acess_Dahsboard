@@ -3881,7 +3881,7 @@ app.get('/api/tunnel/status', (req, res) => {
         success: true,
         running: false,
         active: false,
-        mode: isCloudServer ? 'cloud_vps' : 'local_with_vps_sync',
+        mode: process.platform === 'linux' ? 'cloud_vps' : 'local_with_vps_sync',
         target: 'https://smartcs.m-kamel.workers.dev'
     });
 });
