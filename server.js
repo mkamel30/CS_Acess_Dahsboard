@@ -359,7 +359,11 @@ app.get('/api/explorer/:table', async (req, res) => {
     try {
         const allowedTables = [
             'merchants', 'devices', 'sim_cards', 'tickets', 'payments', 'spare_parts',
-            'assets_raw', 'maintenance_raw', 'transactions_raw', 'store_pos_raw', 'store_sim_raw', 'store_sp_raw', 'store_sp_maintenance_raw', 'tblinstallments', 'temp_transfer_raw'
+            'assets_raw', 'maintenance_raw', 'transactions_raw', 'payments_raw',
+            'store_pos_raw', 'store_sim_raw', 'store_sp_raw', 'store_sp_maintenance_raw',
+            'installments_raw', 'tblinstallments', 'tblfaults_raw', 'tblstaff_raw',
+            'tblfixes_raw', 'failure_points_raw', 'temp_transfer_raw', 'trade_raw',
+            'merchant_assets', 'audit_logs', 'sync_history', 'diagnostic_errors'
         ];
         const table = req.params.table.toLowerCase();
         if (!allowedTables.includes(table)) {
@@ -2138,9 +2142,13 @@ app.get('/api/inventory/spare-parts-dashboard', async (req, res) => {
 app.get('/api/reports/eod-detail', async (req, res) => {
     try {
         const { date = '' } = req.query;
-        if (!date) return res.status(400).json({ error: "Date parameter is required" });
+        let reqDate = String(date || '').trim();
+        if (!reqDate) {
+            const now = new Date();
+            reqDate = now.toLocaleDateString('en-CA', { timeZone: 'Africa/Cairo' });
+        }
 
-        const targetIso = parseDateToIso(date) || date;
+        const targetIso = parseDateToIso(reqDate) || reqDate;
 
         // 1. Closed Tickets on this date
         const allTickets = await allQuery(`
@@ -3867,28 +3875,24 @@ app.get('/api/inventory/spare-parts/price-history', async (req, res) => {
 });
 
 // ==========================================
-// 4. CLOUDFLARE ZERO-TRUST TUNNEL API
+// 4. CLOUD NETWORK STATUS & FALLBACK API
 // ==========================================
-const CloudflareTunnelManager = require('./tunnel_manager');
-const tunnelMgr = new CloudflareTunnelManager(PORT);
-
 app.get('/api/tunnel/status', (req, res) => {
-    res.json({ success: true, ...tunnelMgr.getStatus() });
+    res.json({
+        success: true,
+        running: false,
+        active: false,
+        mode: isCloudServer ? 'cloud_vps' : 'local_with_vps_sync',
+        target: 'https://smartcs.m-kamel.workers.dev'
+    });
 });
 
 app.post('/api/tunnel/start', requireAdmin, async (req, res) => {
-    try {
-        const { token } = req.body || {};
-        const status = await tunnelMgr.start(token);
-        res.json({ success: true, ...status });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
+    res.json({ success: true, running: false, message: 'Direct Oracle Cloud VPS active' });
 });
 
 app.post('/api/tunnel/stop', requireAdmin, (req, res) => {
-    const status = tunnelMgr.stop();
-    res.json({ success: true, ...status });
+    res.json({ success: true, running: false });
 });
 
 // ==========================================
