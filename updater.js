@@ -143,6 +143,12 @@ async function performUpdate() {
             if (!psRes.success) throw new Error('فشل تحميل التحديث عبر ZIP: ' + (psRes.error || psRes.stderr));
         }
 
+        // Guarantee clean run_smartcs.bat launcher
+        try {
+            const cleanBat = '@echo off\r\ncd /d "%~dp0"\r\nstart "" "http://localhost:8970"\r\nnode server.js\r\n';
+            fs.writeFileSync(path.join(__dirname, 'run_smartcs.bat'), cleanBat, 'utf8');
+        } catch(e) {}
+
         await runCommand('npm install --omit=dev');
         const newVersion = await getVersionInfo();
         console.log('[AUTO-UPDATER] Update completed successfully! New Version:', newVersion.version, newVersion.commit);
