@@ -1,31 +1,30 @@
 @echo off
-chcp 65001 >nul
 title Setup SmartCS Operations on New Machine
 color 0a
 
 echo =======================================================================
-echo    📦 SmartCS Operations - Automated Setup & Environment Config
+echo    SmartCS Operations - Automated Setup and Environment Config
 echo =======================================================================
 echo.
 
 cd /d "%~dp0"
 
 :: -------------------------------------------------------------------------
-:: 1. ASK USER FOR MS ACCESS DATABASE PATH INTERACTIVELY
+:: 1. PROMPT USER FOR MS ACCESS DATABASE PATH
 :: -------------------------------------------------------------------------
 set "DEFAULT_ACCESS=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb"
 
 echo -----------------------------------------------------------------------
-echo  📁 إعداد مسار قاعدة بيانات الآكسيس (MS Access Database):
+echo  Database Configuration (MS Access Backend Path):
 echo -----------------------------------------------------------------------
-echo  المسار الافتراضي لشبكة الفرع:
+echo  Default Branch Network Path:
 echo  "%DEFAULT_ACCESS%"
 echo.
-echo  [تعليمات]:
-echo  - اضغط [Enter] مباشرة للموافقة على المسار الافتراضي.
-echo  - أو اكتب المسار، أو اسحب ملف الـ (.accdb/.mdb) وأفلته هنا:
+echo  Instructions:
+echo  - Press [ENTER] to accept the default network path.
+echo  - OR type / drag and drop your (.accdb / .mdb) database file here:
 echo.
-set /p "USER_DB_INPUT= مسار ملف الآكسيس: "
+set /p "USER_DB_INPUT= Database Path: "
 
 if "%USER_DB_INPUT%"=="" (
     set "FINAL_DB_PATH=%DEFAULT_ACCESS%"
@@ -34,7 +33,7 @@ if "%USER_DB_INPUT%"=="" (
 )
 
 echo.
-echo [*] تم اعتماد مسار قاعدة البيانات: "%FINAL_DB_PATH%"
+echo [*] Configured Database Path: "%FINAL_DB_PATH%"
 echo.
 
 :: -------------------------------------------------------------------------
@@ -101,7 +100,7 @@ const db = new sqlite3.Database('branch_database.db', (err) => {
     }
     db.run('PRAGMA journal_mode = WAL;');
     initSyncDatabase(db).then(() => {
-        console.log('  [+] App Database (SQLite WAL) Schema Created & Ready! ✅');
+        console.log('  [+] App Database (SQLite WAL) Schema Created and Ready!');
         db.close();
     }).catch(e => {
         console.error('  [!] Schema init error:', e.message);
@@ -127,7 +126,7 @@ if %errorlevel% equ 0 (
 echo.
 
 echo =======================================================================
-echo    🎉 Setup Completed Successfully! Starting SmartCS Dashboard...
+echo    Setup Completed Successfully! Starting SmartCS Dashboard...
 echo =======================================================================
 echo.
 timeout /t 2 >nul

@@ -1,10 +1,9 @@
 @echo off
-chcp 65001 >nul
 title SmartCS Dashboard - Central Operations System
 color 0b
 
 echo =======================================================================
-echo    🚀 SmartCS Dashboard - Central Operations & Maintenance Engine
+echo    SmartCS Dashboard - Central Operations and Maintenance Engine
 echo =======================================================================
 echo.
 
@@ -31,7 +30,7 @@ if %errorlevel% equ 0 (
     if not "%LOCAL_HASH%"=="" if not "%REMOTE_HASH%"=="" (
         if not "%LOCAL_HASH%"=="%REMOTE_HASH%" (
             echo.
-            echo [!] 🌟 New updates detected on GitHub!
+            echo [!] New updates detected on GitHub!
             echo [*] Applying latest updates automatically...
             git reset --hard origin/main
             echo [*] Updating dependencies...
@@ -39,7 +38,7 @@ if %errorlevel% equ 0 (
             echo [OK] System updated to latest version successfully!
             echo.
         ) else (
-            echo [OK] System is up to date with GitHub (Commit: %LOCAL_HASH:~0,7%) ✅
+            echo [OK] System is up to date with GitHub (Commit: %LOCAL_HASH:~0,7%)
         )
     )
 ) else (

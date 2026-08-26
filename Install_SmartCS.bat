@@ -1,49 +1,46 @@
 @echo off
-chcp 65001 >nul
 title SmartCS Central Operations - Automated Installer
 color 0b
 
 echo =======================================================================
-echo    🚀 SmartCS Central Operations - Zero-Touch Automated Installer
+echo    SmartCS Central Operations - Automated Installer
 echo =======================================================================
 echo.
 
 :: 1. SET CURRENT WORKING FOLDER CONTAINING THIS .BAT FILE
 set "TARGET_DIR=%~dp0"
-:: Strip trailing backslash
 if "%TARGET_DIR:~-1%"=="\" set "TARGET_DIR=%TARGET_DIR:~0,-1%"
 
 cd /d "%TARGET_DIR%"
-echo [*] مسار تثبيت وتشغيل البرنامج:
+echo [*] Installation and working directory:
 echo     "%TARGET_DIR%"
 echo.
 
 :: -------------------------------------------------------------------------
-:: 2. ASK USER FOR MS ACCESS DATABASE PATH INTERACTIVELY
+:: 2. PROMPT USER FOR MS ACCESS DATABASE PATH
 :: -------------------------------------------------------------------------
 set "DEFAULT_ACCESS=\\Share\d\gROCER SUPPORT\0 Gro.Support\DB\BRrelease\BE\Bread_Final_be.accdb"
 
 echo -----------------------------------------------------------------------
-echo  📁 إعداد مسار قاعدة بيانات الآكسيس (MS Access Database):
+echo  Database Configuration (MS Access Backend Path):
 echo -----------------------------------------------------------------------
-echo  المسار الافتراضي لشبكة الفرع:
+echo  Default Branch Network Path:
 echo  "%DEFAULT_ACCESS%"
 echo.
-echo  [تعليمات]:
-echo  - اضغط [Enter] مباشرة للموافقة على المسار الافتراضي.
-echo  - أو اكتب المسار، أو اسحب ملف الـ (.accdb/.mdb) وأفلته هنا:
+echo  Instructions:
+echo  - Press [ENTER] to accept the default network path.
+echo  - OR type / drag and drop your (.accdb / .mdb) database file here:
 echo.
-set /p "USER_DB_INPUT= مسار ملف الآكسيس: "
+set /p "USER_DB_INPUT= Database Path: "
 
 if "%USER_DB_INPUT%"=="" (
     set "FINAL_DB_PATH=%DEFAULT_ACCESS%"
 ) else (
-    :: Strip surrounding quotes if dragged and dropped
     set "FINAL_DB_PATH=%USER_DB_INPUT:"=%"
 )
 
 echo.
-echo [*] تم اعتماد مسار قاعدة البيانات: "%FINAL_DB_PATH%"
+echo [*] Configured Database Path: "%FINAL_DB_PATH%"
 echo.
 
 :: -------------------------------------------------------------------------
@@ -51,7 +48,7 @@ echo.
 :: -------------------------------------------------------------------------
 where git >nul 2>nul
 if %errorlevel% neq 0 (
-    echo [!] Git is not found. Attempting automated installation via winget...
+    echo [!] Git is not installed. Attempting automated installation via winget...
     where winget >nul 2>nul
     if %errorlevel% equ 0 (
         echo [*] Installing Git silently via winget...
@@ -64,7 +61,7 @@ if %errorlevel% neq 0 (
 :: -------------------------------------------------------------------------
 where node >nul 2>nul
 if %errorlevel% neq 0 (
-    echo [!] Node.js is not found. Attempting automated installation via winget...
+    echo [!] Node.js is not installed. Attempting automated installation via winget...
     where winget >nul 2>nul
     if %errorlevel% equ 0 (
         echo [*] Installing Node.js LTS silently via winget...
@@ -107,7 +104,7 @@ if %errorlevel% equ 0 (
 )
 
 :: -------------------------------------------------------------------------
-:: 6. SAVE CONFIG.JSON WITH USER'S DATABASE PATH
+:: 6. SAVE CONFIG.JSON WITH CHOSEN DATABASE PATH
 :: -------------------------------------------------------------------------
 echo.
 echo [*] Configuring application settings and database path...
@@ -136,7 +133,7 @@ const db = new sqlite3.Database('branch_database.db', (err) => {
     }
     db.run('PRAGMA journal_mode = WAL;');
     initSyncDatabase(db).then(() => {
-        console.log('  [+] App Database (SQLite WAL) Schema Created & Ready! ✅');
+        console.log('  [+] App Database (SQLite WAL) Schema Created and Ready!');
         db.close();
     }).catch(e => {
         console.error('  [!] Schema init error:', e.message);
@@ -159,7 +156,7 @@ echo [OK] Shortcuts and Auto-Boot configured successfully!
 
 echo.
 echo =======================================================================
-echo    🎉 Installation Complete! Launching SmartCS Dashboard...
+echo    Installation Complete! Launching SmartCS Dashboard...
 echo =======================================================================
 echo.
 timeout /t 2 >nul
