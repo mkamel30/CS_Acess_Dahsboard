@@ -143,9 +143,9 @@ async function performUpdate() {
             if (!psRes.success) throw new Error('فشل تحميل التحديث عبر ZIP: ' + (psRes.error || psRes.stderr));
         }
 
-        // Guarantee clean run_smartcs.bat launcher
+        // Guarantee clean run_smartcs.bat launcher with resilient loop
         try {
-            const cleanBat = '@echo off\r\ncd /d "%~dp0"\r\nstart "" "http://localhost:8970"\r\nnode server.js\r\n';
+            const cleanBat = '@echo off\r\nset "PATH=%SystemRoot%\\System32;%SystemRoot%\\System32\\WindowsPowerShell\\v1.0;%ProgramFiles%\\nodejs;%ProgramFiles(x86)%\\nodejs;%LOCALAPPDATA%\\Programs\\nodejs;%APPDATA%\\npm;%ProgramFiles%\\Git\\cmd;%PATH%"\r\ntitle SmartCS Dashboard - Operations Server\r\ncolor 0a\r\ncd /d "%~dp0"\r\nfor /f "tokens=5" %%a in (\'netstat -aon ^| findstr ":8970" ^| findstr "LISTENING"\') do taskkill /F /PID %%a >nul 2>nul\r\nstart "" "http://localhost:8970"\r\n:loop\r\necho.\r\necho =======================================================================\r\necho   SmartCS Dashboard Server Running on Port 8970\r\necho   Keep this window OPEN. Press Ctrl+C to stop.\r\necho =======================================================================\r\necho.\r\nnode server.js\r\necho.\r\necho [WARNING] Server stopped or exited with code %errorlevel%!\r\necho Restarting in 3 seconds... (Press Ctrl+C to abort)\r\ntimeout /t 3 /nobreak >nul\r\ngoto loop\r\n';
             fs.writeFileSync(path.join(__dirname, 'run_smartcs.bat'), cleanBat, 'utf8');
         } catch(e) {}
 
