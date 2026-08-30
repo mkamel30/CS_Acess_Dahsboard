@@ -910,8 +910,8 @@ async function syncHighLevelDomainEntities(db) {
             COALESCE(m."Checked In Condition", '') AS selected_faults,
             '' AS selected_bridges
         FROM maintenance_raw m
-        LEFT JOIN devices d ON d.serial = m."Unit Serial"
-        LEFT JOIN assets_raw a ON a.POS = m."Unit Serial"
+        LEFT JOIN (SELECT serial, MIN(id) AS id FROM devices WHERE serial IS NOT NULL AND TRIM(serial) != '' AND serial != '-' GROUP BY serial) d ON d.serial = m."Unit Serial"
+        LEFT JOIN (SELECT POS, MIN(bkcode) AS bkcode, MIN(ID) AS ID FROM assets_raw WHERE POS IS NOT NULL AND TRIM(POS) != '' AND POS != '-' GROUP BY POS) a ON a.POS = m."Unit Serial"
         WHERE m.ID IS NOT NULL AND m.ID != ''
         UNION ALL
         SELECT 
@@ -937,8 +937,8 @@ async function syncHighLevelDomainEntities(db) {
             '' AS selected_faults,
             '' AS selected_bridges
         FROM transactions_raw t
-        LEFT JOIN devices d ON d.serial = t.POSN
-        LEFT JOIN assets_raw a ON a.POS = t.POSN
+        LEFT JOIN (SELECT serial, MIN(id) AS id FROM devices WHERE serial IS NOT NULL AND TRIM(serial) != '' AND serial != '-' GROUP BY serial) d ON d.serial = t.POSN
+        LEFT JOIN (SELECT POS, MIN(bkcode) AS bkcode, MIN(ID) AS ID FROM assets_raw WHERE POS IS NOT NULL AND TRIM(POS) != '' AND POS != '-' GROUP BY POS) a ON a.POS = t.POSN
         WHERE t.ID IS NOT NULL AND t.ID != '';
     `);
 
