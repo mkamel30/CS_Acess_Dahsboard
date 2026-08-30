@@ -872,6 +872,11 @@ async function syncHighLevelDomainEntities(db) {
     `);
 
     // 5. Maintenance Tickets
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_assets_pos ON assets_raw(POS);`);
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_trans_posn ON transactions_raw(POSN);`);
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_devices_serial ON devices(serial);`);
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_maint_serial ON maintenance_raw("Unit Serial");`);
+
     await dbRun(db, `DELETE FROM tickets;`);
     await dbRun(db, `
         INSERT INTO tickets (
@@ -880,65 +885,61 @@ async function syncHighLevelDomainEntities(db) {
             hq_debt, hq_payment_ref, entry_time, selected_faults, selected_bridges
         )
         SELECT 
-            type, merchant_code, device_id, status, issue_details,
-            resolution_details, technician_name, issue_date, close_date,
-            hq_debt, hq_payment_ref, entry_time, selected_faults, selected_bridges
-        FROM (
-            SELECT 
-                'صيانة دورية / استلام' AS type,
-                (SELECT COALESCE(bkcode, ID) FROM assets_raw WHERE POS = m."Unit Serial" LIMIT 1) AS merchant_code,
-                d.id AS device_id,
-                CASE 
-                    WHEN m."Checked Out Date" IS NOT NULL AND m."Checked Out Date" != '' THEN 'completed'
-                    ELSE 'in_progress'
-                END AS status,
-                COALESCE(NULLIF(m."Checked In Condition", ''), 'عطل جهاز') AS issue_details,
-                COALESCE(NULLIF(m.Notes, ''), 'تم الفحص والإصلاح الفني') AS resolution_details,
-                CASE 
-                    WHEN UPPER(TRIM(COALESCE(m."Procedure", ''))) = 'AHMEDMAHDY' THEN 'أحمد المهدي محفوظ المهدي'
-                    WHEN UPPER(TRIM(COALESCE(m."Procedure", ''))) = 'ELFAKHARANY' THEN 'أحمد فؤاد سيد الفخراني'
-                    WHEN UPPER(TRIM(COALESCE(m."Procedure", ''))) = 'MESSAM' THEN 'محمد عصام محمود فرغلي'
-                    WHEN UPPER(TRIM(COALESCE(m."Procedure", ''))) = 'MOSTAFA' THEN 'مصطفى محمد أبو العطا'
-                    WHEN TRIM(COALESCE(m."Procedure", '')) != '' THEN TRIM(m."Procedure")
-                    ELSE 'فني الصيانة'
-                END AS technician_name,
-                COALESCE(NULLIF(m."Checked In Date", ''), datetime('now')) AS issue_date,
-                NULLIF(m."Checked Out Date", '') AS close_date,
-                0 AS hq_debt,
-                '' AS hq_payment_ref,
-                datetime('now') AS entry_time,
-                COALESCE(m."Checked In Condition", '') AS selected_faults,
-                '' AS selected_bridges
-            FROM maintenance_raw m
-            LEFT JOIN devices d ON d.serial = m."Unit Serial"
-            WHERE m.ID IS NOT NULL AND m.ID != ''
-            UNION ALL
-            SELECT 
-                COALESCE(NULLIF(t.ActionType, ''), 'إجراء صيانة / حركة') AS type,
-                COALESCE(NULLIF(t.POSN, ''), (SELECT COALESCE(bkcode, ID) FROM assets_raw WHERE POS = t.POSN LIMIT 1)) AS merchant_code,
-                d.id AS device_id,
-                'completed' AS status,
-                COALESCE(NULLIF(t.NoteG, ''), NULLIF(t.ActionType, ''), 'شكوى عطل ماكينة') AS issue_details,
-                COALESCE(NULLIF(t.NoteD, ''), 'تم الإصلاح الفني') AS resolution_details,
-                CASE 
-                    WHEN UPPER(TRIM(COALESCE(t."Procedure", ''))) = 'AHMEDMAHDY' THEN 'أحمد المهدي محفوظ المهدي'
-                    WHEN UPPER(TRIM(COALESCE(t."Procedure", ''))) = 'ELFAKHARANY' THEN 'أحمد فؤاد سيد الفخراني'
-                    WHEN UPPER(TRIM(COALESCE(t."Procedure", ''))) = 'MESSAM' THEN 'محمد عصام محمود فرغلي'
-                    WHEN UPPER(TRIM(COALESCE(t."Procedure", ''))) = 'MOSTAFA' THEN 'مصطفى محمد أبو العطا'
-                    WHEN TRIM(COALESCE(t."Procedure", '')) != '' AND TRIM(t."Procedure") NOT LIKE 'DESKTOP%' AND TRIM(t."Procedure") != 'SHARE' AND TRIM(t."Procedure") != '35' THEN TRIM(t."Procedure")
-                    ELSE 'فني الصيانة'
-                END AS technician_name,
-                COALESCE(NULLIF(t.IssueDate, ''), datetime('now')) AS issue_date,
-                COALESCE(NULLIF(t.ActionDate, ''), t.IssueDate) AS close_date,
-                0 AS hq_debt,
-                '' AS hq_payment_ref,
-                datetime('now') AS entry_time,
-                '' AS selected_faults,
-                '' AS selected_bridges
-            FROM transactions_raw t
-            LEFT JOIN devices d ON d.serial = t.POSN
-            WHERE t.ID IS NOT NULL AND t.ID != ''
-        );
+            'صيانة دورية / استلام' AS type,
+            COALESCE(a.bkcode, a.ID, 'عام') AS merchant_code,
+            d.id AS device_id,
+            CASE 
+                WHEN m."Checked Out Date" IS NOT NULL AND m."Checked Out Date" != '' THEN 'completed'
+                ELSE 'in_progress'
+            END AS status,
+            COALESCE(NULLIF(m."Checked In Condition", ''), 'عطل جهاز') AS issue_details,
+            COALESCE(NULLIF(m.Notes, ''), 'تم الفحص والإصلاح الفني') AS resolution_details,
+            CASE 
+                WHEN UPPER(TRIM(COALESCE(m."Procedure", ''))) = 'AHMEDMAHDY' THEN 'أحمد المهدي محفوظ المهدي'
+                WHEN UPPER(TRIM(COALESCE(m."Procedure", ''))) = 'ELFAKHARANY' THEN 'أحمد فؤاد سيد الفخراني'
+                WHEN UPPER(TRIM(COALESCE(m."Procedure", ''))) = 'MESSAM' THEN 'محمد عصام محمود فرغلي'
+                WHEN UPPER(TRIM(COALESCE(m."Procedure", ''))) = 'MOSTAFA' THEN 'مصطفى محمد أبو العطا'
+                WHEN TRIM(COALESCE(m."Procedure", '')) != '' THEN TRIM(m."Procedure")
+                ELSE 'فني الصيانة'
+            END AS technician_name,
+            COALESCE(NULLIF(m."Checked In Date", ''), datetime('now')) AS issue_date,
+            NULLIF(m."Checked Out Date", '') AS close_date,
+            0 AS hq_debt,
+            '' AS hq_payment_ref,
+            datetime('now') AS entry_time,
+            COALESCE(m."Checked In Condition", '') AS selected_faults,
+            '' AS selected_bridges
+        FROM maintenance_raw m
+        LEFT JOIN devices d ON d.serial = m."Unit Serial"
+        LEFT JOIN assets_raw a ON a.POS = m."Unit Serial"
+        WHERE m.ID IS NOT NULL AND m.ID != ''
+        UNION ALL
+        SELECT 
+            COALESCE(NULLIF(t.ActionType, ''), 'إجراء صيانة / حركة') AS type,
+            COALESCE(NULLIF(t.POSN, ''), a.bkcode, a.ID, 'عام') AS merchant_code,
+            d.id AS device_id,
+            'completed' AS status,
+            COALESCE(NULLIF(t.NoteG, ''), NULLIF(t.ActionType, ''), 'شكوى عطل ماكينة') AS issue_details,
+            COALESCE(NULLIF(t.NoteD, ''), 'تم الإصلاح الفني') AS resolution_details,
+            CASE 
+                WHEN UPPER(TRIM(COALESCE(t."Procedure", ''))) = 'AHMEDMAHDY' THEN 'أحمد المهدي محفوظ المهدي'
+                WHEN UPPER(TRIM(COALESCE(t."Procedure", ''))) = 'ELFAKHARANY' THEN 'أحمد فؤاد سيد الفخراني'
+                WHEN UPPER(TRIM(COALESCE(t."Procedure", ''))) = 'MESSAM' THEN 'محمد عصام محمود فرغلي'
+                WHEN UPPER(TRIM(COALESCE(t."Procedure", ''))) = 'MOSTAFA' THEN 'مصطفى محمد أبو العطا'
+                WHEN TRIM(COALESCE(t."Procedure", '')) != '' AND TRIM(t."Procedure") NOT LIKE 'DESKTOP%' AND TRIM(t."Procedure") != 'SHARE' AND TRIM(t."Procedure") != '35' THEN TRIM(t."Procedure")
+                ELSE 'فني الصيانة'
+            END AS technician_name,
+            COALESCE(NULLIF(t.IssueDate, ''), datetime('now')) AS issue_date,
+            COALESCE(NULLIF(t.ActionDate, ''), t.IssueDate) AS close_date,
+            0 AS hq_debt,
+            '' AS hq_payment_ref,
+            datetime('now') AS entry_time,
+            '' AS selected_faults,
+            '' AS selected_bridges
+        FROM transactions_raw t
+        LEFT JOIN devices d ON d.serial = t.POSN
+        LEFT JOIN assets_raw a ON a.POS = t.POSN
+        WHERE t.ID IS NOT NULL AND t.ID != '';
     `);
 
     // 6. Payments
