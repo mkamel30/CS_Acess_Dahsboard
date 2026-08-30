@@ -827,23 +827,37 @@ app.get('/api/maintenance/technicians-performance', async (req, res) => {
 
 app.get('/api/dashboard/stats', async (req, res) => {
     try {
-        // High-level counts
-        const totalMerchants = (await getQuery("SELECT COUNT(*) as count FROM merchants"))?.count || 0;
-        const totalDevices = (await getQuery("SELECT COUNT(*) as count FROM devices"))?.count || 0;
-        const inMerchantDevices = (await getQuery("SELECT COUNT(*) as count FROM devices WHERE status = 'in_merchant' OR status = 'DEPLOYED'"))?.count || 0;
-        const inStockDevices = (await getQuery("SELECT COUNT(*) as count FROM devices WHERE status = 'in_stock' OR status = 'IN_STOCK'"))?.count || 0;
-        const faultyDevices = (await getQuery("SELECT COUNT(*) as count FROM devices WHERE status = 'faulty' OR status = 'FAULTY'"))?.count || 0;
-        
-        const totalSims = (await getQuery("SELECT COUNT(*) as count FROM sim_cards"))?.count || 0;
-        const assignedSims = (await getQuery("SELECT COUNT(*) as count FROM sim_cards WHERE status = 'assigned' OR status = 'DEPLOYED'"))?.count || 0;
-        const inStockSims = (await getQuery("SELECT COUNT(*) as count FROM sim_cards WHERE status = 'in_stock' OR status = 'IN_STOCK'"))?.count || 0;
+        // High-level counts combined in single ultra-fast query
+        const counts = await getQuery(`
+            SELECT 
+                (SELECT COUNT(*) FROM merchants) as totalMerchants,
+                (SELECT COUNT(*) FROM devices) as totalDevices,
+                (SELECT COUNT(*) FROM devices WHERE status IN ('in_merchant', 'DEPLOYED')) as inMerchantDevices,
+                (SELECT COUNT(*) FROM devices WHERE status IN ('in_stock', 'IN_STOCK')) as inStockDevices,
+                (SELECT COUNT(*) FROM devices WHERE status IN ('faulty', 'FAULTY')) as faultyDevices,
+                (SELECT COUNT(*) FROM sim_cards) as totalSims,
+                (SELECT COUNT(*) FROM sim_cards WHERE status IN ('assigned', 'DEPLOYED')) as assignedSims,
+                (SELECT COUNT(*) FROM sim_cards WHERE status IN ('in_stock', 'IN_STOCK')) as inStockSims,
+                (SELECT COUNT(*) FROM tickets) as totalTickets,
+                (SELECT COUNT(*) FROM tickets WHERE status IN ('OPEN', 'in_progress')) as openTickets,
+                (SELECT COUNT(*) FROM tickets WHERE status IN ('CLOSED', 'completed')) as closedTickets,
+                (SELECT COALESCE(SUM(amount), 0) FROM payments) as totalPaymentsAmount,
+                (SELECT COUNT(*) FROM payments) as totalPaymentsCount
+        `) || {};
 
-        const totalTickets = (await getQuery("SELECT COUNT(*) as count FROM tickets"))?.count || 0;
-        const openTickets = (await getQuery("SELECT COUNT(*) as count FROM tickets WHERE status = 'OPEN' OR status = 'in_progress'"))?.count || 0;
-        const closedTickets = (await getQuery("SELECT COUNT(*) as count FROM tickets WHERE status = 'CLOSED' OR status = 'completed'"))?.count || 0;
-
-        const totalPaymentsAmount = (await getQuery("SELECT SUM(amount) as total FROM payments"))?.total || 0;
-        const totalPaymentsCount = (await getQuery("SELECT COUNT(*) as count FROM payments"))?.count || 0;
+        const totalMerchants = counts.totalMerchants || 0;
+        const totalDevices = counts.totalDevices || 0;
+        const inMerchantDevices = counts.inMerchantDevices || 0;
+        const inStockDevices = counts.inStockDevices || 0;
+        const faultyDevices = counts.faultyDevices || 0;
+        const totalSims = counts.totalSims || 0;
+        const assignedSims = counts.assignedSims || 0;
+        const inStockSims = counts.inStockSims || 0;
+        const totalTickets = counts.totalTickets || 0;
+        const openTickets = counts.openTickets || 0;
+        const closedTickets = counts.closedTickets || 0;
+        const totalPaymentsAmount = counts.totalPaymentsAmount || 0;
+        const totalPaymentsCount = counts.totalPaymentsCount || 0;
 
         // Top 5 common faults
         const topFaults = await allQuery(`

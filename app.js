@@ -4159,12 +4159,8 @@ function initLiveSyncStream() {
                 // 2. Show Live Toast Notification
                 showLiveSyncToast(data);
 
-                // 3. Refresh current active tab view smoothly
-                refreshActiveTab();
-
-                // 4. Update Header Notifications & Alerts & Health
-                if (typeof checkSyncHealth === 'function') checkSyncHealth();
-                if (typeof loadNotifications === 'function') loadNotifications();
+                // 3. Refresh current active tab view smoothly with debounce
+                debounceRefreshActiveTab();
             } catch (err) {
                 console.error('[LIVE SSE] Error parsing sync event:', err);
             }
@@ -4225,6 +4221,16 @@ function showLiveSyncToast(data) {
             toast.style.display = 'none';
         }, 400);
     }, 4500);
+}
+
+let refreshTabDebounceTimer = null;
+function debounceRefreshActiveTab() {
+    if (refreshTabDebounceTimer) clearTimeout(refreshTabDebounceTimer);
+    refreshTabDebounceTimer = setTimeout(() => {
+        refreshActiveTab();
+        if (typeof checkSyncHealth === 'function') checkSyncHealth();
+        if (typeof loadNotifications === 'function') loadNotifications();
+    }, 800);
 }
 
 function refreshActiveTab() {
