@@ -4805,7 +4805,10 @@ function fallbackCopyText(text, successMsg) {
 async function checkCloudflareTunnelStatus() {
     try {
         const res = await fetch('/api/tunnel/status');
-        const data = await res.json();
+        if (!res.ok) return;
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); } catch (e) { return; }
         
         const badge = document.getElementById('settings-tunnel-status-badge');
         const input = document.getElementById('settings-tunnel-url');

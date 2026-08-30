@@ -3884,8 +3884,9 @@ app.get('/api/inventory/spare-parts/price-history', async (req, res) => {
 app.get('/api/tunnel/status', (req, res) => {
     res.json({
         success: true,
-        running: false,
-        active: false,
+        running: true,
+        active: true,
+        publicUrl: 'https://smartcs.m-kamel.workers.dev',
         mode: process.platform === 'linux' ? 'cloud_vps' : 'local_with_vps_sync',
         target: 'https://smartcs.m-kamel.workers.dev'
     });
