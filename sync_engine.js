@@ -875,12 +875,11 @@ async function syncHighLevelDomainEntities(db) {
     await dbRun(db, `DELETE FROM tickets;`);
     await dbRun(db, `
         INSERT INTO tickets (
-            id, type, merchant_code, device_id, status, issue_details,
+            type, merchant_code, device_id, status, issue_details,
             resolution_details, technician_name, issue_date, close_date,
             hq_debt, hq_payment_ref, entry_time, selected_faults, selected_bridges
         )
         SELECT 
-            ROW_NUMBER() OVER () AS id,
             type, merchant_code, device_id, status, issue_details,
             resolution_details, technician_name, issue_date, close_date,
             hq_debt, hq_payment_ref, entry_time, selected_faults, selected_bridges
