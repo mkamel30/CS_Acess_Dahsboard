@@ -2927,82 +2927,83 @@ function resolveMaintenanceServiceDetails(t, allSp = [], allPayments = [], price
         });
 
         let matchedSp = null;
+        let allMatchedSpInfo = [];
+        
         if (candidates.length > 0) {
             candidates.sort((a, b) => {
                 const diffA = Math.abs(parseDateScore(a.out_date || a.date) - tDateScore);
                 const diffB = Math.abs(parseDateScore(b.out_date || b.date) - tDateScore);
                 return diffA - diffB;
             });
-            matchedSp = candidates[0];
-        }
+            
+            // Collect all candidates that are very close in time (same day)
+            const closestTime = Math.abs(parseDateScore(candidates[0].out_date || candidates[0].date) - tDateScore);
+            const validCandidates = candidates.filter(c => {
+                 const diff = Math.abs(parseDateScore(c.out_date || c.date) - tDateScore);
+                 return Math.abs(diff - closestTime) < 86400000;
+            });
 
-        // Correlate with payments_raw
-        let matchedPayment = null;
-        if (allPayments && allPayments.length > 0) {
-            if (matchedSp && (matchedSp.Serial || matchedSp.serial_raw)) {
-                const spStr = String(matchedSp.Serial || matchedSp.serial_raw);
-                matchedPayment = allPayments.find(p => p.ref_num && spStr.includes(p.ref_num));
-            }
-
-            if (!matchedPayment && posSerial) {
-                const payCandidates = allPayments.filter(p => {
-                    const pPos = String(p.pos_number || '');
-                    return pPos.includes(posSerial);
-                });
-                if (payCandidates.length > 0) {
-                    payCandidates.sort((a, b) => {
-                        const diffA = Math.abs(parseDateScore(a.payment_date) - tDateScore);
-                        const diffB = Math.abs(parseDateScore(b.payment_date) - tDateScore);
-                        return diffA - diffB;
-                    });
-                    if (Math.abs(parseDateScore(payCandidates[0].payment_date) - tDateScore) < 7 * 86400000) {
-                        matchedPayment = payCandidates[0];
+            validCandidates.forEach(cand => {
+                let matchedPayment = null;
+                if (allPayments && allPayments.length > 0) {
+                    const spStr = String(cand.Serial || cand.serial_raw);
+                    matchedPayment = allPayments.find(p => p.ref_num && spStr.includes(p.ref_num));
+                    if (!matchedPayment && posSerial) {
+                        const payCandidates = allPayments.filter(p => String(p.pos_number || '').includes(posSerial));
+                        if (payCandidates.length > 0) {
+                            payCandidates.sort((a, b) => Math.abs(parseDateScore(a.payment_date) - tDateScore) - Math.abs(parseDateScore(b.payment_date) - tDateScore));
+                            if (Math.abs(parseDateScore(payCandidates[0].payment_date) - tDateScore) < 7 * 86400000) {
+                                matchedPayment = payCandidates[0];
+                            }
+                        }
                     }
                 }
-            }
+
+                const partName = cand.type || cand.part_name || noteD.replace(/تغير|تغيير|استبدال|تركيب/g, '').trim();
+                const serialRaw = String(cand.Serial || cand.serial_raw || '');
+                const rMatch = serialRaw.match(/(\d{10,20})/);
+                const receiptNum = rMatch ? rMatch[1] : (matchedPayment?.ref_num || null);
+
+                let payStatus = 'FREE';
+                let payStatusLabel = 'صرف مجاني (بدون مقابل)';
+                let amount = 0;
+                let channel = '-';
+
+                if (serialRaw.includes('مجاني') || serialRaw.includes('بدون مقابل')) {
+                    payStatus = 'FREE';
+                    payStatusLabel = 'صرف مجاني (بدون مقابل)';
+                    amount = 0;
+                    channel = 'فرع الشركة';
+                } else if (receiptNum) {
+                    payStatus = 'PAID';
+                    amount = matchedPayment ? parseFloat(matchedPayment.payment_amount) : (priceMap.get(partName.toLowerCase()) || 0);
+                    channel = matchedPayment?.payment_place || 'ضامن';
+                    payStatusLabel = `مسدد بمقابل (إيصال إيداع #${receiptNum}${channel && channel !== '-' ? ` - جهة الدفع: ${channel}` : ''})`;
+                } else if (matchedPayment && matchedPayment.ref_num) {
+                    payStatus = 'PAID';
+                    amount = parseFloat(matchedPayment.payment_amount);
+                    channel = matchedPayment.payment_place || 'ضامن';
+                    payStatusLabel = `مسدد بمقابل (إيصال إيداع #${matchedPayment.ref_num}${channel && channel !== '-' ? ` - جهة الدفع: ${channel}` : ''})`;
+                } else if (serialRaw.includes('مؤجل')) {
+                    payStatus = 'DEFERRED';
+                    payStatusLabel = 'تحصيل مؤجل ⚠️';
+                    amount = priceMap.get(partName.toLowerCase()) || 0;
+                }
+
+                allMatchedSpInfo.push({
+                    is_replaced: true,
+                    part_name: partName,
+                    payment_status: payStatus,
+                    payment_status_label: payStatusLabel,
+                    receipt_number: receiptNum,
+                    amount: amount,
+                    payment_channel: channel
+                });
+            });
+            
+            sparePartInfo = allMatchedSpInfo.length > 0 ? allMatchedSpInfo[0] : null;
+            if (sparePartInfo) sparePartInfo.all_spare_parts = allMatchedSpInfo;
         }
-
-        const partName = matchedSp?.type || matchedSp?.part_name || noteD.replace(/تغير|تغيير|استبدال|تركيب/g, '').trim();
-        const serialRaw = String(matchedSp?.Serial || matchedSp?.serial_raw || '');
-        const rMatch = serialRaw.match(/(\d{10,20})/);
-        const receiptNum = rMatch ? rMatch[1] : (matchedPayment?.ref_num || null);
-
-        let payStatus = 'FREE';
-        let payStatusLabel = 'صرف مجاني (بدون مقابل)';
-        let amount = 0;
-        let channel = '-';
-
-        if (serialRaw.includes('مجاني') || serialRaw.includes('بدون مقابل')) {
-            payStatus = 'FREE';
-            payStatusLabel = 'صرف مجاني (بدون مقابل)';
-            amount = 0;
-            channel = 'فرع الشركة';
-        } else if (receiptNum) {
-            payStatus = 'PAID';
-            amount = matchedPayment ? parseFloat(matchedPayment.payment_amount) : (priceMap.get(partName.toLowerCase()) || 0);
-            channel = matchedPayment?.payment_place || 'ضامن';
-            payStatusLabel = `مسدد بمقابل (إيصال إيداع #${receiptNum}${channel && channel !== '-' ? ` - جهة الدفع: ${channel}` : ''})`;
-        } else if (matchedPayment && matchedPayment.ref_num) {
-            payStatus = 'PAID';
-            amount = parseFloat(matchedPayment.payment_amount);
-            channel = matchedPayment.payment_place || 'ضامن';
-            payStatusLabel = `مسدد بمقابل (إيصال إيداع #${matchedPayment.ref_num}${channel && channel !== '-' ? ` - جهة الدفع: ${channel}` : ''})`;
-        } else if (serialRaw.includes('مؤجل')) {
-            payStatus = 'DEFERRED';
-            payStatusLabel = 'تحصيل مؤجل ⚠️';
-            amount = priceMap.get(partName.toLowerCase()) || 0;
-        }
-
-        sparePartInfo = {
-            is_replaced: true,
-            part_name: partName,
-            payment_status: payStatus,
-            payment_status_label: payStatusLabel,
-            receipt_number: receiptNum,
-            amount: amount,
-            payment_channel: channel
-        };
-    }
 
     return {
         ticket_id: t.ID || t.ticket_id,
@@ -3734,7 +3735,8 @@ app.get('/api/assets/timeline', async (req, res) => {
                     is_initial_maintenance: resolved.is_initial_maintenance,
                     has_spare_part: resolved.has_spare_part,
                     spare_part: resolved.spare_part,
-                    replaced_part: resolved.spare_part?.part_name || null,
+                    all_spare_parts: resolved.spare_part?.all_spare_parts || (resolved.spare_part ? [resolved.spare_part] : null),
+                    replaced_part: resolved.spare_part?.all_spare_parts ? resolved.spare_part.all_spare_parts.map(p => p.part_name).join(' + ') : (resolved.spare_part?.part_name || null),
                     cost_status: resolved.spare_part ? resolved.spare_part.payment_status : 'FREE',
                     cost_badge: resolved.spare_part ? resolved.spare_part.payment_status_label : (resolved.is_initial_maintenance ? 'صيانة أولية (فحص وتنظيف مجاني)' : 'صيانة بالفرع (بدون قطع غيار)'),
                     receipt_number: resolved.spare_part?.receipt_number || null,

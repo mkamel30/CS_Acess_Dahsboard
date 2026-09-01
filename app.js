@@ -2899,17 +2899,20 @@ function renderSparePartsTable() {
             continue;
         }
         
-        // Grouping key: identical time, merchant, receipt, and payment status
-        const key = `${m.date}_${m.merchant_code}_${m.receipt_number}_${m.payment_status_key}`;
+        // Grouping key: identical time, merchant, and pos (ignore receipt and payment status to merge entire visit)
+        const key = `${m.date}_${m.merchant_code}_${m.pos_serial}`;
         
         if (groupMap.has(key)) {
             const existing = groupMap.get(key);
             if (!existing.grouped_parts) {
                 existing.grouped_parts = [{ name: existing.part_name, qty: existing.quantity, type: existing.movement_type }];
+                existing.all_payments = [{ status: existing.payment_status_key, receipt: existing.receipt_number, channel: existing.payment_channel }];
                 existing.is_grouped = true;
             }
             existing.grouped_parts.push({ name: m.part_name, qty: m.quantity, type: m.movement_type });
+            existing.all_payments.push({ status: m.payment_status_key, receipt: m.receipt_number, channel: m.payment_channel });
             existing.total_amount = Number(existing.total_amount) + Number(m.total_amount);
+            existing.quantity = Number(existing.quantity) + Number(m.quantity);
         } else {
             const copy = {...m};
             groupMap.set(key, copy);
@@ -2965,37 +2968,79 @@ function renderSparePartsTable() {
 
     pagedList.forEach((m, idx) => {
         let badgeHtml = '';
-        if (m.payment_status_key === 'FREE_WARRANTY') {
-            badgeHtml = `<span class="badge" style="background:rgba(6,182,212,0.15); color:#06b6d4; border:1px solid rgba(6,182,212,0.3); font-weight:700;"><i data-lucide="shield-check" style="width:11px;height:11px;vertical-align:middle;margin-left:4px;"></i> مجاني (بدون مقابل)</span>`;
-        } else if (m.payment_status_key === 'DEFERRED_PENDING') {
-            badgeHtml = `<span class="badge" style="background:rgba(239,68,68,0.15); color:#ef4444; border:1px solid rgba(239,68,68,0.3); font-weight:700;"><i data-lucide="clock" style="width:11px;height:11px;vertical-align:middle;margin-left:4px;"></i> تحصيلات مؤجلة ⚠️</span>`;
-        } else if (m.payment_status_key === 'STOCK_IN') {
-            badgeHtml = `<span class="badge instore" style="font-weight:700;"><i data-lucide="download" style="width:11px;height:11px;vertical-align:middle;margin-left:4px;"></i> توريد وارد</span>`;
-        } else {
-            badgeHtml = `<span class="badge inmerchant" style="font-weight:700;"><i data-lucide="check-circle" style="width:11px;height:11px;vertical-align:middle;margin-left:4px;"></i> مسدد بمقابل ✅</span>`;
-        }
-
         let channelBadge = '';
-        if (m.receipt_number && m.receipt_number !== '-') {
-            const chName = m.payment_channel || 'ضامن';
-            const chBadgeClass = chName.includes('ضامن') ? 'inmerchant' : (chName.includes('بريد') ? 'instore' : 'warning');
-            const chIcon = chName.includes('ضامن') ? 'check-circle' : (chName.includes('بريد') ? 'mail' : 'landmark');
-            channelBadge = `
-                <div style="display:flex; flex-direction:column; gap:3px;">
-                    <span style="font-family:var(--font-en); font-weight:800; color:var(--color-success); font-size:12px;">${m.receipt_number}</span>
-                    <span class="badge ${chBadgeClass}" style="font-weight:700; font-size:10px; width:fit-content; padding:2px 8px;">
-                        <i data-lucide="${chIcon}" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> ${chName}
-                    </span>
-                </div>
-            `;
-        } else if (m.payment_status_key === 'FREE_WARRANTY') {
-            channelBadge = `<span class="badge" style="background:rgba(6,182,212,0.12); color:#06b6d4; border:1px solid rgba(6,182,212,0.25); font-size:10px; font-weight:700;"><i data-lucide="shield-check" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> صيانة مجانية</span>`;
-        } else if (m.payment_status_key === 'DEFERRED_PENDING') {
-            channelBadge = `<span class="badge" style="background:rgba(239,68,68,0.12); color:#ef4444; border:1px solid rgba(239,68,68,0.25); font-size:10px; font-weight:700;"><i data-lucide="clock" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> تحصيل مؤجل</span>`;
-        } else if (m.is_stock_in) {
-            channelBadge = `<span class="badge instore" style="font-size:10px; font-weight:700;"><i data-lucide="download" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> توريد مخزن</span>`;
+
+        if (m.is_grouped && m.all_payments) {
+            // Aggregate badges
+            const uniquePayments = [];
+            const uniqueChannels = [];
+            m.all_payments.forEach(p => {
+                if (p.status && !uniquePayments.find(u => u.status === p.status)) uniquePayments.push(p);
+                if (p.receipt && p.receipt !== '-' && !uniqueChannels.find(c => c.receipt === p.receipt)) {
+                    uniqueChannels.push(p);
+                }
+            });
+
+            badgeHtml = `<div style="display:flex; flex-direction:column; gap:4px;">` + uniquePayments.map(p => {
+                if (p.status === 'FREE_WARRANTY') return `<span class="badge" style="background:rgba(6,182,212,0.15); color:#06b6d4; font-weight:700;"><i data-lucide="shield-check" style="width:11px;height:11px;vertical-align:middle;margin-left:4px;"></i> مجاني</span>`;
+                if (p.status === 'DEFERRED_PENDING') return `<span class="badge" style="background:rgba(239,68,68,0.15); color:#ef4444; font-weight:700;"><i data-lucide="clock" style="width:11px;height:11px;vertical-align:middle;margin-left:4px;"></i> مؤجل</span>`;
+                return `<span class="badge inmerchant" style="font-weight:700;"><i data-lucide="check-circle" style="width:11px;height:11px;vertical-align:middle;margin-left:4px;"></i> مسدد</span>`;
+            }).join('') + `</div>`;
+
+            if (uniqueChannels.length > 0) {
+                channelBadge = `<div style="display:flex; flex-direction:column; gap:4px;">` + uniqueChannels.map(p => {
+                    const chName = p.channel || 'ضامن';
+                    const chBadgeClass = chName.includes('ضامن') ? 'inmerchant' : (chName.includes('بريد') ? 'instore' : 'warning');
+                    const chIcon = chName.includes('ضامن') ? 'check-circle' : (chName.includes('بريد') ? 'mail' : 'landmark');
+                    return `
+                        <div style="display:flex; flex-direction:column; gap:2px; margin-bottom:4px;">
+                            <span style="font-family:var(--font-en); font-weight:800; color:var(--color-success); font-size:11px;">${p.receipt}</span>
+                            <span class="badge ${chBadgeClass}" style="font-weight:700; font-size:9px; width:fit-content; padding:2px 6px;">
+                                <i data-lucide="${chIcon}" style="width:9px;height:9px;vertical-align:middle;margin-left:2px;"></i> ${chName}
+                            </span>
+                        </div>
+                    `;
+                }).join('') + `</div>`;
+            } else if (uniquePayments.some(p => p.status === 'FREE_WARRANTY')) {
+                channelBadge = `<span class="badge" style="background:rgba(6,182,212,0.12); color:#06b6d4; font-size:10px; font-weight:700;"><i data-lucide="shield-check" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> مجاني</span>`;
+            } else if (uniquePayments.some(p => p.status === 'DEFERRED_PENDING')) {
+                channelBadge = `<span class="badge" style="background:rgba(239,68,68,0.12); color:#ef4444; font-size:10px; font-weight:700;"><i data-lucide="clock" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> مؤجل</span>`;
+            } else {
+                channelBadge = `<span style="color:var(--text-muted);">-</span>`;
+            }
         } else {
-            channelBadge = `<span style="color:var(--text-muted);">-</span>`;
+            // Original logic for single items
+            if (m.payment_status_key === 'FREE_WARRANTY') {
+                badgeHtml = `<span class="badge" style="background:rgba(6,182,212,0.15); color:#06b6d4; border:1px solid rgba(6,182,212,0.3); font-weight:700;"><i data-lucide="shield-check" style="width:11px;height:11px;vertical-align:middle;margin-left:4px;"></i> مجاني (بدون مقابل)</span>`;
+            } else if (m.payment_status_key === 'DEFERRED_PENDING') {
+                badgeHtml = `<span class="badge" style="background:rgba(239,68,68,0.15); color:#ef4444; border:1px solid rgba(239,68,68,0.3); font-weight:700;"><i data-lucide="clock" style="width:11px;height:11px;vertical-align:middle;margin-left:4px;"></i> تحصيلات مؤجلة ⚠️</span>`;
+            } else if (m.payment_status_key === 'STOCK_IN') {
+                badgeHtml = `<span class="badge instore" style="font-weight:700;"><i data-lucide="download" style="width:11px;height:11px;vertical-align:middle;margin-left:4px;"></i> توريد وارد</span>`;
+            } else {
+                badgeHtml = `<span class="badge inmerchant" style="font-weight:700;"><i data-lucide="check-circle" style="width:11px;height:11px;vertical-align:middle;margin-left:4px;"></i> مسدد بمقابل ✅</span>`;
+            }
+
+            if (m.receipt_number && m.receipt_number !== '-') {
+                const chName = m.payment_channel || 'ضامن';
+                const chBadgeClass = chName.includes('ضامن') ? 'inmerchant' : (chName.includes('بريد') ? 'instore' : 'warning');
+                const chIcon = chName.includes('ضامن') ? 'check-circle' : (chName.includes('بريد') ? 'mail' : 'landmark');
+                channelBadge = `
+                    <div style="display:flex; flex-direction:column; gap:3px;">
+                        <span style="font-family:var(--font-en); font-weight:800; color:var(--color-success); font-size:12px;">${m.receipt_number}</span>
+                        <span class="badge ${chBadgeClass}" style="font-weight:700; font-size:10px; width:fit-content; padding:2px 8px;">
+                            <i data-lucide="${chIcon}" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> ${chName}
+                        </span>
+                    </div>
+                `;
+            } else if (m.payment_status_key === 'FREE_WARRANTY') {
+                channelBadge = `<span class="badge" style="background:rgba(6,182,212,0.12); color:#06b6d4; border:1px solid rgba(6,182,212,0.25); font-size:10px; font-weight:700;"><i data-lucide="shield-check" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> صيانة مجانية</span>`;
+            } else if (m.payment_status_key === 'DEFERRED_PENDING') {
+                channelBadge = `<span class="badge" style="background:rgba(239,68,68,0.12); color:#ef4444; border:1px solid rgba(239,68,68,0.25); font-size:10px; font-weight:700;"><i data-lucide="clock" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> تحصيل مؤجل</span>`;
+            } else if (m.is_stock_in) {
+                channelBadge = `<span class="badge instore" style="font-size:10px; font-weight:700;"><i data-lucide="download" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> توريد مخزن</span>`;
+            } else {
+                channelBadge = `<span style="color:var(--text-muted);">-</span>`;
+            }
         }
 
         const serialLink = m.pos_serial && m.pos_serial !== '-' 
@@ -3013,7 +3058,7 @@ function renderSparePartsTable() {
                 </td>
                 <td>
                     ${m.is_grouped 
-                        ? `<div style="display:flex; flex-direction:column; gap:8px;">${m.grouped_parts.map(p => `<div><span class="badge inmerchant" style="font-family:var(--font-en); font-size:11px; font-weight:700;">${p.qty} قطعة (${p.type})</span></div>`).join('')}</div>`
+                        ? `<span class="badge" style="background-color:rgba(99,102,241,0.15); color:#4f46e5; font-family:var(--font-en); font-size:12px; font-weight:800; border:1px solid rgba(99,102,241,0.3);"><i data-lucide="layers" style="width:12px;height:12px;vertical-align:middle;margin-left:3px;"></i> ${m.quantity} قطع (${m.movement_type})</span>`
                         : `<span class="badge ${m.is_stock_in ? 'instore' : 'inmerchant'}" style="font-family:var(--font-en); font-size:11px; font-weight:700;">${m.quantity} قطعة (${m.movement_type})</span>`}
                 </td>
                 <td>${serialLink}</td>
@@ -3587,7 +3632,25 @@ async function searchAssetTimeline(query) {
                                 ${ev.resolution ? `<div style="color:var(--text-secondary);"><strong style="color:var(--text-primary);"><i data-lucide="wrench" style="width:12px;height:12px;vertical-align:middle;margin-left:3px;color:#0284c7;"></i> الإجراء الفني:</strong> ${ev.resolution}</div>` : ''}
                                 ${!ev.complaint && !ev.resolution && ev.detail ? `<div>${ev.detail}</div>` : ''}
                             </div>
-                            ${ev.replaced_part ? `
+                            ${ev.all_spare_parts && ev.all_spare_parts.length > 0 ? `
+                                <div style="margin-top:8px; display:flex; flex-direction:column; gap:4px;">
+                                    ${ev.all_spare_parts.map(sp => `
+                                        <div style="padding:8px 12px; background:rgba(6,182,212,0.06); border:1px solid rgba(6,182,212,0.25); border-radius:8px; font-size:11.5px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                                            <div>
+                                                <strong style="color:#06b6d4;"><i data-lucide="cpu" style="width:13px;height:13px;vertical-align:middle;margin-left:3px;"></i> قطعة الغيار المسحوبة من المخزن:</strong>
+                                                <span style="font-weight:700; color:var(--text-primary); margin-right:4px;">${sp.part_name}</span>
+                                            </div>
+                                            <div>
+                                                ${sp.payment_status === 'PAID' 
+                                                    ? `<span style="color:#10b981; font-weight:700;"><i data-lucide="check-circle" style="width:12px;height:12px;vertical-align:middle;"></i> مسددة بمقابل ${sp.receipt_number ? `(إيصال إيداع: <strong style="color:#10b981; font-family:var(--font-en); font-weight:800;">#${sp.receipt_number}</strong>${(sp.payment_channel && sp.payment_channel !== '-') ? ` - جهة الدفع: <strong>${sp.payment_channel}</strong>` : ''}${parseFloat(sp.amount) > 0 ? ` - بمبلغ: <strong>${Number(sp.amount).toLocaleString('ar-EG')} جم</strong>` : ''})` : ''}</span>` 
+                                                    : (sp.payment_status === 'DEFERRED'
+                                                        ? `<span style="color:#ef4444; font-weight:700;"><i data-lucide="clock" style="width:12px;height:12px;vertical-align:middle;"></i> تحصيل مؤجل ⚠️</span>`
+                                                        : `<span style="color:#06b6d4; font-weight:700;"><i data-lucide="shield-check" style="width:12px;height:12px;vertical-align:middle;"></i> صرف مجاني (بدون مقابل)</span>`)}
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : (ev.replaced_part ? `
                                 <div style="margin-top:8px; padding:8px 12px; background:rgba(6,182,212,0.06); border:1px solid rgba(6,182,212,0.25); border-radius:8px; font-size:11.5px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
                                     <div>
                                         <strong style="color:#06b6d4;"><i data-lucide="cpu" style="width:13px;height:13px;vertical-align:middle;margin-left:3px;"></i> قطعة الغيار المسحوبة من المخزن:</strong>
@@ -3601,7 +3664,7 @@ async function searchAssetTimeline(query) {
                                                 : `<span style="color:#06b6d4; font-weight:700;"><i data-lucide="shield-check" style="width:12px;height:12px;vertical-align:middle;"></i> صرف مجاني (بدون مقابل)</span>`)}
                                     </div>
                                 </div>
-                            ` : ''}
+                            ` : '')}
                         </div>
                         <div class="timeline-item-meta">
                             <span><strong style="color:var(--color-primary);">كود العميل:</strong> <code style="font-family:var(--font-en); font-weight:bold; color:var(--color-primary); background:var(--md-sys-color-primary-container); padding:2px 6px; border-radius:4px;">${codeToShow}</code></span>
