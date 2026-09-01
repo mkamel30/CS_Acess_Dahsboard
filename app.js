@@ -3640,7 +3640,9 @@ async function searchAssetTimeline(query) {
                                             acc[key] = { ...sp, part_names: [sp.part_name], total_amount: parseFloat(sp.amount) || 0 };
                                         } else {
                                             if (!acc[key].part_names.includes(sp.part_name)) acc[key].part_names.push(sp.part_name);
-                                            acc[key].total_amount += parseFloat(sp.amount) || 0;
+                                            // DO NOT sum the amount if they share the same receipt, 
+                                            // because the matched payment amount is already the total receipt value!
+                                            acc[key].total_amount = parseFloat(sp.amount) || 0;
                                         }
                                         return acc;
                                     }, {})).map(grp => `
