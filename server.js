@@ -3001,7 +3001,7 @@ function resolveMaintenanceServiceDetails(t, allSp = [], allPayments = [], price
                 });
             });
             
-            sparePartInfo = allMatchedSpInfo.length > 0 ? allMatchedSpInfo[0] : null;
+            sparePartInfo = allMatchedSpInfo.length > 0 ? { ...allMatchedSpInfo[0] } : null;
             if (sparePartInfo) sparePartInfo.all_spare_parts = allMatchedSpInfo;
         }
     }
