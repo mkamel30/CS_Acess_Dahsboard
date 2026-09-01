@@ -3634,16 +3634,25 @@ async function searchAssetTimeline(query) {
                             </div>
                             ${ev.all_spare_parts && ev.all_spare_parts.length > 0 ? `
                                 <div style="margin-top:8px; display:flex; flex-direction:column; gap:4px;">
-                                    ${ev.all_spare_parts.map(sp => `
+                                    ${Object.values(ev.all_spare_parts.reduce((acc, sp) => {
+                                        const key = sp.payment_status + '_' + (sp.receipt_number || '') + '_' + (sp.payment_channel || '');
+                                        if (!acc[key]) {
+                                            acc[key] = { ...sp, part_names: [sp.part_name], total_amount: parseFloat(sp.amount) || 0 };
+                                        } else {
+                                            if (!acc[key].part_names.includes(sp.part_name)) acc[key].part_names.push(sp.part_name);
+                                            acc[key].total_amount += parseFloat(sp.amount) || 0;
+                                        }
+                                        return acc;
+                                    }, {})).map(grp => `
                                         <div style="padding:8px 12px; background:rgba(6,182,212,0.06); border:1px solid rgba(6,182,212,0.25); border-radius:8px; font-size:11.5px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
                                             <div>
                                                 <strong style="color:#06b6d4;"><i data-lucide="cpu" style="width:13px;height:13px;vertical-align:middle;margin-left:3px;"></i> قطعة الغيار المسحوبة من المخزن:</strong>
-                                                <span style="font-weight:700; color:var(--text-primary); margin-right:4px;">${sp.part_name}</span>
+                                                <span style="font-weight:700; color:var(--text-primary); margin-right:4px;">${grp.part_names.join(' - ')}</span>
                                             </div>
                                             <div>
-                                                ${sp.payment_status === 'PAID' 
-                                                    ? `<span style="color:#10b981; font-weight:700;"><i data-lucide="check-circle" style="width:12px;height:12px;vertical-align:middle;"></i> مسددة بمقابل ${sp.receipt_number ? `(إيصال إيداع: <strong style="color:#10b981; font-family:var(--font-en); font-weight:800;">#${sp.receipt_number}</strong>${(sp.payment_channel && sp.payment_channel !== '-') ? ` - جهة الدفع: <strong>${sp.payment_channel}</strong>` : ''}${parseFloat(sp.amount) > 0 ? ` - بمبلغ: <strong>${Number(sp.amount).toLocaleString('ar-EG')} جم</strong>` : ''})` : ''}</span>` 
-                                                    : (sp.payment_status === 'DEFERRED'
+                                                ${grp.payment_status === 'PAID' 
+                                                    ? `<span style="color:#10b981; font-weight:700;"><i data-lucide="check-circle" style="width:12px;height:12px;vertical-align:middle;"></i> مسددة بمقابل ${grp.receipt_number ? `(إيصال إيداع: <strong style="color:#10b981; font-family:var(--font-en); font-weight:800;">#${grp.receipt_number}</strong>${(grp.payment_channel && grp.payment_channel !== '-') ? ` - جهة الدفع: <strong>${grp.payment_channel}</strong>` : ''}${grp.total_amount > 0 ? ` - بمبلغ: <strong>${grp.total_amount.toLocaleString('ar-EG')} جم</strong>` : ''})` : ''}</span>` 
+                                                    : (grp.payment_status === 'DEFERRED'
                                                         ? `<span style="color:#ef4444; font-weight:700;"><i data-lucide="clock" style="width:12px;height:12px;vertical-align:middle;"></i> تحصيل مؤجل ⚠️</span>`
                                                         : `<span style="color:#06b6d4; font-weight:700;"><i data-lucide="shield-check" style="width:12px;height:12px;vertical-align:middle;"></i> صرف مجاني (بدون مقابل)</span>`)}
                                             </div>
