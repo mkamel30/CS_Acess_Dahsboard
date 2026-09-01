@@ -9,8 +9,11 @@
   "dependencies": {
     "@ngrok/ngrok": "^1.7.0",
     "compression": "^1.8.1",
+    "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
     "localtunnel": "^2.0.2",
+    "pg": "^8.23.0",
     "sqlite3": "^6.0.1",
     "xlsx": "^0.18.5"
   }

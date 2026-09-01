@@ -3109,16 +3109,21 @@ async function fetchAndRenderAuditLogs() {
 
         // Update counters
         let inserts = 0, updates = 0, deletes = 0;
-        if (data.typeStats) {
+        if (Array.isArray(data.typeStats)) {
             data.typeStats.forEach(t => {
-                if (t.change_type === 'INSERT') inserts = t.count;
-                if (t.change_type === 'UPDATE') updates = t.count;
-                if (t.change_type === 'DELETE') deletes = t.count;
+                const cType = (t.change_type || t.CHANGE_TYPE || '').toUpperCase();
+                const cnt = parseInt(t.count || t.COUNT || 0, 10) || 0;
+                if (cType === 'INSERT') inserts += cnt;
+                else if (cType === 'UPDATE') updates += cnt;
+                else if (cType === 'DELETE') deletes += cnt;
             });
         }
-        document.getElementById('stat-audit-inserts').textContent = Number(inserts).toLocaleString('ar-EG');
-        document.getElementById('stat-audit-updates').textContent = Number(updates).toLocaleString('ar-EG');
-        document.getElementById('stat-audit-deletes').textContent = Number(deletes).toLocaleString('ar-EG');
+        const insertEl = document.getElementById('stat-audit-inserts');
+        const updateEl = document.getElementById('stat-audit-updates');
+        const deleteEl = document.getElementById('stat-audit-deletes');
+        if (insertEl) insertEl.textContent = Number(inserts).toLocaleString('ar-EG');
+        if (updateEl) updateEl.textContent = Number(updates).toLocaleString('ar-EG');
+        if (deleteEl) deleteEl.textContent = Number(deletes).toLocaleString('ar-EG');
 
         tbody.innerHTML = '';
         if (!data.logs || data.logs.length === 0) {
@@ -3556,7 +3561,7 @@ async function searchAssetTimeline(query) {
                                     </div>
                                     <div>
                                         ${ev.cost_status === 'PAID' 
-                                            ? `<span style="color:#10b981; font-weight:700;"><i data-lucide="check-circle" style="width:12px;height:12px;vertical-align:middle;"></i> مسددة بمقابل ${ev.receipt_number ? `(إيصال إيداع: <a href="javascript:void(0)" onclick="openPrintMemo('receipt', '${ev.receipt_number}')" style="color:#10b981; font-family:var(--font-en); font-weight:800; text-decoration:underline;">#${ev.receipt_number}</a>${((ev.spare_part?.payment_channel && ev.spare_part?.payment_channel !== '-') || (ev.payment_channel && ev.payment_channel !== '-')) ? ` - جهة الدفع: <strong>${ev.spare_part?.payment_channel || ev.payment_channel}</strong>` : ''}${parseFloat(ev.fees_amount) > 0 ? ` - بمبلغ: <strong>${Number(ev.fees_amount).toLocaleString('ar-EG')} جم</strong>` : ''})` : ''}</span>` 
+                                            ? `<span style="color:#10b981; font-weight:700;"><i data-lucide="check-circle" style="width:12px;height:12px;vertical-align:middle;"></i> مسددة بمقابل ${ev.receipt_number ? `(إيصال إيداع: <strong style="color:#10b981; font-family:var(--font-en); font-weight:800;">#${ev.receipt_number}</strong>${((ev.spare_part?.payment_channel && ev.spare_part?.payment_channel !== '-') || (ev.payment_channel && ev.payment_channel !== '-')) ? ` - جهة الدفع: <strong>${ev.spare_part?.payment_channel || ev.payment_channel}</strong>` : ''}${parseFloat(ev.fees_amount) > 0 ? ` - بمبلغ: <strong>${Number(ev.fees_amount).toLocaleString('ar-EG')} جم</strong>` : ''})` : ''}</span>` 
                                             : (ev.cost_status === 'DEFERRED'
                                                 ? `<span style="color:#ef4444; font-weight:700;"><i data-lucide="clock" style="width:12px;height:12px;vertical-align:middle;"></i> تحصيل مؤجل ⚠️</span>`
                                                 : `<span style="color:#06b6d4; font-weight:700;"><i data-lucide="shield-check" style="width:12px;height:12px;vertical-align:middle;"></i> صرف مجاني (بدون مقابل)</span>`)}
@@ -3735,66 +3740,6 @@ async function openPrintMemo(type, id) {
                         <div style="text-align:center;">
                             <strong>اعتماد إدارة الفرع</strong>
                             <div style="margin-top:40px; border-top:1px dashed #94a3b8; width:160px;">خاتم الفرع والتاريخ</div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        } else if (type === 'receipt') {
-            content.innerHTML = `
-                <div style="font-family: 'Cairo', sans-serif; color:#0f172a; line-height:1.6; border: 2px solid #0f172a; padding: 24px; border-radius: 8px;">
-                    <!-- Header -->
-                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom: 2px solid #0f172a; padding-bottom: 15px; margin-bottom: 20px;">
-                        <div>
-                            <h2 style="margin:0; font-size:18px; color:#1e3a8a;">شركة سمارت كارد لنظم المعلومات</h2>
-                            <p style="margin:2px 0 0; font-size:12px; color:#475569;">إيصال إيداع وتحصيل وسداد نقدي</p>
-                        </div>
-                        <div style="text-align:left;">
-                            <strong style="font-size:14px; font-family:'Roboto', sans-serif; color:#dc2626;">${doc.doc_number}</strong>
-                            <div style="font-size:11px; color:#64748b;">التاريخ: ${formattedDocDate}</div>
-                        </div>
-                    </div>
-
-                    <!-- Receipt Amount Box -->
-                    <div style="background:#f0fdf4; border:2px solid #16a34a; border-radius:8px; padding:15px; text-align:center; margin-bottom:20px;">
-                        <span style="font-size:13px; color:#15803d; display:block;">المبلغ المستلم والمحصل</span>
-                        <h1 style="margin:5px 0 0; font-size:28px; font-family:'Roboto', sans-serif; color:#15803d;">${Number(d.amount || 0).toLocaleString('ar-EG')} جنيه مصري فقط لا غير</h1>
-                    </div>
-
-                    <!-- Details Table -->
-                    <table style="width:100%; border-collapse:collapse; margin-bottom:20px; font-size:13px;">
-                        <tbody>
-                            <tr>
-                                <td style="border:1px solid #cbd5e1; padding:8px 12px; background:#f8fafc; font-weight:bold; width:25%;">استلمنا من السيد / المخبز</td>
-                                <td style="border:1px solid #cbd5e1; padding:8px 12px; font-weight:bold; color:#1e3a8a;">${d.merchant_name || '-'}</td>
-                                <td style="border:1px solid #cbd5e1; padding:8px 12px; background:#f8fafc; font-weight:bold; width:20%;">كود المخبز</td>
-                                <td style="border:1px solid #cbd5e1; padding:8px 12px; font-family:'Roboto', sans-serif; font-weight:bold;">${d.merchant_code || '-'}</td>
-                            </tr>
-                            <tr>
-                                <td style="border:1px solid #cbd5e1; padding:8px 12px; background:#f8fafc; font-weight:bold;">وذلك قيمة</td>
-                                <td colspan="3" style="border:1px solid #cbd5e1; padding:8px 12px; font-weight:bold;">${d.reason || 'سداد مقابل صيانة / استبدال قطع غيار'}</td>
-                            </tr>
-                            <tr>
-                                <td style="border:1px solid #cbd5e1; padding:8px 12px; background:#f8fafc; font-weight:bold;">جهة الدفع والتحصيل</td>
-                                <td style="border:1px solid #cbd5e1; padding:8px 12px; font-weight:bold; color:#15803d;">${d.payment_place || 'ضامن'}</td>
-                                <td style="border:1px solid #cbd5e1; padding:8px 12px; background:#f8fafc; font-weight:bold;">الماكينة المعنية</td>
-                                <td style="border:1px solid #cbd5e1; padding:8px 12px; font-family:'Roboto', sans-serif;">${d.pos_serial || '-'}</td>
-                            </tr>
-                        </tbody>
-                    </table>
-
-                    <!-- Signatures -->
-                    <div style="display:flex; justify-content:space-between; margin-top:40px; padding:0 20px; font-size:13px;">
-                        <div style="text-align:center;">
-                            <strong>المسدد / العميل</strong>
-                            <div style="margin-top:35px; border-top:1px dashed #94a3b8; width:150px;">التوقيع</div>
-                        </div>
-                        <div style="text-align:center;">
-                            <strong>أمين الخزينة / المحصل</strong>
-                            <div style="margin-top:35px; border-top:1px dashed #94a3b8; width:150px;">التوقيع</div>
-                        </div>
-                        <div style="text-align:center;">
-                            <strong>مدير الفرع</strong>
-                            <div style="margin-top:35px; border-top:1px dashed #94a3b8; width:150px;">الاعتماد والختم</div>
                         </div>
                     </div>
                 </div>
@@ -5103,7 +5048,8 @@ async function checkSyncHealth() {
         
         // Healthy if status is NOT error and data.success is not false
         const isHealthy = data && data.status !== 'error' && data.success !== false;
-        const fileName = (data && data.accessFilePath) ? data.accessFilePath.split(/[\\/]/).pop() : 'Bread_Final_be.accdb';
+        const isCloud = !!data.isCloudServer;
+        const fileName = isCloud ? 'السحابة متصلة ومحدثة ☁️' : ((data && data.accessFilePath) ? data.accessFilePath.split(/[\\/]/).pop() : 'Bread_Final_be.accdb');
         const pendingCount = data.outboxPendingCount || 0;
         updateHeaderDatabaseStatus(isHealthy, fileName, data?.message, pendingCount);
     } catch (err) {
@@ -6150,7 +6096,7 @@ function renderDeviceDeepdiveContent(data) {
         spBody.innerHTML = spare_parts.map((sp, idx) => {
             const hasReceipt = sp.receipt_number && sp.receipt_number !== '-' && !sp.receipt_number.includes('مجاني');
             const receiptHtml = hasReceipt
-                ? `<a href="javascript:void(0)" onclick="openPrintMemo('receipt', '${sp.receipt_number}')" class="badge inmerchant" style="font-family:var(--font-en); font-weight:800; font-size:11px; padding:2px 8px; border:1px solid rgba(56,189,248,0.4); text-decoration:underline;" title="انقر لطباعة إيصال الإيداع"><i data-lucide="receipt" style="width:11px; height:11px; vertical-align:middle; margin-left:3px;"></i>#${sp.receipt_number}</a>`
+                ? `<span class="badge inmerchant" style="font-family:var(--font-en); font-weight:800; font-size:11px; padding:2px 8px; border:1px solid rgba(56,189,248,0.4);"><i data-lucide="receipt" style="width:11px; height:11px; vertical-align:middle; margin-left:3px;"></i>#${sp.receipt_number}</span>`
                 : `<span style="font-size:11px; color:var(--text-muted);">-</span>`;
 
             const paidColor = sp.paid_amount > 0 ? '#10b981' : 'var(--text-muted)';
@@ -6590,7 +6536,18 @@ async function loadReconciliationMatrix() {
         if (kpiErrors24h) kpiErrors24h.textContent = data.errors_last_24h ?? 0;
         if (kpiTotalRecords) kpiTotalRecords.textContent = Number(data.total_local_records || 0).toLocaleString('ar-EG');
 
-        if (data.is_all_matched) {
+        const reseedBtn = document.getElementById('btn-reseed-vps-action');
+        if (reseedBtn) {
+            reseedBtn.style.display = data.is_cloud_server ? 'none' : 'inline-flex';
+        }
+
+        if (data.is_cloud_server) {
+            if (kpiMatchStatus) {
+                kpiMatchStatus.textContent = 'سيرفر سحابي مباشر ☁️';
+                kpiMatchStatus.style.color = '#38bdf8';
+            }
+            if (kpiMismatchCount) kpiMismatchCount.textContent = 'متصل بالسيرفر السحابي (VPS) مباشرة';
+        } else if (data.is_all_matched) {
             if (kpiMatchStatus) {
                 kpiMatchStatus.textContent = '100% متطابق ✅';
                 kpiMatchStatus.style.color = '#10b981';
@@ -6818,5 +6775,15 @@ if (typeof document !== 'undefined') {
     checkDiagnosticsPulse();
     setInterval(checkSyncHealth, 15000);
     setInterval(checkDiagnosticsPulse, 20000);
+
+    // Enable Shift + Mouse Wheel smooth horizontal scroll on all data tables
+    document.addEventListener('wheel', function(e) {
+        const tableContainer = e.target.closest('.table-responsive, .table-container');
+        if (!tableContainer) return;
+        if (e.shiftKey && e.deltaY !== 0) {
+            tableContainer.scrollLeft += (e.deltaY * 1.5);
+            e.preventDefault();
+        }
+    }, { passive: false });
 }
 

@@ -7,6 +7,29 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 const sqlite3 = require('sqlite3').verbose();
+const { Pool } = require('pg');
+
+let pgPool = null;
+function initPgPool() {
+    const config = readConfigSafely();
+    if (config.isCloudServer && !pgPool) {
+        pgPool = new Pool({
+            user: config.pgUser || process.env.PGUSER || 'smartcs_user',
+            password: config.pgPassword || process.env.PGPASSWORD || 'smartcs_secure_2026',
+            database: config.pgDatabase || process.env.PGDATABASE || 'smartcs_db',
+            host: config.pgHost || process.env.PGHOST || '127.0.0.1',
+            port: config.pgPort || process.env.PGPORT || 5432,
+            max: 20,
+            connectionTimeoutMillis: 5000,
+            idleTimeoutMillis: 30000,
+            statement_timeout: 60000,
+        });
+        pgPool.on('error', (err) => {
+            console.error('[PG POOL ERROR] Unexpected error on idle client:', err.message);
+        });
+    }
+}
+initPgPool();
 
 const DATA_SYNC_DIR = path.join(__dirname, 'data_sync');
 const CONFIG_FILE_PATH = path.join(__dirname, 'config.json');
@@ -73,6 +96,12 @@ function startFileWatcher(db) {
     if (periodicInterval) {
         clearInterval(periodicInterval);
         periodicInterval = null;
+    }
+
+    const watcherConfig = readConfigSafely();
+    if (watcherConfig.isCloudServer) {
+        console.log('[FILE WATCHER] Disabled on Cloud VPS (Receiver Mode) ☁️');
+        return;
     }
 
     if (!isAutoSyncEnabled()) {
@@ -205,9 +234,22 @@ let lastSyncResult = {
     durationMs: 0
 };
 
-// Helper: Run SQL as Promise
+const { translateSqliteToPostgres } = require('./db_translator');
+
 function dbRun(db, sql, params = []) {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
+        initPgPool();
+        const appCfgSync = readConfigSafely();
+        if (appCfgSync.isCloudServer && pgPool) {
+            try {
+                const { pgSql, pgParams } = translateSqliteToPostgres(sql, params);
+                const res = await pgPool.query(pgSql, pgParams);
+                resolve({ changes: res.rowCount });
+            } catch (err) {
+                reject(err);
+            }
+            return;
+        }
         db.run(sql, params, function(err) {
             if (err) reject(err);
             else resolve(this);
@@ -216,7 +258,19 @@ function dbRun(db, sql, params = []) {
 }
 
 function dbAll(db, sql, params = []) {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
+        initPgPool();
+        const appCfgSync = readConfigSafely();
+        if (appCfgSync.isCloudServer && pgPool) {
+            try {
+                const { pgSql, pgParams } = translateSqliteToPostgres(sql, params);
+                const res = await pgPool.query(pgSql, pgParams);
+                resolve(res.rows || []);
+            } catch (err) {
+                reject(err);
+            }
+            return;
+        }
         db.all(sql, params, (err, rows) => {
             if (err) reject(err);
             else resolve(rows || []);
@@ -288,7 +342,7 @@ async function initSyncDatabase(db) {
 
     await dbRun(db, `
         CREATE TABLE IF NOT EXISTS devices (
-            id INTEGER PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             serial TEXT UNIQUE,
             manufacturer TEXT,
             model TEXT,
@@ -300,12 +354,16 @@ async function initSyncDatabase(db) {
 
     await dbRun(db, `
         CREATE TABLE IF NOT EXISTS sim_cards (
-            id INTEGER PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             serial TEXT UNIQUE,
             carrier TEXT,
             status TEXT
         );
     `);
+
+    // Ensure sequences exist for PostgreSQL cloud database
+    try { await dbRun(db, `CREATE SEQUENCE IF NOT EXISTS devices_id_seq; ALTER TABLE devices ALTER COLUMN id SET DEFAULT nextval('devices_id_seq');`); } catch(e){}
+    try { await dbRun(db, `CREATE SEQUENCE IF NOT EXISTS sim_cards_id_seq; ALTER TABLE sim_cards ALTER COLUMN id SET DEFAULT nextval('sim_cards_id_seq');`); } catch(e){}
 
     await dbRun(db, `
         CREATE TABLE IF NOT EXISTS merchant_assets (
@@ -442,6 +500,20 @@ async function initSyncDatabase(db) {
             unitprice REAL
         );
     `);
+
+    // Ensure all raw tables exist on fresh databases
+    await dbRun(db, `CREATE TABLE IF NOT EXISTS assets_raw ("ID" TEXT PRIMARY KEY, bkcode TEXT, "Owner" TEXT, "Comments" TEXT, bk_type TEXT, telephone_1 TEXT, telephone_2 TEXT, "Address" TEXT, dep TEXT, "NationalD" TEXT, notes TEXT, "Condition" TEXT, "POS" TEXT, "POS_2" TEXT, pos_3 TEXT, "Manufacturer" TEXT, "Manufacturer2" TEXT, "Manufacturer3" TEXT, "Model" TEXT, "Model2" TEXT, "Model3" TEXT, "Cell_Serial" TEXT, "Cell_type" TEXT, "Cell_Serial3" TEXT, "Cell_type3" TEXT, "Acquired Date" TEXT, papers_date TEXT);`);
+    await dbRun(db, `CREATE TABLE IF NOT EXISTS transactions_raw ("ID" TEXT PRIMARY KEY, "POSN" TEXT, "ActionType" TEXT, "IssueDate" TEXT, "ActionDate" TEXT, "NoteG" TEXT, "NoteD" TEXT, "Fees" TEXT, "Paid" TEXT, "FeesAmount" TEXT, "Procedure" TEXT);`);
+    await dbRun(db, `CREATE TABLE IF NOT EXISTS maintenance_raw ("ID" TEXT PRIMARY KEY, "Unit Serial" TEXT, "Checked In Date" TEXT, "Checked Out Date" TEXT, "Checked In Condition" TEXT, "Procedure" TEXT, "Notes" TEXT);`);
+    await dbRun(db, `CREATE TABLE IF NOT EXISTS payments_raw ("ID" TEXT PRIMARY KEY, pos_number TEXT, payer TEXT, payment_date TEXT, payment_amount TEXT, ref_num TEXT, payment_reason TEXT, payment_place TEXT);`);
+    await dbRun(db, `CREATE TABLE IF NOT EXISTS store_pos_raw ("Serial" TEXT PRIMARY KEY, type TEXT, "Model" TEXT, faulty TEXT, pos_status TEXT, faulty_detils TEXT);`);
+    await dbRun(db, `CREATE TABLE IF NOT EXISTS store_sim_raw (sim_serial TEXT PRIMARY KEY, network TEXT, sim_type TEXT, faulty TEXT, notes TEXT);`);
+    await dbRun(db, `CREATE TABLE IF NOT EXISTS store_sp_raw (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, count_in TEXT, count_out TEXT);`);
+    await dbRun(db, `CREATE TABLE IF NOT EXISTS store_sp_maintenance_raw (id INTEGER PRIMARY KEY AUTOINCREMENT, formNo TEXT, type TEXT, out_date TEXT, notes TEXT, faulty_detils TEXT);`);
+    await dbRun(db, `CREATE TABLE IF NOT EXISTS tblfaults_raw (faultid TEXT PRIMARY KEY, FaultName TEXT);`);
+    await dbRun(db, `CREATE TABLE IF NOT EXISTS tblstaff_raw (id TEXT PRIMARY KEY, name TEXT, jtitle TEXT);`);
+    await dbRun(db, `CREATE TABLE IF NOT EXISTS tblfixes_raw ("FixID" TEXT PRIMARY KEY, "FixName" TEXT);`);
+    await dbRun(db, `CREATE TABLE IF NOT EXISTS failure_points_raw (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, model TEXT, fees TEXT, price TEXT);`);
 
     await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_audit_table_time ON audit_change_logs(table_name, timestamp DESC);`);
     await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_audit_type ON audit_change_logs(change_type);`);
@@ -680,11 +752,20 @@ async function upsertTableData(db, tableName, pkField, records) {
     }
 }
 
+let isRebuildingDomainEntities = false;
+
 /**
  * Synchronize Structured Domain Entities
  */
 async function syncHighLevelDomainEntities(db) {
-    console.log('[SYNC] Rebuilding Structured Domain Entities...');
+    if (isRebuildingDomainEntities) {
+        console.log('[SYNC] Domain entities rebuild already in progress, skipping overlapping request...');
+        return;
+    }
+    isRebuildingDomainEntities = true;
+    try {
+        await initSyncDatabase(db);
+        console.log('[SYNC] Rebuilding Structured Domain Entities...');
 
     // 1. Merchants (Ensure schema exists safely without DROP TABLE)
     await dbRun(db, `
@@ -709,21 +790,35 @@ async function syncHighLevelDomainEntities(db) {
             address, government, national_id, notes, status
         )
         SELECT 
-            COALESCE(bkcode, ID) AS merchant_code,
-            COALESCE(Owner, Comments, 'مخبز ' || COALESCE(bkcode, ID)) AS name,
-            COALESCE(bk_type, 'مخبز بلدي') AS type,
-            COALESCE(telephone_1, '') AS contact_phone,
-            COALESCE(telephone_2, '') AS contact_phone_2,
-            COALESCE(Address, '') AS address,
-            COALESCE(dep, 'القاهرة') AS government,
-            COALESCE(NationalD, '') AS national_id,
-            COALESCE(notes, '') AS notes,
-            CASE 
-                WHEN Condition LIKE '%تالف%' OR Condition LIKE '%كهنة%' OR Condition LIKE '%مغلق%' THEN 'suspended'
-                ELSE 'active'
-            END AS status
-        FROM assets_raw
-        WHERE COALESCE(bkcode, ID) IS NOT NULL AND COALESCE(bkcode, ID) != '';
+            merchant_code,
+            MAX(name) AS name,
+            MAX(type) AS type,
+            MAX(contact_phone) AS contact_phone,
+            MAX(contact_phone_2) AS contact_phone_2,
+            MAX(address) AS address,
+            MAX(government) AS government,
+            MAX(national_id) AS national_id,
+            MAX(notes) AS notes,
+            MAX(status) AS status
+        FROM (
+            SELECT 
+                COALESCE(bkcode, "ID") AS merchant_code,
+                COALESCE("Owner", "Comments", 'مخبز ' || COALESCE(bkcode, "ID")) AS name,
+                COALESCE(bk_type, 'مخبز بلدي') AS type,
+                COALESCE(telephone_1, '') AS contact_phone,
+                COALESCE(telephone_2, '') AS contact_phone_2,
+                COALESCE("Address", '') AS address,
+                COALESCE(dep, 'القاهرة') AS government,
+                COALESCE("NationalD", '') AS national_id,
+                COALESCE(notes, '') AS notes,
+                CASE 
+                    WHEN "Condition" LIKE '%تالف%' OR "Condition" LIKE '%كهنة%' OR "Condition" LIKE '%مغلق%' THEN 'suspended'
+                    ELSE 'active'
+                END AS status
+            FROM assets_raw
+            WHERE COALESCE(bkcode, "ID") IS NOT NULL AND COALESCE(bkcode, "ID") != ''
+        ) sub
+        GROUP BY merchant_code;
     `);
 
     // 2. Devices (POS)
@@ -733,34 +828,39 @@ async function syncHighLevelDomainEntities(db) {
             serial, manufacturer, model, status, faulty_details, solder_bridges
         )
         SELECT 
-            serial, manufacturer, model, status, faulty_details, solder_bridges
+            serial,
+            MAX(manufacturer) AS manufacturer,
+            MAX(model) AS model,
+            MAX(status) AS status,
+            MAX(faulty_details) AS faulty_details,
+            MAX(solder_bridges) AS solder_bridges
         FROM (
             SELECT 
-                POS AS serial,
-                COALESCE(Manufacturer, 'Verifone') AS manufacturer,
-                COALESCE(Model, 'VX520') AS model,
+                "POS" AS serial,
+                COALESCE(MAX("Manufacturer"), 'Verifone') AS manufacturer,
+                COALESCE(MAX("Model"), 'VX520') AS model,
                 'in_merchant' AS status,
                 '' AS faulty_details,
                 '' AS solder_bridges
             FROM assets_raw
-            WHERE POS IS NOT NULL AND TRIM(POS) != ''
-            GROUP BY POS
+            WHERE "POS" IS NOT NULL AND TRIM("POS") != ''
+            GROUP BY "POS"
             UNION
             SELECT 
-                POS_2 AS serial,
-                COALESCE(Manufacturer2, 'PAX') AS manufacturer,
-                COALESCE(Model2, 'S90') AS model,
+                "POS_2" AS serial,
+                COALESCE(MAX("Manufacturer2"), 'PAX') AS manufacturer,
+                COALESCE(MAX("Model2"), 'S90') AS model,
                 'in_merchant' AS status,
                 '' AS faulty_details,
                 '' AS solder_bridges
             FROM assets_raw
-            WHERE POS_2 IS NOT NULL AND TRIM(POS_2) != ''
-            GROUP BY POS_2
+            WHERE "POS_2" IS NOT NULL AND TRIM("POS_2") != ''
+            GROUP BY "POS_2"
             UNION
             SELECT 
                 pos_3 AS serial,
-                COALESCE(Manufacturer3, 'PAX') AS manufacturer,
-                COALESCE(Model3, 'S90') AS model,
+                COALESCE(MAX("Manufacturer3"), 'PAX') AS manufacturer,
+                COALESCE(MAX("Model3"), 'S90') AS model,
                 'in_merchant' AS status,
                 '' AS faulty_details,
                 '' AS solder_bridges
@@ -769,19 +869,19 @@ async function syncHighLevelDomainEntities(db) {
             GROUP BY pos_3
             UNION
             SELECT 
-                Serial AS serial,
-                COALESCE(type, 'Verifone') AS manufacturer,
-                COALESCE(Model, 'VX520') AS model,
-                CASE 
+                "Serial" AS serial,
+                COALESCE(MAX(type), 'Verifone') AS manufacturer,
+                COALESCE(MAX("Model"), 'VX520') AS model,
+                MAX(CASE 
                     WHEN LOWER(COALESCE(faulty, '')) IN ('true', '1', '-1', 'yes', 'نعم') OR pos_status LIKE '%عطل%' OR pos_status LIKE '%غير سليم%' OR pos_status LIKE '%كهنة%' OR pos_status LIKE '%تالف%' THEN 'faulty'
                     ELSE 'in_stock'
-                END AS status,
-                COALESCE(faulty_detils, '') AS faulty_details,
+                END) AS status,
+                COALESCE(MAX(faulty_detils), '') AS faulty_details,
                 '' AS solder_bridges
             FROM store_pos_raw
-            WHERE Serial IS NOT NULL AND TRIM(Serial) != ''
-            GROUP BY Serial
-        )
+            WHERE "Serial" IS NOT NULL AND TRIM("Serial") != ''
+            GROUP BY "Serial"
+        ) sub
         GROUP BY serial;
     `);
 
@@ -792,53 +892,55 @@ async function syncHighLevelDomainEntities(db) {
             serial, carrier, status
         )
         SELECT 
-            serial, carrier, status
+            serial,
+            MAX(carrier) AS carrier,
+            MAX(status) AS status
         FROM (
             SELECT 
-                Cell_Serial AS serial,
-                CASE 
-                    WHEN LOWER(COALESCE(Cell_type, '')) LIKE '%voda%' OR LOWER(COALESCE(Cell_type, '')) LIKE '%فودافون%' THEN 'Vodafone'
-                    WHEN LOWER(COALESCE(Cell_type, '')) LIKE '%orange%' OR LOWER(COALESCE(Cell_type, '')) LIKE '%اورنج%' OR LOWER(COALESCE(Cell_type, '')) LIKE '%أورنج%' OR LOWER(COALESCE(Cell_type, '')) LIKE '%موبينيل%' THEN 'Orange'
-                    WHEN LOWER(COALESCE(Cell_type, '')) LIKE '%etisalat%' OR LOWER(COALESCE(Cell_type, '')) LIKE '%اتصالات%' OR LOWER(COALESCE(Cell_type, '')) LIKE '%e&%' THEN 'Etisalat'
-                    WHEN LOWER(COALESCE(Cell_type, '')) LIKE '%we%' OR LOWER(COALESCE(Cell_type, '')) LIKE '%المصرية%' OR LOWER(COALESCE(Cell_type, '')) LIKE '%te%' THEN 'WE'
-                    ELSE COALESCE(NULLIF(Cell_type, ''), 'Orange')
-                END AS carrier,
+                "Cell_Serial" AS serial,
+                MAX(CASE 
+                    WHEN LOWER(COALESCE("Cell_type", '')) LIKE '%voda%' OR LOWER(COALESCE("Cell_type", '')) LIKE '%فودافون%' THEN 'Vodafone'
+                    WHEN LOWER(COALESCE("Cell_type", '')) LIKE '%orange%' OR LOWER(COALESCE("Cell_type", '')) LIKE '%اورنج%' OR LOWER(COALESCE("Cell_type", '')) LIKE '%أورنج%' OR LOWER(COALESCE("Cell_type", '')) LIKE '%موبينيل%' THEN 'Orange'
+                    WHEN LOWER(COALESCE("Cell_type", '')) LIKE '%etisalat%' OR LOWER(COALESCE("Cell_type", '')) LIKE '%اتصالات%' OR LOWER(COALESCE("Cell_type", '')) LIKE '%e&%' THEN 'Etisalat'
+                    WHEN LOWER(COALESCE("Cell_type", '')) LIKE '%we%' OR LOWER(COALESCE("Cell_type", '')) LIKE '%المصرية%' OR LOWER(COALESCE("Cell_type", '')) LIKE '%te%' THEN 'WE'
+                    ELSE COALESCE(NULLIF("Cell_type", ''), 'Orange')
+                END) AS carrier,
                 'assigned' AS status
             FROM assets_raw
-            WHERE Cell_Serial IS NOT NULL AND TRIM(Cell_Serial) != ''
-            GROUP BY Cell_Serial
+            WHERE "Cell_Serial" IS NOT NULL AND TRIM("Cell_Serial") != ''
+            GROUP BY "Cell_Serial"
             UNION
             SELECT 
-                Cell_Serial3 AS serial,
-                CASE 
-                    WHEN LOWER(COALESCE(Cell_type3, '')) LIKE '%voda%' OR LOWER(COALESCE(Cell_type3, '')) LIKE '%فودافون%' THEN 'Vodafone'
-                    WHEN LOWER(COALESCE(Cell_type3, '')) LIKE '%orange%' OR LOWER(COALESCE(Cell_type3, '')) LIKE '%اورنج%' OR LOWER(COALESCE(Cell_type3, '')) LIKE '%أورنج%' OR LOWER(COALESCE(Cell_type3, '')) LIKE '%موبينيل%' THEN 'Orange'
-                    WHEN LOWER(COALESCE(Cell_type3, '')) LIKE '%etisalat%' OR LOWER(COALESCE(Cell_type3, '')) LIKE '%اتصالات%' OR LOWER(COALESCE(Cell_type3, '')) LIKE '%e&%' THEN 'Etisalat'
-                    WHEN LOWER(COALESCE(Cell_type3, '')) LIKE '%we%' OR LOWER(COALESCE(Cell_type3, '')) LIKE '%المصرية%' OR LOWER(COALESCE(Cell_type3, '')) LIKE '%te%' THEN 'WE'
-                    ELSE COALESCE(NULLIF(Cell_type3, ''), 'Orange')
-                END AS carrier,
+                "Cell_Serial3" AS serial,
+                MAX(CASE 
+                    WHEN LOWER(COALESCE("Cell_type3", '')) LIKE '%voda%' OR LOWER(COALESCE("Cell_type3", '')) LIKE '%فودافون%' THEN 'Vodafone'
+                    WHEN LOWER(COALESCE("Cell_type3", '')) LIKE '%orange%' OR LOWER(COALESCE("Cell_type3", '')) LIKE '%اورنج%' OR LOWER(COALESCE("Cell_type3", '')) LIKE '%أورنج%' OR LOWER(COALESCE("Cell_type3", '')) LIKE '%موبينيل%' THEN 'Orange'
+                    WHEN LOWER(COALESCE("Cell_type3", '')) LIKE '%etisalat%' OR LOWER(COALESCE("Cell_type3", '')) LIKE '%اتصالات%' OR LOWER(COALESCE("Cell_type3", '')) LIKE '%e&%' THEN 'Etisalat'
+                    WHEN LOWER(COALESCE("Cell_type3", '')) LIKE '%we%' OR LOWER(COALESCE("Cell_type3", '')) LIKE '%المصرية%' OR LOWER(COALESCE("Cell_type3", '')) LIKE '%te%' THEN 'WE'
+                    ELSE COALESCE(NULLIF("Cell_type3", ''), 'Orange')
+                END) AS carrier,
                 'assigned' AS status
             FROM assets_raw
-            WHERE Cell_Serial3 IS NOT NULL AND TRIM(Cell_Serial3) != ''
-            GROUP BY Cell_Serial3
+            WHERE "Cell_Serial3" IS NOT NULL AND TRIM("Cell_Serial3") != ''
+            GROUP BY "Cell_Serial3"
             UNION
             SELECT 
                 sim_serial AS serial,
-                CASE 
+                MAX(CASE 
                     WHEN LOWER(COALESCE(network, sim_type, '')) LIKE '%voda%' OR LOWER(COALESCE(network, sim_type, '')) LIKE '%فودافون%' THEN 'Vodafone'
                     WHEN LOWER(COALESCE(network, sim_type, '')) LIKE '%orange%' OR LOWER(COALESCE(network, sim_type, '')) LIKE '%اورنج%' OR LOWER(COALESCE(network, sim_type, '')) LIKE '%أورنج%' OR LOWER(COALESCE(network, sim_type, '')) LIKE '%موبينيل%' THEN 'Orange'
                     WHEN LOWER(COALESCE(network, sim_type, '')) LIKE '%etisalat%' OR LOWER(COALESCE(network, sim_type, '')) LIKE '%اتصالات%' OR LOWER(COALESCE(network, sim_type, '')) LIKE '%e&%' THEN 'Etisalat'
                     WHEN LOWER(COALESCE(network, sim_type, '')) LIKE '%we%' OR LOWER(COALESCE(network, sim_type, '')) LIKE '%المصرية%' OR LOWER(COALESCE(network, sim_type, '')) LIKE '%te%' THEN 'WE'
                     ELSE COALESCE(NULLIF(network, ''), NULLIF(sim_type, ''), 'Orange')
-                END AS carrier,
-                CASE 
+                END) AS carrier,
+                MAX(CASE 
                     WHEN LOWER(COALESCE(faulty, '')) IN ('true', '1', '-1', 'yes', 'نعم') OR notes LIKE '%لا تعمل%' OR notes LIKE '%تالف%' THEN 'faulty'
                     ELSE 'in_stock'
-                END AS status
+                END) AS status
             FROM store_sim_raw
             WHERE sim_serial IS NOT NULL AND TRIM(sim_serial) != ''
             GROUP BY sim_serial
-        )
+        ) sub
         GROUP BY serial;
     `);
 
@@ -849,31 +951,31 @@ async function syncHighLevelDomainEntities(db) {
             merchant_code, device_id, sim_card_id, slot_label, assigned_date
         )
         SELECT 
-            COALESCE(a.bkcode, a.ID) AS merchant_code,
+            COALESCE(a.bkcode, a."ID") AS merchant_code,
             d.id AS device_id,
             s.id AS sim_card_id,
             'Main POS' AS slot_label,
             COALESCE(a."Acquired Date", a.papers_date, datetime('now')) AS assigned_date
         FROM assets_raw a
-        JOIN devices d ON d.serial = a.POS
-        LEFT JOIN sim_cards s ON s.serial = a.Cell_Serial
-        WHERE COALESCE(a.bkcode, a.ID) IS NOT NULL
+        JOIN devices d ON d.serial = a."POS"
+        LEFT JOIN sim_cards s ON s.serial = a."Cell_Serial"
+        WHERE COALESCE(a.bkcode, a."ID") IS NOT NULL
         UNION ALL
         SELECT 
-            COALESCE(a.bkcode, a.ID) AS merchant_code,
+            COALESCE(a.bkcode, a."ID") AS merchant_code,
             d.id AS device_id,
             s.id AS sim_card_id,
             'Secondary POS (POS_2)' AS slot_label,
             COALESCE(a."Acquired Date", a.papers_date, datetime('now')) AS assigned_date
         FROM assets_raw a
-        JOIN devices d ON d.serial = a.POS_2
-        LEFT JOIN sim_cards s ON s.serial = a.Cell_Serial3
-        WHERE COALESCE(a.bkcode, a.ID) IS NOT NULL AND a.POS_2 IS NOT NULL AND TRIM(a.POS_2) != '';
+        JOIN devices d ON d.serial = a."POS_2"
+        LEFT JOIN sim_cards s ON s.serial = a."Cell_Serial3"
+        WHERE COALESCE(a.bkcode, a."ID") IS NOT NULL AND a."POS_2" IS NOT NULL AND TRIM(a."POS_2") != '';
     `);
 
     // 5. Maintenance Tickets
-    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_assets_pos ON assets_raw(POS);`);
-    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_trans_posn ON transactions_raw(POSN);`);
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_assets_pos ON assets_raw("POS");`);
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_trans_posn ON transactions_raw("POSN");`);
     await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_devices_serial ON devices(serial);`);
     await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_maint_serial ON maintenance_raw("Unit Serial");`);
 
@@ -886,14 +988,14 @@ async function syncHighLevelDomainEntities(db) {
         )
         SELECT 
             'صيانة دورية / استلام' AS type,
-            COALESCE(a.bkcode, a.ID, 'عام') AS merchant_code,
+            COALESCE(a.bkcode, a."ID", 'عام') AS merchant_code,
             d.id AS device_id,
             CASE 
                 WHEN m."Checked Out Date" IS NOT NULL AND m."Checked Out Date" != '' THEN 'completed'
                 ELSE 'in_progress'
             END AS status,
             COALESCE(NULLIF(m."Checked In Condition", ''), 'عطل جهاز') AS issue_details,
-            COALESCE(NULLIF(m.Notes, ''), 'تم الفحص والإصلاح الفني') AS resolution_details,
+            COALESCE(NULLIF(m."Notes", ''), 'تم الفحص والإصلاح الفني') AS resolution_details,
             CASE 
                 WHEN UPPER(TRIM(COALESCE(m."Procedure", ''))) = 'AHMEDMAHDY' THEN 'أحمد المهدي محفوظ المهدي'
                 WHEN UPPER(TRIM(COALESCE(m."Procedure", ''))) = 'ELFAKHARANY' THEN 'أحمد فؤاد سيد الفخراني'
@@ -911,16 +1013,16 @@ async function syncHighLevelDomainEntities(db) {
             '' AS selected_bridges
         FROM maintenance_raw m
         LEFT JOIN (SELECT serial, MIN(id) AS id FROM devices WHERE serial IS NOT NULL AND TRIM(serial) != '' AND serial != '-' GROUP BY serial) d ON d.serial = m."Unit Serial"
-        LEFT JOIN (SELECT POS, MIN(bkcode) AS bkcode, MIN(ID) AS ID FROM assets_raw WHERE POS IS NOT NULL AND TRIM(POS) != '' AND POS != '-' GROUP BY POS) a ON a.POS = m."Unit Serial"
-        WHERE m.ID IS NOT NULL AND m.ID != ''
+        LEFT JOIN (SELECT "POS", MIN(bkcode) AS bkcode, MIN("ID") AS "ID" FROM assets_raw WHERE "POS" IS NOT NULL AND TRIM("POS") != '' AND "POS" != '-' GROUP BY "POS") a ON a."POS" = m."Unit Serial"
+        WHERE m."ID" IS NOT NULL AND m."ID" != ''
         UNION ALL
         SELECT 
-            COALESCE(NULLIF(t.ActionType, ''), 'إجراء صيانة / حركة') AS type,
-            COALESCE(NULLIF(t.POSN, ''), a.bkcode, a.ID, 'عام') AS merchant_code,
+            COALESCE(NULLIF(t."ActionType", ''), 'إجراء صيانة / حركة') AS type,
+            COALESCE(NULLIF(t."POSN", ''), a.bkcode, a."ID", 'عام') AS merchant_code,
             d.id AS device_id,
             'completed' AS status,
-            COALESCE(NULLIF(t.NoteG, ''), NULLIF(t.ActionType, ''), 'شكوى عطل ماكينة') AS issue_details,
-            COALESCE(NULLIF(t.NoteD, ''), 'تم الإصلاح الفني') AS resolution_details,
+            COALESCE(NULLIF(t."NoteG", ''), NULLIF(t."ActionType", ''), 'شكوى عطل ماكينة') AS issue_details,
+            COALESCE(NULLIF(t."NoteD", ''), 'تم الإصلاح الفني') AS resolution_details,
             CASE 
                 WHEN UPPER(TRIM(COALESCE(t."Procedure", ''))) = 'AHMEDMAHDY' THEN 'أحمد المهدي محفوظ المهدي'
                 WHEN UPPER(TRIM(COALESCE(t."Procedure", ''))) = 'ELFAKHARANY' THEN 'أحمد فؤاد سيد الفخراني'
@@ -929,50 +1031,64 @@ async function syncHighLevelDomainEntities(db) {
                 WHEN TRIM(COALESCE(t."Procedure", '')) != '' AND TRIM(t."Procedure") NOT LIKE 'DESKTOP%' AND TRIM(t."Procedure") != 'SHARE' AND TRIM(t."Procedure") != '35' THEN TRIM(t."Procedure")
                 ELSE 'فني الصيانة'
             END AS technician_name,
-            COALESCE(NULLIF(t.IssueDate, ''), datetime('now')) AS issue_date,
-            COALESCE(NULLIF(t.ActionDate, ''), t.IssueDate) AS close_date,
+            COALESCE(NULLIF(t."IssueDate", ''), datetime('now')) AS issue_date,
+            COALESCE(NULLIF(t."ActionDate", ''), t."IssueDate") AS close_date,
             0 AS hq_debt,
             '' AS hq_payment_ref,
             datetime('now') AS entry_time,
             '' AS selected_faults,
             '' AS selected_bridges
         FROM transactions_raw t
-        LEFT JOIN (SELECT serial, MIN(id) AS id FROM devices WHERE serial IS NOT NULL AND TRIM(serial) != '' AND serial != '-' GROUP BY serial) d ON d.serial = t.POSN
-        LEFT JOIN (SELECT POS, MIN(bkcode) AS bkcode, MIN(ID) AS ID FROM assets_raw WHERE POS IS NOT NULL AND TRIM(POS) != '' AND POS != '-' GROUP BY POS) a ON a.POS = t.POSN
-        WHERE t.ID IS NOT NULL AND t.ID != '';
+        LEFT JOIN (SELECT serial, MIN(id) AS id FROM devices WHERE serial IS NOT NULL AND TRIM(serial) != '' AND serial != '-' GROUP BY serial) d ON d.serial = t."POSN"
+        LEFT JOIN (SELECT "POS", MIN(bkcode) AS bkcode, MIN("ID") AS "ID" FROM assets_raw WHERE "POS" IS NOT NULL AND TRIM("POS") != '' AND "POS" != '-' GROUP BY "POS") a ON a."POS" = t."POSN"
+        WHERE t."ID" IS NOT NULL AND t."ID" != '';
     `);
 
     // 6. Payments
+    await dbRun(db, `DELETE FROM payments;`);
     await dbRun(db, `
         INSERT OR REPLACE INTO payments (
             id, merchant_code, payment_date, amount, ref_num, reason, payment_place
         )
         SELECT 
-            ID AS id,
-            COALESCE(pos_number, payer, 'عام') AS merchant_code,
-            COALESCE(payment_date, datetime('now')) AS payment_date,
-            CAST(COALESCE(payment_amount, '0') AS REAL) AS amount,
-            COALESCE(ref_num, '') AS ref_num,
-            COALESCE(payment_reason, 'سداد مستحقات') AS reason,
-            COALESCE(payment_place, 'الفرع') AS payment_place
-        FROM payments_raw
-        WHERE ID IS NOT NULL AND ID != '';
+            id,
+            MAX(merchant_code) AS merchant_code,
+            MAX(payment_date) AS payment_date,
+            MAX(amount) AS amount,
+            MAX(ref_num) AS ref_num,
+            MAX(reason) AS reason,
+            MAX(payment_place) AS payment_place
+        FROM (
+            SELECT 
+                CAST("ID" AS INTEGER) AS id,
+                COALESCE(pos_number, payer, 'عام') AS merchant_code,
+                COALESCE(payment_date, datetime('now')) AS payment_date,
+                CAST(COALESCE(NULLIF(payment_amount, ''), '0') AS REAL) AS amount,
+                COALESCE(ref_num, '') AS ref_num,
+                COALESCE(payment_reason, 'سداد مستحقات') AS reason,
+                COALESCE(payment_place, 'الفرع') AS payment_place
+            FROM payments_raw
+            WHERE "ID" IS NOT NULL AND TRIM("ID") != ''
+        ) sub
+        GROUP BY id;
     `);
 
     // 7. Faults List
     await dbRun(db, `
         INSERT OR REPLACE INTO tblfaults (id, fault_name)
-        SELECT CAST(faultid AS INTEGER), FaultName
+        SELECT CAST(NULLIF(faultid, '') AS INTEGER) AS id, MAX("FaultName") AS fault_name
         FROM tblfaults_raw
-        WHERE faultid IS NOT NULL;
+        WHERE faultid IS NOT NULL AND TRIM(faultid) != ''
+        GROUP BY CAST(NULLIF(faultid, '') AS INTEGER);
     `);
 
     // 8. Staff
     await dbRun(db, `
         INSERT OR REPLACE INTO tblstaff (id, name, role, can_maintain)
-        SELECT CAST(id AS INTEGER), name, COALESCE(jtitle, 'موظف'), 1
+        SELECT CAST(NULLIF(id, '') AS INTEGER) AS id, MAX(name) AS name, MAX(COALESCE(jtitle, 'موظف')) AS role, 1 AS can_maintain
         FROM tblstaff_raw
-        WHERE id IS NOT NULL;
+        WHERE id IS NOT NULL AND TRIM(id) != ''
+        GROUP BY CAST(NULLIF(id, '') AS INTEGER);
     `);
 
     // 9. Failure Points & Spare Parts Official Price History Engine
@@ -1066,6 +1182,9 @@ async function syncHighLevelDomainEntities(db) {
             WHERE type = spare_parts.part_name
         ), 0);
     `);
+    } finally {
+        isRebuildingDomainEntities = false;
+    }
 }
 
 // Real-time Sync Progress State
@@ -1356,10 +1475,13 @@ async function pushDeltaToCloud(db, deltaChanges) {
 /**
  * Flush and retry any pending delta changes queued in delta_outbox
  */
+let _isFlushingOutbox = false;
 async function flushDeltaOutbox(db) {
     if (!db) return;
+    if (_isFlushingOutbox) return; // Prevent concurrent flushes
     const config = readConfigSafely();
     if (config.isCloudServer) return;
+    _isFlushingOutbox = true;
 
     try {
         const pending = await dbAll(db, `SELECT * FROM delta_outbox ORDER BY id ASC LIMIT 5;`);
@@ -1370,6 +1492,12 @@ async function flushDeltaOutbox(db) {
         const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
 
         for (const item of pending) {
+            // Skip poison-pill items that have exceeded max retry attempts
+            if (item.attempts >= 15) {
+                console.warn(`[CLOUD DELTA OUTBOX] Archiving failed outbox #${item.id} after ${item.attempts} attempts: ${item.last_error}`);
+                await dbRun(db, `DELETE FROM delta_outbox WHERE id = ?;`, [item.id]);
+                continue;
+            }
             try {
                 const changes = JSON.parse(item.payload);
                 const response = await fetchFn(cloudEndpoint, {
@@ -1394,7 +1522,11 @@ async function flushDeltaOutbox(db) {
                 await dbRun(db, `UPDATE delta_outbox SET attempts = attempts + 1, last_error = ? WHERE id = ?;`, [err.message, item.id]);
             }
         }
-    } catch (e) {}
+    } catch (e) {
+        console.error('[CLOUD DELTA OUTBOX] Flush error:', e.message);
+    } finally {
+        _isFlushingOutbox = false;
+    }
 }
 
 module.exports = {

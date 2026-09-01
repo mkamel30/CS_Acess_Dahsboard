@@ -2,9 +2,12 @@ const express = require('express');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+require('dotenv').config();
 const sqlite3 = require('sqlite3').verbose();
+const { Pool } = require('pg');
 const fs = require('fs');
 const XLSX = require('xlsx');
+const rateLimit = require('express-rate-limit');
 const syncEngine = require('./sync_engine');
 
 function getLocalIpAddress() {
@@ -51,6 +54,24 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(__dirname)));
 
+// Global API rate limit
+const apiLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 100, // limit each IP to 100 requests per windowMs
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { success: false, error: 'Too many requests from this IP, please try again after a minute' }
+});
+
+// Stricter rate limit for sync delta
+const syncLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 30, // limit each IP to 30 requests per windowMs
+    message: { success: false, error: 'Too many sync requests from this IP' }
+});
+
+app.use('/api/', apiLimiter);
+
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 // ==========================================
@@ -60,9 +81,37 @@ function readAppConfig() {
     try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch (e) { return {}; }
 }
 const appCfg = readAppConfig();
+let pgPool = null;
+if (appCfg.isCloudServer) {
+    pgPool = new Pool({
+        user: appCfg.pgUser || process.env.PGUSER || 'smartcs_user',
+        password: appCfg.pgPassword || process.env.PGPASSWORD || 'smartcs_secure_2026',
+        database: appCfg.pgDatabase || process.env.PGDATABASE || 'smartcs_db',
+        host: appCfg.pgHost || process.env.PGHOST || '127.0.0.1',
+        port: appCfg.pgPort || process.env.PGPORT || 5432,
+        max: 20,
+        connectionTimeoutMillis: 5000,
+        idleTimeoutMillis: 30000,
+        statement_timeout: 60000,
+    });
+    pgPool.on('error', (err) => {
+        console.error('[PG POOL ERROR] Unexpected error on idle client:', err.message);
+    });
+}
 const SYNC_SECRET   = appCfg.syncSecret   || process.env.SYNC_SECRET   || 'smartcs-cloud-secret-2026';
 const WEBHOOK_SECRET = appCfg.webhookSecret || process.env.WEBHOOK_SECRET || '';
 const ADMIN_SECRET   = appCfg.adminSecret   || process.env.ADMIN_SECRET   || '';
+
+// Timing-safe secret comparison to prevent timing attacks
+function safeCompareSecret(provided, expected) {
+    if (!provided || !expected) return false;
+    try {
+        const bufA = Buffer.from(String(provided));
+        const bufB = Buffer.from(String(expected));
+        if (bufA.length !== bufB.length) return false;
+        return crypto.timingSafeEqual(bufA, bufB);
+    } catch { return false; }
+}
 
 // Admin-guard middleware: protects destructive endpoints
 // If ADMIN_SECRET is configured, require x-admin-secret header; otherwise allow (backward-compat)
@@ -121,8 +170,21 @@ async function logSystemError(module, endpoint, err, req = null, severity = 'ERR
     }
 }
 
+const { translateSqliteToPostgres } = require('./db_translator');
+
 function runQuery(sql, params = []) {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
+        if (appCfg.isCloudServer && pgPool) {
+            try {
+                const { pgSql, pgParams } = translateSqliteToPostgres(sql, params);
+                const res = await pgPool.query(pgSql, pgParams);
+                resolve({ changes: res.rowCount });
+            } catch (err) {
+                logSystemError('SQL_RUN', sql.slice(0, 120), err);
+                reject(err);
+            }
+            return;
+        }
         db.run(sql, params, function(err) {
             if (err) {
                 logSystemError('SQL_RUN', sql.slice(0, 120), err);
@@ -135,7 +197,18 @@ function runQuery(sql, params = []) {
 }
 
 function getQuery(sql, params = []) {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
+        if (appCfg.isCloudServer && pgPool) {
+            try {
+                const { pgSql, pgParams } = translateSqliteToPostgres(sql, params);
+                const res = await pgPool.query(pgSql, pgParams);
+                resolve(res.rows[0]);
+            } catch (err) {
+                logSystemError('SQL_GET', sql.slice(0, 120), err);
+                reject(err);
+            }
+            return;
+        }
         db.get(sql, params, (err, row) => {
             if (err) {
                 logSystemError('SQL_GET', sql.slice(0, 120), err);
@@ -148,7 +221,18 @@ function getQuery(sql, params = []) {
 }
 
 function allQuery(sql, params = []) {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
+        if (appCfg.isCloudServer && pgPool) {
+            try {
+                const { pgSql, pgParams } = translateSqliteToPostgres(sql, params);
+                const res = await pgPool.query(pgSql, pgParams);
+                resolve(res.rows || []);
+            } catch (err) {
+                logSystemError('SQL_ALL', sql.slice(0, 120), err);
+                reject(err);
+            }
+            return;
+        }
         db.all(sql, params, (err, rows) => {
             if (err) {
                 logSystemError('SQL_ALL', sql.slice(0, 120), err);
@@ -346,6 +430,13 @@ async function initAppSchema() {
             );
         `);
         await runQuery(`CREATE INDEX IF NOT EXISTS idx_system_error_logs_ts ON system_error_logs(timestamp);`).catch(() => {});
+        await runQuery(`CREATE INDEX IF NOT EXISTS idx_tickets_issue_clean ON tickets(issue_details);`).catch(() => {});
+        await runQuery(`CREATE INDEX IF NOT EXISTS idx_devices_model ON devices(model);`).catch(() => {});
+        await runQuery(`CREATE INDEX IF NOT EXISTS idx_devices_status ON devices(status);`).catch(() => {});
+        await runQuery(`CREATE INDEX IF NOT EXISTS idx_sims_carrier ON sim_cards(carrier);`).catch(() => {});
+        await runQuery(`CREATE INDEX IF NOT EXISTS idx_sims_status ON sim_cards(status);`).catch(() => {});
+        await runQuery(`CREATE INDEX IF NOT EXISTS idx_merchants_gov ON merchants(government);`).catch(() => {});
+        await runQuery(`CREATE INDEX IF NOT EXISTS idx_payments_date ON payments(payment_date);`).catch(() => {});
 
         console.log("[DB INIT] App Database Schema Verified and Ready.");
     } catch(err) {
@@ -571,6 +662,7 @@ app.get('/api/sync/status', async (req, res) => {
         
         res.json({
             success: true,
+            isCloudServer: !!appCfg.isCloudServer,
             status: status.status || 'idle',
             isSyncInProgress: !!status.isSyncInProgress,
             progress: status.progress || {},
@@ -597,6 +689,16 @@ app.get('/api/sync/status', async (req, res) => {
 // Trigger full sync from Access Database
 app.post('/api/sync/run', async (req, res) => {
     try {
+        const config = readAppConfig();
+        if (config.isCloudServer) {
+            // Cloud VPS is in receiver mode. Rebuild domain entities on demand.
+            await syncEngine.syncHighLevelDomainEntities();
+            return res.json({ 
+                success: true, 
+                is_cloud: true, 
+                message: 'السيرفر السحابي في وضع الاستقبال التلقائي - تمت إعادة بناء الكيانات السحابية بنجاح ⚡' 
+            });
+        }
         const result = await syncEngine.syncFromAccessDatabase(db);
         res.json(result);
     } catch (err) {
@@ -825,39 +927,47 @@ app.get('/api/maintenance/technicians-performance', async (req, res) => {
 // 3. DASHBOARD ANALYTICS & STATS
 // ==========================================
 
+let _cachedDashboardStats = null;
+let _cachedDashboardStatsTime = 0;
+
 app.get('/api/dashboard/stats', async (req, res) => {
     try {
+        const now = Date.now();
+        if (_cachedDashboardStats && (now - _cachedDashboardStatsTime < 4000)) {
+            return res.json(_cachedDashboardStats);
+        }
+
         // High-level counts combined in single ultra-fast query
         const counts = await getQuery(`
             SELECT 
-                (SELECT COUNT(*) FROM merchants) as totalMerchants,
-                (SELECT COUNT(*) FROM devices) as totalDevices,
-                (SELECT COUNT(*) FROM devices WHERE status IN ('in_merchant', 'DEPLOYED')) as inMerchantDevices,
-                (SELECT COUNT(*) FROM devices WHERE status IN ('in_stock', 'IN_STOCK')) as inStockDevices,
-                (SELECT COUNT(*) FROM devices WHERE status IN ('faulty', 'FAULTY')) as faultyDevices,
-                (SELECT COUNT(*) FROM sim_cards) as totalSims,
-                (SELECT COUNT(*) FROM sim_cards WHERE status IN ('assigned', 'DEPLOYED')) as assignedSims,
-                (SELECT COUNT(*) FROM sim_cards WHERE status IN ('in_stock', 'IN_STOCK')) as inStockSims,
-                (SELECT COUNT(*) FROM tickets) as totalTickets,
-                (SELECT COUNT(*) FROM tickets WHERE status IN ('OPEN', 'in_progress')) as openTickets,
-                (SELECT COUNT(*) FROM tickets WHERE status IN ('CLOSED', 'completed')) as closedTickets,
-                (SELECT COALESCE(SUM(amount), 0) FROM payments) as totalPaymentsAmount,
-                (SELECT COUNT(*) FROM payments) as totalPaymentsCount
+                (SELECT COUNT(*) FROM merchants) as "totalMerchants",
+                (SELECT COUNT(*) FROM devices) as "totalDevices",
+                (SELECT COUNT(*) FROM devices WHERE status IN ('in_merchant', 'DEPLOYED')) as "inMerchantDevices",
+                (SELECT COUNT(*) FROM devices WHERE status IN ('in_stock', 'IN_STOCK')) as "inStockDevices",
+                (SELECT COUNT(*) FROM devices WHERE status IN ('faulty', 'FAULTY')) as "faultyDevices",
+                (SELECT COUNT(*) FROM sim_cards) as "totalSims",
+                (SELECT COUNT(*) FROM sim_cards WHERE status IN ('assigned', 'DEPLOYED')) as "assignedSims",
+                (SELECT COUNT(*) FROM sim_cards WHERE status IN ('in_stock', 'IN_STOCK')) as "inStockSims",
+                (SELECT COUNT(*) FROM tickets) as "totalTickets",
+                (SELECT COUNT(*) FROM tickets WHERE status IN ('OPEN', 'in_progress')) as "openTickets",
+                (SELECT COUNT(*) FROM tickets WHERE status IN ('CLOSED', 'completed')) as "closedTickets",
+                (SELECT COALESCE(SUM(amount), 0) FROM payments) as "totalPaymentsAmount",
+                (SELECT COUNT(*) FROM payments) as "totalPaymentsCount"
         `) || {};
 
-        const totalMerchants = counts.totalMerchants || 0;
-        const totalDevices = counts.totalDevices || 0;
-        const inMerchantDevices = counts.inMerchantDevices || 0;
-        const inStockDevices = counts.inStockDevices || 0;
-        const faultyDevices = counts.faultyDevices || 0;
-        const totalSims = counts.totalSims || 0;
-        const assignedSims = counts.assignedSims || 0;
-        const inStockSims = counts.inStockSims || 0;
-        const totalTickets = counts.totalTickets || 0;
-        const openTickets = counts.openTickets || 0;
-        const closedTickets = counts.closedTickets || 0;
-        const totalPaymentsAmount = counts.totalPaymentsAmount || 0;
-        const totalPaymentsCount = counts.totalPaymentsCount || 0;
+        const totalMerchants = counts.totalMerchants ?? counts.totalmerchants ?? 0;
+        const totalDevices = counts.totalDevices ?? counts.totaldevices ?? 0;
+        const inMerchantDevices = counts.inMerchantDevices ?? counts.inmerchantdevices ?? 0;
+        const inStockDevices = counts.inStockDevices ?? counts.instockdevices ?? 0;
+        const faultyDevices = counts.faultyDevices ?? counts.faultydevices ?? 0;
+        const totalSims = counts.totalSims ?? counts.totalsims ?? 0;
+        const assignedSims = counts.assignedSims ?? counts.assignedsims ?? 0;
+        const inStockSims = counts.inStockSims ?? counts.instocksims ?? 0;
+        const totalTickets = counts.totalTickets ?? counts.totaltickets ?? 0;
+        const openTickets = counts.openTickets ?? counts.opentickets ?? 0;
+        const closedTickets = counts.closedTickets ?? counts.closedtickets ?? 0;
+        const totalPaymentsAmount = counts.totalPaymentsAmount ?? counts.totalpaymentsamount ?? 0;
+        const totalPaymentsCount = counts.totalPaymentsCount ?? counts.totalpaymentscount ?? 0;
 
         // Top 5 common faults
         const topFaults = await allQuery(`
@@ -968,6 +1078,9 @@ app.get('/api/dashboard/stats', async (req, res) => {
                 sparePartsAlerts: queryOpts.view === 'summary' ? [] : sparePartsAlerts
             }
         });
+
+        _cachedDashboardStats = envelope;
+        _cachedDashboardStatsTime = Date.now();
 
         res.json(envelope);
     } catch (err) {
@@ -3837,28 +3950,6 @@ app.get('/api/print/memo/:type/:id', async (req, res) => {
                 date: new Date().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }),
                 data: merchant
             });
-        } else if (type === 'receipt') {
-            const payment = await getQuery(`
-                SELECT p.*, m.name as merchant_name, m.government, m.contact_phone,
-                       d.serial as pos_serial, d.model as pos_model
-                FROM payments p
-                LEFT JOIN merchants m ON m.merchant_code = p.merchant_code
-                LEFT JOIN merchant_assets ma ON ma.merchant_code = m.merchant_code
-                LEFT JOIN devices d ON d.id = ma.device_id
-                WHERE p.id = ? OR p.ref_num = ?
-                LIMIT 1
-            `, [id, id]);
-
-            if (!payment) return res.status(404).json({ error: "Payment not found" });
-
-            res.json({
-                success: true,
-                type: 'receipt',
-                doc_title: 'إيصال استلام وسداد نقدي رسمي',
-                doc_number: `REC-${payment.ref_num || payment.id}`,
-                date: payment.payment_date,
-                data: payment
-            });
         } else {
             res.status(400).json({ error: "Invalid memo type" });
         }
@@ -4006,28 +4097,57 @@ app.post('/api/webhook/github', express.raw({ type: 'application/json' }), (req,
 // 6. CLOUD INCREMENTAL DELTA SYNC RECEIVER
 // ==========================================
 
-app.post('/api/sync/delta', express.json({ limit: '50mb' }), async (req, res) => {
+app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async (req, res) => {
     const secret = req.headers['x-sync-secret'] || req.query.secret;
-    if (secret !== SYNC_SECRET) {
+    if (!safeCompareSecret(secret, SYNC_SECRET)) {
         return res.status(401).json({ success: false, error: 'Unauthorized: Invalid sync secret' });
     }
 
     const { changes, tablesData } = req.body || {};
     let appliedCount = 0;
 
+    // Whitelist of allowed table names to prevent SQL injection via dynamic table names
+    const ALLOWED_SYNC_TABLES = new Set([
+        'assets_raw', 'transactions_raw', 'maintenance_raw', 'payments_raw',
+        'store_pos_raw', 'store_sim_raw', 'store_sp_raw', 'store_sp_maintenance_raw',
+        'installments_raw', 'tblfaults_raw', 'tblstaff_raw', 'tblfixes_raw',
+        'failure_points_raw', 'audit_change_logs', 'sync_history'
+    ]);
+
     try {
         if (tablesData && typeof tablesData === 'object') {
             for (const [tbl, rows] of Object.entries(tablesData)) {
-                if (Array.isArray(rows) && rows.length > 0) {
+                if (Array.isArray(rows) && rows.length > 0 && ALLOWED_SYNC_TABLES.has(tbl)) {
                     const sample = rows[0];
                     const keys = Object.keys(sample);
-                    const createCols = keys.map(k => `"${k}" TEXT`).join(', ');
+                    const pkCandidates = ['COMPOSITE', 'ID', 'id', 'Serial', 'sim_serial', 'faultid', 'FixID'];
+                    let pkAssigned = false;
+                    const createCols = keys.map(k => {
+                        if (!pkAssigned && pkCandidates.includes(k)) {
+                            pkAssigned = true;
+                            return `"${k}" TEXT PRIMARY KEY`;
+                        }
+                        return `"${k}" TEXT`;
+                    }).join(', ');
                     await runQuery(`CREATE TABLE IF NOT EXISTS "${tbl}" (${createCols});`);
                     for (const row of rows) {
                         const rowKeys = Object.keys(row);
                         const placeholders = rowKeys.map(() => '?').join(', ');
                         const quotedCols = rowKeys.map(k => `"${k}"`).join(', ');
-                        await runQuery(`INSERT OR REPLACE INTO "${tbl}" (${quotedCols}) VALUES (${placeholders})`, Object.values(row));
+                        
+                        let insertSql = `INSERT OR REPLACE INTO "${tbl}" (${quotedCols}) VALUES (${placeholders})`;
+                        if (appCfg.isCloudServer && pkAssigned) {
+                            let matchedPk = null;
+                            for (const col of pkCandidates) {
+                                if (rowKeys.includes(col)) { matchedPk = col; break; }
+                            }
+                            if (matchedPk) {
+                                const updateCols = rowKeys.filter(k => k !== matchedPk).map(k => `"${k}" = EXCLUDED."${k}"`).join(', ');
+                                insertSql = `INSERT INTO "${tbl}" (${quotedCols}) VALUES (${placeholders}) ON CONFLICT ("${matchedPk}") DO UPDATE SET ${updateCols || `"${matchedPk}" = EXCLUDED."${matchedPk}"`}`;
+                            }
+                        }
+                        
+                        await runQuery(insertSql, Object.values(row));
                         appliedCount++;
                     }
                 }
@@ -4036,12 +4156,21 @@ app.post('/api/sync/delta', express.json({ limit: '50mb' }), async (req, res) =>
 
         if (changes && Array.isArray(changes) && changes.length > 0) {
             for (const change of changes) {
-                if (change.table_name && change.new_data) {
+                if (change.table_name && ALLOWED_SYNC_TABLES.has(change.table_name) && change.new_data) {
                     try {
                         const parsed = typeof change.new_data === 'string' ? JSON.parse(change.new_data) : change.new_data;
                         const keys = Object.keys(parsed);
                         if (keys.length > 0) {
-                            const createCols = keys.map(k => `"${k}" TEXT`).join(', ');
+                            let createCols = keys.map(k => `"${k}" TEXT`).join(', ');
+                            const pkCandidates = ['COMPOSITE', 'ID', 'id', 'Serial', 'sim_serial', 'faultid', 'FixID'];
+                            let pkAssigned = false;
+                            for (const col of pkCandidates) {
+                                if (keys.includes(col)) {
+                                    createCols = createCols.replace(`"${col}" TEXT`, `"${col}" TEXT PRIMARY KEY`);
+                                    pkAssigned = true;
+                                    break;
+                                }
+                            }
                             await runQuery(`CREATE TABLE IF NOT EXISTS "${change.table_name}" (${createCols});`).catch(() => {});
                             const existingInfo = await allQuery(`PRAGMA table_info("${change.table_name}");`).catch(() => []);
                             const existingCols = new Set(existingInfo.map(i => i.name));
@@ -4053,13 +4182,25 @@ app.post('/api/sync/delta', express.json({ limit: '50mb' }), async (req, res) =>
                             const placeholders = keys.map(() => '?').join(', ');
                             const quotedCols = keys.map(k => `"${k}"`).join(', ');
                             const values = Object.values(parsed).map(v => v === null || v === undefined ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v)));
-                            await runQuery(`INSERT OR REPLACE INTO "${change.table_name}" (${quotedCols}) VALUES (${placeholders})`, values);
+                            
+                            let matchedPk = null;
+                            for (const col of pkCandidates) {
+                                if (keys.includes(col)) { matchedPk = col; break; }
+                            }
+                            
+                            let insertSql = `INSERT OR REPLACE INTO "${change.table_name}" (${quotedCols}) VALUES (${placeholders})`;
+                            if (appCfg.isCloudServer && matchedPk) {
+                                const updateCols = keys.filter(k => k !== matchedPk).map(k => `"${k}" = EXCLUDED."${k}"`).join(', ');
+                                insertSql = `INSERT INTO "${change.table_name}" (${quotedCols}) VALUES (${placeholders}) ON CONFLICT ("${matchedPk}") DO UPDATE SET ${updateCols || `"${matchedPk}" = EXCLUDED."${matchedPk}"`}`;
+                            }
+                            
+                            await runQuery(insertSql, values);
                             appliedCount++;
                         }
                     } catch(e) {
                         console.error(`[DELTA APPLY ERROR on ${change.table_name}]:`, e.message);
                     }
-                } else if (change.table_name && change.change_type === 'DELETE' && change.record_id) {
+                } else if (change.table_name && ALLOWED_SYNC_TABLES.has(change.table_name) && change.change_type === 'DELETE' && change.record_id) {
                     try {
                         const existingInfo = await allQuery(`PRAGMA table_info("${change.table_name}");`).catch(() => []);
                         const existingCols = new Set(existingInfo.map(i => i.name));
@@ -4092,11 +4233,6 @@ app.post('/api/sync/delta', express.json({ limit: '50mb' }), async (req, res) =>
             }
         }
 
-        // Re-align high level domain entities
-        if (syncEngine && typeof syncEngine.syncHighLevelDomainEntities === 'function') {
-            await syncEngine.syncHighLevelDomainEntities(db);
-        }
-
         // Broadcast real-time event to connected browsers
         broadcastSseEvent('sync_completed', {
             type: 'cloud_delta_applied',
@@ -4122,7 +4258,16 @@ app.post('/api/sync/delta', express.json({ limit: '50mb' }), async (req, res) =>
         } catch(e) {}
 
         console.log(`[CLOUD DELTA SYNC] Successfully applied ${appliedCount} delta record(s) to cloud database!`);
+        
+        // IMPORTANT: Send response FIRST so client (and Nginx) doesn't timeout!
         res.json({ success: true, applied: appliedCount, timestamp: new Date().toISOString() });
+
+        // Re-align high level domain entities ASYNCHRONOUSLY after response is safely flushed
+        if (syncEngine && typeof syncEngine.syncHighLevelDomainEntities === 'function') {
+            setTimeout(() => {
+                syncEngine.syncHighLevelDomainEntities(db).catch(e => console.error('[SYNC REBUILD ERROR]', e));
+            }, 100);
+        }
     } catch (err) {
         console.error('[CLOUD DELTA SYNC ERROR]', err);
         res.status(500).json({ success: false, error: err.message });
@@ -4290,18 +4435,23 @@ app.get('/api/diagnostics/reconciliation', async (req, res) => {
 
         // 2. Fetch Cloud VPS Counts if on local server
         if (!isCloud) {
-            const cloudUrl = (config.cloudEndpoint || 'https://smartcs.m-kamel.workers.dev/api/sync/delta').replace(/\/api\/sync\/delta.*$/, '/api/diagnostics/table-counts');
+            const cloudUrl = (config.cloudEndpoint || 'http://141.147.136.170/api/sync/delta').replace(/\/api\/sync\/delta.*$/, '/api/diagnostics/table-counts');
             const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
             try {
                 const cloudResp = await fetchFn(cloudUrl, {
                     headers: { 'x-sync-secret': SYNC_SECRET },
-                    timeout: 8000
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined
                 });
-                const cloudData = await cloudResp.json();
-                if (cloudData.success && cloudData.counts) {
-                    cloudCounts = cloudData.counts;
-                } else {
-                    cloudFetchError = cloudData.error || 'Failed to parse cloud response';
+                const text = await cloudResp.text();
+                try {
+                    const cloudData = JSON.parse(text);
+                    if (cloudData.success && cloudData.counts) {
+                        cloudCounts = cloudData.counts;
+                    } else {
+                        cloudFetchError = cloudData.error || 'Invalid cloud response';
+                    }
+                } catch (pe) {
+                    cloudFetchError = `Cloud HTTP ${cloudResp.status}: ${text.slice(0, 100)}`;
                 }
             } catch (e) {
                 cloudFetchError = e.message;
@@ -4326,7 +4476,7 @@ app.get('/api/diagnostics/reconciliation', async (req, res) => {
                 cCount = lCount; // We are on cloud
                 status = 'MATCHED';
             } else if (cloudCounts) {
-                cCount = cloudCounts[item.table] ?? 0;
+                cCount = parseInt(cloudCounts[item.table] ?? 0, 10);
                 totalCloudRecords += (cCount >= 0 ? cCount : 0);
                 diff = lCount - cCount;
                 if (diff === 0) {
@@ -4375,7 +4525,7 @@ app.get('/api/diagnostics/reconciliation', async (req, res) => {
 // 6. Full Cloud Seed Receiver (VPS Endpoint)
 app.post('/api/sync/full-seed', express.json({ limit: '100mb' }), async (req, res) => {
     const secret = req.headers['x-sync-secret'] || req.query.secret;
-    if (secret !== SYNC_SECRET) {
+    if (!safeCompareSecret(secret, SYNC_SECRET)) {
         return res.status(401).json({ success: false, error: 'Unauthorized: Invalid sync secret' });
     }
 
@@ -4390,41 +4540,90 @@ app.post('/api/sync/full-seed', express.json({ limit: '100mb' }), async (req, re
 
                 const sample = rows[0];
                 const cols = Object.keys(sample);
-                const createCols = cols.map(c => `"${c}" TEXT`).join(', ');
+                const pkCandidates = ['COMPOSITE', 'ID', 'id', 'Serial', 'sim_serial', 'faultid', 'FixID'];
+                let pkAssigned = false;
+                const createCols = cols.map(c => {
+                    if (!pkAssigned && pkCandidates.includes(c)) {
+                        pkAssigned = true;
+                        return `"${c}" TEXT PRIMARY KEY`;
+                    }
+                    return `"${c}" TEXT`;
+                }).join(', ');
                 await runQuery(`CREATE TABLE IF NOT EXISTS "${tbl}" (${createCols});`);
+                
+                if (appCfg.isCloudServer) {
+                    const existingInfo = await allQuery(`SELECT column_name as name FROM information_schema.columns WHERE table_name = '${tbl}'`).catch(() => []);
+                    const existingCols = new Set(existingInfo.map(i => i.name));
+                    for (const c of cols) {
+                        if (!existingCols.has(c) && !existingCols.has(c.toLowerCase())) {
+                            await runQuery(`ALTER TABLE "${tbl}" ADD COLUMN "${c}" TEXT;`).catch(() => {});
+                        }
+                    }
+                }
 
                 const placeholders = cols.map(() => '?').join(', ');
                 const quotedCols = cols.map(c => `"${c}"`).join(', ');
-                const insertSql = `INSERT OR REPLACE INTO "${tbl}" (${quotedCols}) VALUES (${placeholders});`;
+                let insertSql = `INSERT OR REPLACE INTO "${tbl}" (${quotedCols}) VALUES (${placeholders});`;
+                
+                if (appCfg.isCloudServer && pkAssigned) {
+                    let matchedPk = null;
+                    for (const col of pkCandidates) {
+                        if (cols.includes(col)) { matchedPk = col; break; }
+                    }
+                    if (matchedPk) {
+                        const updateCols = cols.filter(k => k !== matchedPk).map(k => `"${k}" = EXCLUDED."${k}"`).join(', ');
+                        insertSql = `INSERT INTO "${tbl}" (${quotedCols}) VALUES (${placeholders}) ON CONFLICT ("${matchedPk}") DO UPDATE SET ${updateCols || `"${matchedPk}" = EXCLUDED."${matchedPk}"`};`;
+                    }
+                }
 
-                await runQuery('SAVEPOINT sp_full_seed;');
-                try {
-                    if (!isAppend) {
-                        await runQuery(`DELETE FROM "${tbl}";`);
+                if (appCfg.isCloudServer && pgPool) {
+                    const client = await pgPool.connect();
+                    try {
+                        await client.query('BEGIN');
+                        if (!isAppend) {
+                            await client.query(`DELETE FROM "${tbl}";`);
+                        }
+                        for (const row of rows) {
+                            const vals = cols.map(c => {
+                                const v = row[c];
+                                if (v === null || v === undefined) return '';
+                                if (typeof v === 'object') return JSON.stringify(v);
+                                return String(v);
+                            });
+                            const { pgSql, pgParams } = translateSqliteToPostgres(insertSql, vals);
+                            await client.query(pgSql, pgParams);
+                        }
+                        await client.query('COMMIT');
+                        totalImported += rows.length;
+                    } catch (e) {
+                        await client.query('ROLLBACK').catch(() => {});
+                        throw e;
+                    } finally {
+                        client.release();
                     }
-                    const stmt = db.prepare(insertSql);
-                    for (const row of rows) {
-                        const vals = cols.map(c => {
-                            const v = row[c];
-                            if (v === null || v === undefined) return '';
-                            if (typeof v === 'object') return JSON.stringify(v);
-                            return String(v);
-                        });
-                        stmt.run(vals);
+                } else {
+                    if (!appCfg.isCloudServer) await runQuery('SAVEPOINT sp_full_seed;');
+                    try {
+                        if (!isAppend) {
+                            await runQuery(`DELETE FROM "${tbl}";`);
+                        }
+                        for (const row of rows) {
+                            const vals = cols.map(c => {
+                                const v = row[c];
+                                if (v === null || v === undefined) return '';
+                                if (typeof v === 'object') return JSON.stringify(v);
+                                return String(v);
+                            });
+                            await runQuery(insertSql, vals);
+                        }
+                        if (!appCfg.isCloudServer) await runQuery('RELEASE SAVEPOINT sp_full_seed;').catch(() => {});
+                        totalImported += rows.length;
+                    } catch (e) {
+                        if (!appCfg.isCloudServer) await runQuery('ROLLBACK TO SAVEPOINT sp_full_seed;').catch(() => {});
+                        throw e;
                     }
-                    await new Promise(r => stmt.finalize(r));
-                    await runQuery('RELEASE SAVEPOINT sp_full_seed;');
-                    totalImported += rows.length;
-                } catch (e) {
-                    await runQuery('ROLLBACK TO SAVEPOINT sp_full_seed;').catch(() => {});
-                    throw e;
                 }
             }
-        }
-
-        // Rebuild domain entities
-        if (req.body.rebuildDomain !== false && syncEngine && typeof syncEngine.syncHighLevelDomainEntities === 'function') {
-            await syncEngine.syncHighLevelDomainEntities(db);
         }
 
         res.json({
@@ -4433,6 +4632,13 @@ app.post('/api/sync/full-seed', express.json({ limit: '100mb' }), async (req, re
             duration_ms: Date.now() - startTime,
             message: `تمت المزامنة والتأسيس الشامل بنجاح (${totalImported} سجل)`
         });
+
+        // Rebuild domain entities ASYNCHRONOUSLY to avoid keeping connection open
+        if (req.body.rebuildDomain !== false && syncEngine && typeof syncEngine.syncHighLevelDomainEntities === 'function') {
+            setTimeout(() => {
+                syncEngine.syncHighLevelDomainEntities(db).catch(e => console.error('[SYNC REBUILD ERROR]', e));
+            }, 100);
+        }
     } catch (err) {
         logSystemError('FULL_SEED_RECEIVE', '/api/sync/full-seed', err, req, 'CRITICAL');
         res.status(500).json({ success: false, error: err.message });
@@ -4463,7 +4669,7 @@ app.post('/api/diagnostics/reseed-vps', requireAdmin, async (req, res) => {
             }
             if (rows.length === 0) continue;
 
-            const CHUNK_SIZE = 1500;
+            const CHUNK_SIZE = 500;
             for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
                 const chunk = rows.slice(i, i + CHUNK_SIZE);
                 const isFirst = (i === 0);
@@ -4484,8 +4690,11 @@ app.post('/api/diagnostics/reseed-vps', requireAdmin, async (req, res) => {
 
                 const rawText = await cloudResp.text();
                 let cloudResult = {};
-                try { cloudResult = JSON.parse(rawText); } catch(e) {
-                    throw new Error(`تعذر معالجة استجابة السيرفر السحابي لجدول ${item.name_ar}`);
+                try { 
+                    cloudResult = JSON.parse(rawText); 
+                } catch(e) {
+                    console.error(`[RESEED ERROR] Invalid response for ${item.table}:`, rawText.slice(0, 200));
+                    throw new Error(`تعذر معالجة استجابة السيرفر السحابي لجدول ${item.name_ar}: ${rawText.slice(0, 100)}`);
                 }
                 if (!cloudResult.success) {
                     throw new Error(cloudResult.error || `خطأ في مزامنة جدول ${item.name_ar}`);
@@ -4539,3 +4748,34 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`================================================================`);
     syncEngine.startFileWatcher(db);
 });
+
+// Graceful shutdown handler
+async function gracefulShutdown(signal) {
+    console.log(`\n[SHUTDOWN] ${signal} received. Cleaning up...`);
+    try {
+        if (pgPool) {
+            await pgPool.end();
+            console.log('[SHUTDOWN] PostgreSQL pool closed.');
+        }
+    } catch (e) { console.error('[SHUTDOWN] pgPool close error:', e.message); }
+    try {
+        db.close();
+        console.log('[SHUTDOWN] SQLite database closed.');
+    } catch (e) { console.error('[SHUTDOWN] SQLite close error:', e.message); }
+    console.log('[SHUTDOWN] Cleanup complete. Exiting.');
+    process.exit(0);
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Auto-cleanup logs older than 90 days to prevent infinite growth
+setInterval(async () => {
+    try {
+        console.log('[MAINTENANCE] Running log cleanup job...');
+        await runQuery(`DELETE FROM audit_change_logs WHERE timestamp < datetime('now', '-90 days')`).catch(() => {});
+        await runQuery(`DELETE FROM sync_history WHERE sync_time < datetime('now', '-90 days')`).catch(() => {});
+        await runQuery(`DELETE FROM system_error_logs WHERE timestamp < datetime('now', '-90 days')`).catch(() => {});
+    } catch (e) {
+        console.error('[LOG CLEANUP ERROR]', e.message);
+    }
+}, 24 * 60 * 60 * 1000); // Run daily
