@@ -1853,7 +1853,7 @@ app.get('/api/inventory/spare-parts-dashboard', async (req, res) => {
     try {
         const { date_from = '', date_to = '', payment_status = 'all', part_type = 'all', search = '', limit = 50, offset = 0 } = req.query;
 
-        const [allMovementsRaw, allPartsDef, allMerchants, allMerchantAssets, allPayments] = await Promise.all([
+        const [allMovementsRaw, allPartsDef, allMerchants, allMerchantAssets, allPayments, allTransactions] = await Promise.all([
             allQuery(`
                 SELECT s.rowid as id, s.type, s.count_in, s.count_out, s.Serial as serial_raw, s.notes, s.out_date, s.in_date, s.Model
                 FROM store_sp_raw s
@@ -1867,7 +1867,12 @@ app.get('/api/inventory/spare-parts-dashboard', async (req, res) => {
                 JOIN merchants m ON m.merchant_code = ma.merchant_code
                 LEFT JOIN devices d ON d.id = ma.device_id
             `),
-            allQuery('SELECT ref_num, payment_place FROM payments WHERE ref_num IS NOT NULL AND ref_num != ""')
+            allQuery('SELECT ref_num, payment_place FROM payments WHERE ref_num IS NOT NULL AND ref_num != ""'),
+            allQuery(`
+                SELECT POSN, GrocerName, ActionDate, IssueDate 
+                FROM transactions_raw 
+                WHERE ActionDate IS NOT NULL AND ActionDate != ""
+            `)
         ]);
 
         // Price & metadata map
@@ -1899,6 +1904,16 @@ app.get('/api/inventory/spare-parts-dashboard', async (req, res) => {
         allPayments.forEach(p => {
             if (p.ref_num) {
                 paymentsMap.set(p.ref_num.trim(), (p.payment_place || '').trim() || 'ضامن');
+            }
+        });
+        // Transactions Lookup Map for Date Override
+        const txMap = new Map();
+        allTransactions.forEach(t => {
+            const code = (t.POSN || t.GrocerName || '').trim();
+            if (code) {
+                if (!txMap.has(code)) txMap.set(code, []);
+                const txDate = UniversalDateEngine.parsePrecisionDate(t.ActionDate || t.IssueDate);
+                if (txDate) txMap.get(code).push(txDate);
             }
         });
 
@@ -2071,7 +2086,31 @@ app.get('/api/inventory/spare-parts-dashboard', async (req, res) => {
 
             // Date Parsing with Universal Engine
             const rawDateStr = row.out_date || row.in_date || '';
-            const movementDateObj = UniversalDateEngine.parsePrecisionDate(rawDateStr);
+            let movementDateObj = UniversalDateEngine.parsePrecisionDate(rawDateStr);
+
+            // Smart Date Shift Reversal (Resolving 27th artificial shift to actual transaction date)
+            if (movementDateObj && !isStockIn) {
+                const day = movementDateObj.getDate();
+                if (day >= 24 && day <= 28) {
+                    const m = movementDateObj.getMonth();
+                    const y = movementDateObj.getFullYear();
+                    
+                    const lookupCode = (posSerial !== '-' ? posSerial : extractedMerchantCode);
+                    const txList = lookupCode ? txMap.get(lookupCode) : null;
+                    if (txList && txList.length > 0) {
+                        const trueTxDate = txList.find(d => 
+                            d.getMonth() === m && 
+                            d.getFullYear() === y && 
+                            d.getDate() >= 24 && 
+                            d.getDate() <= 31
+                        );
+                        if (trueTxDate) {
+                            movementDateObj = trueTxDate;
+                        }
+                    }
+                }
+            }
+
             const movementTimestamp = movementDateObj ? movementDateObj.getTime() : null;
 
             // Point-in-time exact pricing based on movement date!
@@ -2312,7 +2351,63 @@ app.get('/api/reports/eod-detail', async (req, res) => {
             ORDER BY s.rowid DESC
         `);
 
-        const dayParts = allParts.filter(p => parseDateToIso(p.out_date) === targetIso).map(r => {
+        const allTransactionsEod = await allQuery(`
+            SELECT POSN, GrocerName, ActionDate, IssueDate 
+            FROM transactions_raw 
+            WHERE ActionDate IS NOT NULL AND ActionDate != ""
+        `);
+        const txMapEod = new Map();
+        allTransactionsEod.forEach(t => {
+            const code = (t.POSN || t.GrocerName || '').trim();
+            if (code) {
+                if (!txMapEod.has(code)) txMapEod.set(code, []);
+                const txDate = UniversalDateEngine.parsePrecisionDate(t.ActionDate || t.IssueDate);
+                if (txDate) txMapEod.get(code).push(txDate);
+            }
+        });
+
+        let processedAllParts = allParts.map(r => {
+            let movementDateObj = UniversalDateEngine.parsePrecisionDate(r.out_date);
+            const notesStr = String(r.pos_serial || '').trim();
+            const sStr = String(r.serial_raw || '').trim();
+            
+            // Extract Merchant Code for fallback lookup
+            let merchant_code = '';
+            const merchantMatch = sStr.match(/\b(0\d{5}|\d{5,6})\b/);
+            if (merchantMatch) {
+                merchant_code = merchantMatch[1];
+            } else if (sStr.includes('_3D') || sStr.includes('_3C') || sStr.includes('_3H')) {
+                const m = sStr.match(/_([30][A-Z0-9]{7})/);
+                if (m) merchant_code = m[1];
+            }
+
+            // Smart Date Shift Reversal
+            if (movementDateObj) {
+                const day = movementDateObj.getDate();
+                if (day >= 24 && day <= 28) {
+                    const m = movementDateObj.getMonth();
+                    const y = movementDateObj.getFullYear();
+                    const posSerial = (notesStr && notesStr !== '-' && notesStr.length >= 6) ? notesStr : merchant_code;
+                    
+                    const txList = posSerial ? txMapEod.get(posSerial) : null;
+                    if (txList && txList.length > 0) {
+                        const trueTxDate = txList.find(d => 
+                            d.getMonth() === m && 
+                            d.getFullYear() === y && 
+                            d.getDate() >= 24 && 
+                            d.getDate() <= 31
+                        );
+                        if (trueTxDate) {
+                            movementDateObj = trueTxDate;
+                            r.out_date = trueTxDate.toISOString(); // update for downstream
+                        }
+                    }
+                }
+            }
+            return r;
+        });
+
+        const dayParts = processedAllParts.filter(p => parseDateToIso(p.out_date) === targetIso).map(r => {
             const s = String(r.serial_raw || '').trim();
             const notes = String(r.pos_serial || '').trim();
             let payment_status = 'PAID';
