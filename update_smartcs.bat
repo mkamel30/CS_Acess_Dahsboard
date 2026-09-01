@@ -1,6 +1,6 @@
 @echo off
 set "PATH=%SystemRoot%\System32;%SystemRoot%\System32\WindowsPowerShell\v1.0;%ProgramFiles%\nodejs;%ProgramFiles%\Git\cmd;%PATH%"
-title SmartCS Dashboard - 1-Click Update
+title 1-Click GitHub Updater
 color 0b
 
 echo =======================================================================
