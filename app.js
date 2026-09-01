@@ -2889,6 +2889,36 @@ function renderSparePartsTable() {
 
     let list = [...sparePartsDataCache.movements];
 
+    // --- Smart Grouping Logic ---
+    let groupedList = [];
+    let groupMap = new Map();
+
+    for (const m of list) {
+        if (m.is_stock_in) {
+            groupedList.push(m);
+            continue;
+        }
+        
+        // Grouping key: identical time, merchant, receipt, and payment status
+        const key = `${m.date}_${m.merchant_code}_${m.receipt_number}_${m.payment_status_key}`;
+        
+        if (groupMap.has(key)) {
+            const existing = groupMap.get(key);
+            if (!existing.grouped_parts) {
+                existing.grouped_parts = [{ name: existing.part_name, qty: existing.quantity, type: existing.movement_type }];
+                existing.is_grouped = true;
+            }
+            existing.grouped_parts.push({ name: m.part_name, qty: m.quantity, type: m.movement_type });
+            existing.total_amount = Number(existing.total_amount) + Number(m.total_amount);
+        } else {
+            const copy = {...m};
+            groupMap.set(key, copy);
+            groupedList.push(copy);
+        }
+    }
+    list = groupedList;
+    // ----------------------------
+
     if (totalCountBadge) {
         totalCountBadge.textContent = `${list.length.toLocaleString('ar-EG')} حركة مطابقة`;
     }
@@ -2976,11 +3006,15 @@ function renderSparePartsTable() {
             <tr>
                 <td style="font-family:var(--font-en); color:var(--text-muted); font-size:12px;">${startIdx + idx + 1}</td>
                 <td>${formatDateTimeCell(m.date)}</td>
-                <td><strong style="color:var(--md-sys-color-primary); font-size:13px;">${m.part_name}</strong></td>
                 <td>
-                    <span class="badge ${m.is_stock_in ? 'instore' : 'inmerchant'}" style="font-family:var(--font-en); font-size:11px; font-weight:700;">
-                        ${m.quantity} قطعة (${m.movement_type})
-                    </span>
+                    ${m.is_grouped 
+                        ? `<div style="display:flex; flex-direction:column; gap:8px;">${m.grouped_parts.map(p => `<div><strong style="color:var(--md-sys-color-primary); font-size:13px;">${p.name}</strong></div>`).join('')}</div>`
+                        : `<strong style="color:var(--md-sys-color-primary); font-size:13px;">${m.part_name}</strong>`}
+                </td>
+                <td>
+                    ${m.is_grouped 
+                        ? `<div style="display:flex; flex-direction:column; gap:8px;">${m.grouped_parts.map(p => `<div><span class="badge inmerchant" style="font-family:var(--font-en); font-size:11px; font-weight:700;">${p.qty} قطعة (${p.type})</span></div>`).join('')}</div>`
+                        : `<span class="badge ${m.is_stock_in ? 'instore' : 'inmerchant'}" style="font-family:var(--font-en); font-size:11px; font-weight:700;">${m.quantity} قطعة (${m.movement_type})</span>`}
                 </td>
                 <td>${serialLink}</td>
                 <td>
@@ -3824,7 +3858,28 @@ async function openEODDayDetails(rawDate, isoDate) {
         // Render Spare Parts Table
         const tbParts = document.getElementById('eod-table-body-parts');
         if (data.spare_parts && data.spare_parts.length > 0) {
-            tbParts.innerHTML = data.spare_parts.map(p => {
+            
+            // --- Smart Grouping Logic ---
+            let groupedParts = [];
+            let gpMap = new Map();
+            for (const p of data.spare_parts) {
+                const key = `${p.out_date}_${p.merchant_code}_${p.receipt_num}_${p.payment_status}`;
+                if (gpMap.has(key)) {
+                    const ex = gpMap.get(key);
+                    if (!ex.grouped_parts) {
+                        ex.grouped_parts = [{ name: ex.part_name, qty: ex.quantity }];
+                        ex.is_grouped = true;
+                    }
+                    ex.grouped_parts.push({ name: p.part_name, qty: p.quantity });
+                    ex.total_amount = Number(ex.total_amount || 0) + Number(p.total_amount || 0);
+                } else {
+                    const copy = {...p};
+                    gpMap.set(key, copy);
+                    groupedParts.push(copy);
+                }
+            }
+
+            tbParts.innerHTML = groupedParts.map(p => {
                 let statusBadge = '<span class="badge" style="background:rgba(6,182,212,0.15); color:#06b6d4; font-weight:700;"><i data-lucide="shield-check" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> صرف مجاني</span>';
                 if (p.payment_status === 'DEFERRED') {
                     statusBadge = '<span class="badge" style="background:rgba(239,68,68,0.15); color:#ef4444; font-weight:700;"><i data-lucide="clock" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> تحصيل مؤجل ⚠️</span>';
@@ -3836,8 +3891,16 @@ async function openEODDayDetails(rawDate, isoDate) {
                     <tr>
                         <td><strong>#${p.id}</strong></td>
                         <td>${formatDateTimeCell(p.out_date)}</td>
-                        <td><strong style="color:var(--color-primary);">${p.part_name}</strong></td>
-                        <td><span class="badge inmerchant" style="font-family:var(--font-en);">${p.quantity} قطعة</span></td>
+                        <td>
+                            ${p.is_grouped 
+                                ? `<div style="display:flex; flex-direction:column; gap:8px;">${p.grouped_parts.map(gp => `<div><strong style="color:var(--color-primary);">${gp.name}</strong></div>`).join('')}</div>`
+                                : `<strong style="color:var(--color-primary);">${p.part_name}</strong>`}
+                        </td>
+                        <td>
+                            ${p.is_grouped 
+                                ? `<div style="display:flex; flex-direction:column; gap:8px;">${p.grouped_parts.map(gp => `<div><span class="badge inmerchant" style="font-family:var(--font-en);">${gp.qty} قطعة</span></div>`).join('')}</div>`
+                                : `<span class="badge inmerchant" style="font-family:var(--font-en);">${p.quantity} قطعة</span>`}
+                        </td>
                         <td><code style="font-family:var(--font-en); font-weight:bold;">${p.merchant_code || '-'}</code></td>
                         <td><code style="font-family:var(--font-en);">${p.pos_serial || '-'}</code></td>
                         <td>${statusBadge}</td>
