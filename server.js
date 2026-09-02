@@ -78,7 +78,13 @@ app.get('/favicon.ico', (req, res) => res.status(204).end());
 // SECURITY: Config-driven secrets & admin guard
 // ==========================================
 function readAppConfig() {
-    try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch (e) { return {}; }
+    let cfg = {};
+    try { cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) || {}; } catch (e) {}
+    if (process.platform === 'linux' || process.env.IS_CLOUD_SERVER === 'true') {
+        cfg.isCloudServer = true;
+        cfg.usePostgres = true;
+    }
+    return cfg;
 }
 const appCfg = readAppConfig();
 let pgPool = null;
