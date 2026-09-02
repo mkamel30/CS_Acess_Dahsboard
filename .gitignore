@@ -8,3 +8,5 @@ branch_database.db*
 .DS_Store
 Thumbs.db
 
+
+config.json
