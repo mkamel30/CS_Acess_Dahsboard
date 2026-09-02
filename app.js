@@ -5159,10 +5159,17 @@ window.drilldownSpareParts = drilldownSpareParts;
 // ==========================================================================
 // 17. HEADER DATABASE STATUS INDICATOR (GREEN / RED HEALTH MONITOR)
 // ==========================================================================
-function updateHeaderDatabaseStatus(isOnline, dbName, errorMessage, outboxPendingCount = 0) {
+function updateHeaderDatabaseStatus(isOnline, dbName, errorMessage, outboxPendingCount = 0, isCloud = false) {
     const iconEl = document.getElementById('header-db-icon');
-    if (iconEl) {
-        iconEl.setAttribute('data-lucide', isCloud ? 'cloud' : 'database');
+    if (iconEl && iconEl.getAttribute('data-lucide') !== (isCloud ? 'cloud' : 'database')) {
+        const newI = document.createElement('i');
+        newI.setAttribute('data-lucide', isCloud ? 'cloud' : 'database');
+        newI.id = 'header-db-icon';
+        newI.style.color = 'var(--color-success)';
+        newI.style.width = '16px';
+        newI.style.height = '16px';
+        iconEl.parentNode.replaceChild(newI, iconEl);
+        if (typeof window.lucide !== 'undefined') window.lucide.createIcons();
     }
     const pill = document.getElementById('header-db-pill');
     const statusText = document.getElementById('header-db-status');
