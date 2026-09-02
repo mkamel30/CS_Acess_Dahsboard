@@ -66,9 +66,10 @@ function translateSqliteToPostgres(sql, params) {
         }
     }
     
-    pgSql = pgSql.replace(/datetime\('now', '-24 hours', 'localtime'\)/ig, "NOW() - INTERVAL '24 hours'");
-    pgSql = pgSql.replace(/datetime\('now', 'localtime'\)/ig, 'CURRENT_TIMESTAMP::text');
-    pgSql = pgSql.replace(/datetime\('now'\)/ig, 'CURRENT_TIMESTAMP::text');
+    pgSql = pgSql.replace(/datetime\('now', '-24 hours', 'localtime'\)/ig, "to_char(NOW() - INTERVAL '24 hours', 'YYYY-MM-DD HH24:MI:SS')");
+    pgSql = pgSql.replace(/datetime\('now', '-90 days'\)/ig, "to_char(NOW() - INTERVAL '90 days', 'YYYY-MM-DD HH24:MI:SS')");
+    pgSql = pgSql.replace(/datetime\('now', 'localtime'\)/ig, "to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')");
+    pgSql = pgSql.replace(/datetime\('now'\)/ig, "to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')");
     pgSql = pgSql.replace(/\bDATETIME\b/ig, 'TEXT');
     pgSql = pgSql.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/ig, 'SERIAL PRIMARY KEY');
     
