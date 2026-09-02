@@ -85,16 +85,33 @@ function translateSqliteToPostgres(sql, params) {
     pgSql = pgSql.replace(/\b(\w+\.)?rowid\b/ig, '1');
 
     // Quote case-sensitive column names from RAW tables for PostgreSQL
-    pgSql = pgSql.replace(/\b([ams]\.)?Serial\b/g, '$1"Serial"');
-    pgSql = pgSql.replace(/\b([ams]\.)?ID\b/g, '$1"ID"');
-    pgSql = pgSql.replace(/\b([ams]\.)?Model\b/g, '$1"Model"');
-    pgSql = pgSql.replace(/\b([ams]\.)?Owner\b/g, '$1"Owner"');
-    pgSql = pgSql.replace(/\b([ams]\.)?POS\b/g, '$1"POS"');
-    pgSql = pgSql.replace(/\b([ams]\.)?POSID\b/g, '$1"POSID"');
-    pgSql = pgSql.replace(/\b([ams]\.)?FormNo\b/g, '$1"FormNo"');
-    pgSql = pgSql.replace(/\b([ams]\.)?NationalD\b/g, '$1"NationalD"');
-    pgSql = pgSql.replace(/\b([ams]\.)?Contact_person\b/g, '$1"Contact_person"');
-    pgSql = pgSql.replace(/\b([ams]\.)?GrocerNumber\b/g, '$1"GrocerNumber"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?Serial\b/g, '$1"Serial"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?ID\b/g, '$1"ID"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?Model\b/g, '$1"Model"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?Owner\b/g, '$1"Owner"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?POS\b/g, '$1"POS"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?POSID\b/g, '$1"POSID"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?FormNo\b/g, '$1"FormNo"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?NationalD\b/g, '$1"NationalD"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?Contact_person\b/g, '$1"Contact_person"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?GrocerNumber\b/g, '$1"GrocerNumber"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?POSN\b/g, '$1"POSN"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?GrocerName\b/g, '$1"GrocerName"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?ActionDate\b/g, '$1"ActionDate"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?IssueDate\b/g, '$1"IssueDate"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?ActionType\b/g, '$1"ActionType"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?NoteG\b/g, '$1"NoteG"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?NoteD\b/g, '$1"NoteD"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?Fees\b/g, '$1"Fees"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?Paid\b/g, '$1"Paid"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?FeesAmount\b/g, '$1"FeesAmount"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?Procedure\b/g, '$1"Procedure"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?Place\b/g, '$1"Place"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?SupplyOffice\b/g, '$1"SupplyOffice"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?ReplacedDate\b/g, '$1"ReplacedDate"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?PinpadSerial\b/g, '$1"PinpadSerial"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?Commercial_register\b/g, '$1"Commercial_register"');
+    pgSql = pgSql.replace(/\b([amtps]\.)?Tax_Card\b/g, '$1"Tax_Card"');
 
     // Fix empty string comparisons with double quotes: != "" -> != ''
     pgSql = pgSql.replace(/!=\s*""/g, "!= ''");
