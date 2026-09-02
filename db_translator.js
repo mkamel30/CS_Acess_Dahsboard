@@ -83,6 +83,22 @@ function translateSqliteToPostgres(sql, params) {
     pgSql = pgSql.replace(/\b(\w+\.)?rowid\s+as\s+id\b/ig, '1 as id');
     pgSql = pgSql.replace(/\bORDER\s+BY\s+(\w+\.)?rowid(\s+(ASC|DESC))?/ig, 'ORDER BY 1 $2');
     pgSql = pgSql.replace(/\b(\w+\.)?rowid\b/ig, '1');
+
+    // Quote case-sensitive column names from RAW tables for PostgreSQL
+    pgSql = pgSql.replace(/\b([ams]\.)?Serial\b/g, '$1"Serial"');
+    pgSql = pgSql.replace(/\b([ams]\.)?ID\b/g, '$1"ID"');
+    pgSql = pgSql.replace(/\b([ams]\.)?Model\b/g, '$1"Model"');
+    pgSql = pgSql.replace(/\b([ams]\.)?Owner\b/g, '$1"Owner"');
+    pgSql = pgSql.replace(/\b([ams]\.)?POS\b/g, '$1"POS"');
+    pgSql = pgSql.replace(/\b([ams]\.)?POSID\b/g, '$1"POSID"');
+    pgSql = pgSql.replace(/\b([ams]\.)?FormNo\b/g, '$1"FormNo"');
+    pgSql = pgSql.replace(/\b([ams]\.)?NationalD\b/g, '$1"NationalD"');
+    pgSql = pgSql.replace(/\b([ams]\.)?Contact_person\b/g, '$1"Contact_person"');
+    pgSql = pgSql.replace(/\b([ams]\.)?GrocerNumber\b/g, '$1"GrocerNumber"');
+
+    // Fix empty string comparisons with double quotes: != "" -> != ''
+    pgSql = pgSql.replace(/!=\s*""/g, "!= ''");
+    pgSql = pgSql.replace(/=\s*""/g, "= ''");
     
     // Translate SQLite ON CONFLICT(col) to PostgreSQL ON CONFLICT (col)
     pgSql = pgSql.replace(/ON CONFLICT\(([^)]+)\)/ig, 'ON CONFLICT ($1)');
