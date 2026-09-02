@@ -74,15 +74,15 @@ function translateSqliteToPostgres(sql, params) {
     pgSql = pgSql.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/ig, 'SERIAL PRIMARY KEY');
     
     // Auto-convert SQLite bracketed identifiers [Column Name] to PostgreSQL double quotes "Column Name"
-    pgSql = pgSql.replace(new RegExp('\\\\[([^\\\\]]+)\\\\]', 'g'), '"$1"');
+    pgSql = pgSql.replace(/\[([^\]]+)\]/g, '"$1"');
 
     // Auto-convert SQLite case-insensitive LIKE to PostgreSQL ILIKE
-    pgSql = pgSql.replace(/LIKE/ig, 'ILIKE');
+    pgSql = pgSql.replace(/\bLIKE\b/ig, 'ILIKE');
 
     // Auto-convert SQLite rowid references for PostgreSQL compatibility
-    pgSql = pgSql.replace(/(w+.)?rowids+ass+id/ig, '1 as id');
-    pgSql = pgSql.replace(/ORDERs+BYs+(w+.)?rowids+(ASC|DESC)?/ig, 'ORDER BY 1 $2');
-    pgSql = pgSql.replace(/(w+.)?rowid/ig, '1');
+    pgSql = pgSql.replace(/\b(\w+\.)?rowid\s+as\s+id\b/ig, '1 as id');
+    pgSql = pgSql.replace(/\bORDER\s+BY\s+(\w+\.)?rowid(\s+(ASC|DESC))?/ig, 'ORDER BY 1 $2');
+    pgSql = pgSql.replace(/\b(\w+\.)?rowid\b/ig, '1');
     
     // Translate SQLite ON CONFLICT(col) to PostgreSQL ON CONFLICT (col)
     pgSql = pgSql.replace(/ON CONFLICT\(([^)]+)\)/ig, 'ON CONFLICT ($1)');
