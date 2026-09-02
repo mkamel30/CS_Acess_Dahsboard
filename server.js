@@ -4594,7 +4594,7 @@ app.get('/api/diagnostics/reconciliation', async (req, res) => {
         let totalCloudRecords = 0;
 
         const tableMatrix = CORE_RECONCILIATION_TABLES.map(item => {
-            const lCount = localCounts[item.table] ?? 0;
+            const lCount = parseInt(localCounts[item.table] ?? 0, 10);
             totalLocalRecords += (lCount >= 0 ? lCount : 0);
 
             let cCount = null;
