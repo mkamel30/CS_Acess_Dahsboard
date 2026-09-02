@@ -74,7 +74,7 @@ function translateSqliteToPostgres(sql, params) {
     pgSql = pgSql.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/ig, 'SERIAL PRIMARY KEY');
     
     // Auto-convert SQLite bracketed identifiers [Column Name] to PostgreSQL double quotes "Column Name"
-    pgSql = pgSql.replace(/[([^]]+)]/g, '"$1"');
+    pgSql = pgSql.replace(new RegExp('\\\\[([^\\\\]]+)\\\\]', 'g'), '"$1"');
 
     // Auto-convert SQLite case-insensitive LIKE to PostgreSQL ILIKE
     pgSql = pgSql.replace(/LIKE/ig, 'ILIKE');
