@@ -4564,7 +4564,7 @@ app.get('/api/diagnostics/reconciliation', async (req, res) => {
 
         // 2. Fetch Cloud VPS Counts if on local server
         if (!isCloud) {
-            const cloudUrl = (config.cloudEndpoint || 'http://141.147.136.170/api/sync/delta').replace(/\/api\/sync\/delta.*$/, '/api/diagnostics/table-counts');
+            const cloudUrl = (config.cloudEndpoint || 'https://smartcs.m-kamel.workers.dev/api/sync/delta').replace(/\/api\/sync\/delta.*$/, '/api/diagnostics/table-counts');
             const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
             try {
                 const cloudResp = await fetchFn(cloudUrl, {
