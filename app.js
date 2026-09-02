@@ -4031,6 +4031,13 @@ async function loadSettings() {
         const watcherState = document.getElementById('settings-watcher-state');
         const networkUrlInput = document.getElementById('settings-network-url');
 
+        if (data.isCloudServer) {
+            const dbPanel = document.getElementById('db-connection-panel');
+            const syncPanel = document.getElementById('sync-settings-panel');
+            if (dbPanel) dbPanel.style.display = 'none';
+            if (syncPanel) syncPanel.style.display = 'none';
+        }
+
         if (pathInput && data.path) pathInput.value = data.path;
         if (sizeLabel && data.fileSizeMb) sizeLabel.textContent = `${data.fileSizeMb} MB`;
         if (providerInput && data.provider) providerInput.value = data.provider;
@@ -5153,6 +5160,10 @@ window.drilldownSpareParts = drilldownSpareParts;
 // 17. HEADER DATABASE STATUS INDICATOR (GREEN / RED HEALTH MONITOR)
 // ==========================================================================
 function updateHeaderDatabaseStatus(isOnline, dbName, errorMessage, outboxPendingCount = 0) {
+    const iconEl = document.getElementById('header-db-icon');
+    if (iconEl) {
+        iconEl.setAttribute('data-lucide', isCloud ? 'cloud' : 'database');
+    }
     const pill = document.getElementById('header-db-pill');
     const statusText = document.getElementById('header-db-status');
     if (!pill || !statusText) return;
@@ -5188,7 +5199,7 @@ async function checkSyncHealth() {
         const isCloud = !!data.isCloudServer;
         const fileName = isCloud ? 'السحابة متصلة ومحدثة ☁️' : ((data && data.accessFilePath) ? data.accessFilePath.split(/[\\/]/).pop() : 'Bread_Final_be.accdb');
         const pendingCount = data.outboxPendingCount || 0;
-        updateHeaderDatabaseStatus(isHealthy, fileName, data?.message, pendingCount);
+        updateHeaderDatabaseStatus(isHealthy, fileName, data?.message, pendingCount, isCloud);
     } catch (err) {
         updateHeaderDatabaseStatus(false, null, 'تعذر الاتصال بالسيرفر أو ملف الآكسيس');
     }

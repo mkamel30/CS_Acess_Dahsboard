@@ -571,6 +571,7 @@ app.get('/api/settings/db-path', (req, res) => {
         const localIp = getLocalIpAddress();
         res.json({
             success: true,
+            isCloudServer: !!readAppConfig().isCloudServer,
             path: currentPath,
             exists: exists,
             fileSizeMb: fileSizeMb,
@@ -3960,10 +3961,34 @@ app.get('/api/assets/timeline', async (req, res) => {
                     const evMerchantName = merchant?.name || (evMerchantCode ? `مخبز كود #${evMerchantCode}` : '');
                     const evPos = notes || device?.serial || '-';
 
+                    let displayDate = r.out_date || 'غير محدد';
+                    if (r.out_date && assetTransactions && assetTransactions.length > 0) {
+                        const outDateObj = new Date(parseDateHelper(r.out_date));
+                        if (!isNaN(outDateObj)) {
+                            let closestTxDate = null;
+                            let minDiff = Infinity;
+                            assetTransactions.forEach(tx => {
+                                const txDateStr = tx.ActionDate || tx.IssueDate;
+                                if (txDateStr) {
+                                    const txDateObj = new Date(parseDateHelper(txDateStr));
+                                    if (!isNaN(txDateObj)) {
+                                        const diffDays = (outDateObj - txDateObj) / (1000 * 60 * 60 * 24);
+                                        if (diffDays >= 0 && diffDays <= 7 && diffDays < minDiff) {
+                                            minDiff = diffDays;
+                                            closestTxDate = txDateStr;
+                                        }
+                                    }
+                                }
+                            });
+                            if (closestTxDate) {
+                                displayDate = closestTxDate;
+                            }
+                        }
+                    }
                     timelineEvents.push({
                         type: 'SPARE_PART_BRANCH',
                         title: `صيانة وقطع غيار الفرع: ${r.type} (${Math.abs(parseInt(r.count_in) || 1)} قطعة)`,
-                        date: r.out_date || 'تاريخ غير محدد',
+                        date: displayDate,
                         technician: 'صيانة الفرع المحلية',
                         merchant_code: evMerchantCode,
                         merchant_name: evMerchantName,
