@@ -37,12 +37,17 @@ const DEFAULT_ACCESS_FILE_PATH = 'h:\\Programming\\Br_DB\\BE\\Bread_Final_be.acc
 const VBS_EXPORTER_PATH = path.join(__dirname, 'export_accdb_tables.vbs');
 
 function readConfigSafely() {
+    let cfg = {};
     try {
         if (fs.existsSync(CONFIG_FILE_PATH)) {
-            return JSON.parse(fs.readFileSync(CONFIG_FILE_PATH, 'utf8')) || {};
+            cfg = JSON.parse(fs.readFileSync(CONFIG_FILE_PATH, 'utf8')) || {};
         }
     } catch (e) {}
-    return {};
+    if (process.platform === 'linux' || process.env.IS_CLOUD_SERVER === 'true') {
+        cfg.isCloudServer = true;
+        cfg.usePostgres = true;
+    }
+    return cfg;
 }
 
 function getAccessFilePath() {

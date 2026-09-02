@@ -4032,10 +4032,17 @@ async function loadSettings() {
         const networkUrlInput = document.getElementById('settings-network-url');
 
         if (data.isCloudServer) {
-            const dbPanel = document.getElementById('db-connection-panel');
-            const syncPanel = document.getElementById('sync-settings-panel');
-            if (dbPanel) dbPanel.style.display = 'none';
-            if (syncPanel) syncPanel.style.display = 'none';
+            const dbSubtabBtn = document.getElementById('btn-subtab-settings-db');
+            const dbPane = document.getElementById('pane-settings-db');
+            if (dbSubtabBtn) dbSubtabBtn.style.display = 'none';
+            if (dbPane) dbPane.style.display = 'none';
+
+            // Auto-switch to diagnostics tab if currently on db subtab
+            if (dbSubtabBtn && dbSubtabBtn.classList.contains('active')) {
+                if (typeof switchSettingsSubtab === 'function') {
+                    switchSettingsSubtab('settings-diagnostics');
+                }
+            }
         }
 
         if (pathInput && data.path) pathInput.value = data.path;
@@ -5204,7 +5211,7 @@ async function checkSyncHealth() {
         // Healthy if status is NOT error and data.success is not false
         const isHealthy = data && data.status !== 'error' && data.success !== false;
         const isCloud = !!data.isCloudServer;
-        const fileName = isCloud ? 'السحابة متصلة ومحدثة ☁️' : ((data && data.accessFilePath) ? data.accessFilePath.split(/[\\/]/).pop() : 'Bread_Final_be.accdb');
+        const fileName = isCloud ? 'قاعدة البيانات السحابية (PostgreSQL) ☁️' : ((data && data.accessFilePath) ? data.accessFilePath.split(/[\\/]/).pop() : 'Bread_Final_be.accdb');
         const pendingCount = data.outboxPendingCount || 0;
         updateHeaderDatabaseStatus(isHealthy, fileName, data?.message, pendingCount, isCloud);
     } catch (err) {
