@@ -519,6 +519,7 @@ async function initSyncDatabase(db) {
     await dbRun(db, `CREATE TABLE IF NOT EXISTS tblstaff_raw (id TEXT PRIMARY KEY, name TEXT, jtitle TEXT);`);
     await dbRun(db, `CREATE TABLE IF NOT EXISTS tblfixes_raw ("FixID" TEXT PRIMARY KEY, "FixName" TEXT);`);
     await dbRun(db, `CREATE TABLE IF NOT EXISTS failure_points_raw (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, model TEXT, fees TEXT, price TEXT);`);
+    await dbRun(db, `CREATE TABLE IF NOT EXISTS failure_points_price_history (id INTEGER PRIMARY KEY AUTOINCREMENT, part_name TEXT NOT NULL, model TEXT, old_price REAL NOT NULL, new_price REAL NOT NULL, change_date TEXT, effective_from TEXT, change_source TEXT);`);
 
     await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_audit_table_time ON audit_change_logs(table_name, timestamp DESC);`);
     await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_audit_type ON audit_change_logs(change_type);`);
