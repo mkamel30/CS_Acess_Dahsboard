@@ -2587,7 +2587,7 @@ let sparePartsListenersBound = false;
 const SparePartsTableState = {
     page: 1,
     pageSize: 25,
-    sortCol: 'date',
+    sortKey: 'timestamp',
     sortDir: 'desc'
 };
 
@@ -2744,7 +2744,14 @@ async function loadSparePartsInventory() {
             }).join('');
         }
 
-        // 6. Render Movements Table
+        // 6. Update Sort Icons & Render Movements Table
+        const allSortIcons = document.querySelectorAll('#sp-movements-table .sort-icon');
+        allSortIcons.forEach(icon => icon.textContent = '⬍');
+        const activeSortIcon = document.getElementById(`sp-sort-${SparePartsTableState.sortKey}`);
+        if (activeSortIcon) {
+            activeSortIcon.textContent = SparePartsTableState.sortDir === 'asc' ? '▲' : '▼';
+        }
+
         renderSparePartsTable();
 
         // 7. Bind Listeners once
@@ -2844,10 +2851,10 @@ window.filterSparePartsBySearch = filterSparePartsBySearch;
 
 function sortSparePartsTable(key) {
     if (SparePartsTableState.sortKey === key) {
-        SparePartsTableState.sortDir = SparePartsTableState.sortDir === 'asc' ? 'desc' : 'asc';
+        SparePartsTableState.sortDir = SparePartsTableState.sortDir === 'desc' ? 'asc' : 'desc';
     } else {
         SparePartsTableState.sortKey = key;
-        SparePartsTableState.sortDir = (key === 'total_amount' || key === 'quantity' || key === 'timestamp') ? 'desc' : 'asc';
+        SparePartsTableState.sortDir = (key === 'timestamp' || key === 'total_amount' || key === 'quantity') ? 'desc' : 'asc';
     }
 
     // Update Header Sort Icons
@@ -2858,23 +2865,7 @@ function sortSparePartsTable(key) {
         currentIcon.textContent = SparePartsTableState.sortDir === 'asc' ? '▲' : '▼';
     }
 
-    if (sparePartsDataCache && sparePartsDataCache.movements) {
-        sparePartsDataCache.movements.sort((a, b) => {
-            let valA = a[key];
-            let valB = b[key];
-            if (valA === undefined || valA === null) valA = '';
-            if (valB === undefined || valB === null) valB = '';
-
-            if (typeof valA === 'number' && typeof valB === 'number') {
-                return SparePartsTableState.sortDir === 'asc' ? valA - valB : valB - valA;
-            }
-
-            const strA = String(valA).toLowerCase();
-            const strB = String(valB).toLowerCase();
-            return SparePartsTableState.sortDir === 'asc' ? strA.localeCompare(strB, 'ar') : strB.localeCompare(strA, 'ar');
-        });
-    }
-
+    SparePartsTableState.page = 1;
     renderSparePartsTable();
 }
 window.sortSparePartsTable = sortSparePartsTable;
@@ -2920,6 +2911,32 @@ function renderSparePartsTable() {
         }
     }
     list = groupedList;
+
+    // Apply Active Column Sorting (Defaults to timestamp DESC - newest to oldest)
+    const sortKey = SparePartsTableState.sortKey || 'timestamp';
+    const sortDir = SparePartsTableState.sortDir || 'desc';
+
+    list.sort((a, b) => {
+        if (sortKey === 'timestamp') {
+            const tA = a.timestamp ? Number(a.timestamp) : 0;
+            const tB = b.timestamp ? Number(b.timestamp) : 0;
+            if (tA !== tB) return sortDir === 'asc' ? tA - tB : tB - tA;
+            return sortDir === 'asc' ? (a.id || 0) - (b.id || 0) : (b.id || 0) - (a.id || 0);
+        }
+
+        let valA = a[sortKey];
+        let valB = b[sortKey];
+        if (valA === undefined || valA === null) valA = '';
+        if (valB === undefined || valB === null) valB = '';
+
+        if (typeof valA === 'number' && typeof valB === 'number') {
+            return sortDir === 'asc' ? valA - valB : valB - valA;
+        }
+
+        const strA = String(valA).toLowerCase();
+        const strB = String(valB).toLowerCase();
+        return sortDir === 'asc' ? strA.localeCompare(strB, 'ar') : strB.localeCompare(strA, 'ar');
+    });
     // ----------------------------
 
     if (totalCountBadge) {

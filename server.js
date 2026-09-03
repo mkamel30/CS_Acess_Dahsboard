@@ -2242,6 +2242,14 @@ app.get('/api/inventory/spare-parts-dashboard', async (req, res) => {
             });
         }
 
+        // Default sort: newest to oldest (timestamp DESC, row ID DESC)
+        processedMovements.sort((a, b) => {
+            const timeA = a.timestamp || 0;
+            const timeB = b.timestamp || 0;
+            if (timeB !== timeA) return timeB - timeA;
+            return (b.id || 0) - (a.id || 0);
+        });
+
         // Parts breakdown sorted by activity in the filtered period
         const isFilterActive = Boolean(startTimestamp || endTimestamp || payment_status !== 'all' || (part_type && part_type !== 'all') || search);
         const partsBreakdownList = Array.from(periodPartStatsMap.values()).map(p => {
