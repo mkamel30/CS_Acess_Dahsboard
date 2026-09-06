@@ -2202,7 +2202,7 @@ async function loadInstallmentsDashboard() {
     const exportBtn = document.getElementById('btn-export-inst-excel');
 
     try {
-        if (window.showTableLoading) window.showTableLoading('inst-contracts-table-body', 7, 8);
+        if (window.showTableLoading) window.showTableLoading('inst-contracts-table-body', 14, 8);
 
         const res = await fetch('/api/inventory/installments-dashboard');
         const data = await res.json();
@@ -2234,7 +2234,7 @@ async function loadInstallmentsDashboard() {
                                 <h3 style="font-size: 18px; font-weight: 800; margin: 8px 0 2px 0; color: var(--md-sys-color-primary);">
                                     ${Number(plan.monthly_price).toLocaleString('ar-EG')} جم <span style="font-size:11px; font-weight:normal; color:var(--text-muted);">/ شهرياً</span>
                                 </h3>
-                                <span style="font-size: 11px; color: var(--md-sys-color-on-surface-variant);">مقدم ثابت: 3,000 جم | إجمالي العقد: ${Number(plan.duration === 12 ? 13632 : 12060).toLocaleString('ar-EG')} جم</span>
+                                <span style="font-size: 11px; color: var(--md-sys-color-on-surface-variant);">إجمالي المحصل: ${Number(plan.collected).toLocaleString('ar-EG')} جم | إجمالي العقود: ${Number(plan.total_value).toLocaleString('ar-EG')} جم</span>
                             </div>
                             <div style="text-align:left;">
                                 <span style="font-size:24px; font-weight:800; font-family:var(--font-en); color:var(--text-primary); display:block;">${plan.count}</span>
@@ -2268,7 +2268,7 @@ async function loadInstallmentsDashboard() {
             financeBreakdown.innerHTML = `
                 <div style="padding:10px 14px; border-radius:10px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.2);">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span style="font-size:12px; font-weight:700; color:var(--text-secondary);">إجمالي المقدمات المحصلة (50 عقد):</span>
+                        <span style="font-size:12px; font-weight:700; color:var(--text-secondary);">إجمالي المقدمات المحصلة (${s.total_contracts || 0} عقد):</span>
                         <strong style="font-size:14px; font-family:var(--font-en); color:#10b981;">${Number(s.total_downpayment_amount || 150000).toLocaleString('ar-EG')} جم</strong>
                     </div>
                 </div>
@@ -6966,3 +6966,5 @@ if (typeof document !== 'undefined') {
     }, { passive: false });
 }
 
+
+console.log('App Controller Version 4.2 - Installments Fixed');

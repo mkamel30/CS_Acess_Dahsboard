@@ -1695,7 +1695,7 @@ app.get('/api/inventory/installments-dashboard', async (req, res) => {
             SELECT 
                 t.id,
                 t.pos as pos_serial,
-                t.installments as duration_months,
+                CAST(t.installments AS INTEGER) as duration_months,
                 CAST(t.unitprice AS REAL) as unit_price,
                 CAST(t.finalunitprice AS REAL) as final_unit_price,
                 CAST(t.monthlyinstallmentprice AS REAL) as monthly_installment_price,
@@ -1709,7 +1709,7 @@ app.get('/api/inventory/installments-dashboard', async (req, res) => {
                 p.last_payment_date,
                 d.model as device_model,
                 d.manufacturer as device_mfg
-            FROM tblinstallments t
+            FROM installments_raw t
             LEFT JOIN (
                 SELECT 
                     pos_number,
@@ -1717,13 +1717,15 @@ app.get('/api/inventory/installments-dashboard', async (req, res) => {
                     SUM(CASE WHEN payment_reason LIKE '%قسط%' AND payment_reason NOT LIKE '%مقدم%' THEN CAST(payment_amount AS REAL) ELSE 0 END) as paid_installments_sum,
                     SUM(CASE WHEN payment_reason LIKE '%مقدم%' THEN CAST(payment_amount AS REAL) ELSE 0 END) as paid_downpayment_sum,
                     SUM(CAST(payment_amount AS REAL)) as total_paid_sum,
-                    MIN(CASE WHEN payment_reason LIKE '%قسط%' AND payment_reason NOT LIKE '%مقدم%' THEN send_date ELSE NULL END) as first_send_date,
+                    MIN(CASE WHEN payment_reason LIKE '%قسط%' OR payment_reason LIKE '%مقدم%' THEN payment_date ELSE NULL END) as first_send_date,
                     MAX(payment_date) as last_payment_date
                 FROM payments_raw
                 GROUP BY pos_number
             ) p ON t.pos = p.pos_number
             LEFT JOIN devices d ON d.serial = t.pos
-            LEFT JOIN merchant_assets ma ON ma.device_id = d.id
+            LEFT JOIN (
+                SELECT device_id, merchant_code FROM merchant_assets GROUP BY device_id
+            ) ma ON ma.device_id = d.id
             LEFT JOIN merchants m ON m.merchant_code = ma.merchant_code
             ORDER BY CAST(t.id AS INTEGER) ASC
         `);
@@ -1736,21 +1738,43 @@ app.get('/api/inventory/installments-dashboard', async (req, res) => {
         let fullyPaidCount = 0;
         let lateCount = 0;
 
-        const durationStatsMap = {
-            '6': { duration: 6, count: 0, total_value: 0, collected: 0, remaining: 0, monthly_price: 1510, completed: 0, late: 0 },
-            '12': { duration: 12, count: 0, total_value: 0, collected: 0, remaining: 0, monthly_price: 886, completed: 0, late: 0 }
-        };
-
+        const durationStatsMap = {};
         const govStatsMap = new Map();
 
         const contracts = baseRows.map(r => {
-            const downPayment = 3000;
+            const downPayment = r.paid_downpayment_amount > 0 ? r.paid_downpayment_amount : 0;
             const monthly = r.monthly_installment_price || (r.duration_months === 12 ? 886 : 1510);
-            const paidInstallmentsCount = Math.floor(r.paid_installments_amount / monthly);
+            const paidInstallmentsCount = monthly > 0 ? Math.floor(r.paid_installments_amount / monthly) : 0;
             const remainingInstallmentsCount = Math.max(0, r.duration_months - paidInstallmentsCount);
+            
+            // Fractional remaining logic instead of floor
             const remainingAmount = Math.max(0, r.final_unit_price - (downPayment + r.paid_installments_amount));
-            const isLate = remainingInstallmentsCount > 0 && remainingAmount > 0;
             const totalPaid = downPayment + r.paid_installments_amount;
+
+            // Calculate months late
+            let isLate = false;
+            let months_late = 0;
+            
+            if (r.first_send_date && r.first_send_date !== '-' && remainingAmount > 0) {
+                const startD = new Date(r.first_send_date);
+                if (!isNaN(startD)) {
+                    const now = new Date();
+                    let elapsed = (now.getFullYear() - startD.getFullYear()) * 12 + now.getMonth() - startD.getMonth();
+                    elapsed = Math.max(0, elapsed); // if negative (future)
+                    // if elapsed > paid, then late
+                    if (elapsed > paidInstallmentsCount) {
+                        isLate = true;
+                        months_late = Math.min(remainingInstallmentsCount, elapsed - paidInstallmentsCount);
+                    }
+                }
+            } else if (remainingInstallmentsCount > 0 && remainingAmount > 0) {
+                // fallback if no payment ever but they owe
+                // we cant know how late they are without start date, so just mark as late 1 month if no date
+                if (r.paid_installments_amount === 0 && r.paid_downpayment_amount === 0) {
+                    isLate = true;
+                    months_late = 1;
+                }
+            }
 
             totalExpected += r.final_unit_price;
             totalCollected += totalPaid;
@@ -1759,19 +1783,20 @@ app.get('/api/inventory/installments-dashboard', async (req, res) => {
             totalPaidInstallments += r.paid_installments_amount;
 
             if (isLate) lateCount++;
-            else fullyPaidCount++;
+            else if (remainingAmount <= 0) fullyPaidCount++;
 
             // Duration stats
             const dKey = String(r.duration_months);
-            if (durationStatsMap[dKey]) {
-                const ds = durationStatsMap[dKey];
-                ds.count++;
-                ds.total_value += r.final_unit_price;
-                ds.collected += totalPaid;
-                ds.remaining += remainingAmount;
-                if (isLate) ds.late++;
-                else ds.completed++;
+            if (!durationStatsMap[dKey]) {
+                durationStatsMap[dKey] = { duration: r.duration_months, count: 0, total_value: 0, collected: 0, remaining: 0, monthly_price: monthly, completed: 0, late: 0 };
             }
+            const ds = durationStatsMap[dKey];
+            ds.count++;
+            ds.total_value += r.final_unit_price;
+            ds.collected += totalPaid;
+            ds.remaining += remainingAmount;
+            if (isLate) ds.late++;
+            else if (remainingAmount <= 0) ds.completed++;
 
             // Gov stats
             const govName = r.government && r.government !== '-' ? r.government : 'غير محدد';
@@ -1784,14 +1809,18 @@ app.get('/api/inventory/installments-dashboard', async (req, res) => {
             gs.collected += totalPaid;
             gs.remaining += remainingAmount;
 
+            let posStr = String(r.pos_serial || '');
+            let devMod = r.device_model || (posStr.startsWith('233') ? 'D230' : (posStr.startsWith('321') ? 'T3' : 'S90'));
+            let devMfg = r.device_mfg || (posStr.startsWith('321') ? 'Trendit' : 'PAX');
+
             return {
                 id: r.id,
                 pos_serial: r.pos_serial,
                 merchant_code: r.merchant_code,
                 merchant_name: r.merchant_name,
                 government: r.government,
-                device_model: r.device_model || (r.pos_serial.startsWith('2330') ? 'D230' : (r.pos_serial.startsWith('3210') ? 'T3' : 'S90')),
-                device_mfg: r.device_mfg || (r.pos_serial.startsWith('3210') ? 'Trendit' : 'PAX'),
+                device_model: devMod,
+                device_mfg: devMfg,
                 duration_months: r.duration_months,
                 down_payment: downPayment,
                 unit_price: r.unit_price,
@@ -1802,10 +1831,10 @@ app.get('/api/inventory/installments-dashboard', async (req, res) => {
                 remaining_installments_count: remainingInstallmentsCount,
                 remaining_amount: remainingAmount,
                 total_paid: totalPaid,
-                status_label: isLate ? 'متأخر / عليه متبقي' : 'مسدد بالكامل / منتظم',
+                status_label: isLate ? 'متأخر / عليه متبقي' : (remainingAmount <= 0 ? 'مسدد بالكامل / منتظم' : 'منتظم'),
                 status_key: isLate ? 'LATE' : 'COMPLETED',
-                months_late: isLate ? remainingInstallmentsCount : 0,
-                overdue_amount: isLate ? remainingInstallmentsCount * monthly : 0,
+                months_late: months_late,
+                overdue_amount: months_late * monthly,
                 first_send_date: r.first_send_date || '-',
                 last_payment_date: r.last_payment_date || '-'
             };
@@ -1852,7 +1881,6 @@ app.get('/api/inventory/installments-dashboard', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-
 // ==========================================
 // 3.9 SPARE PARTS INVENTORY & MOVEMENTS DASHBOARD API (Store_SP)
 // ==========================================
