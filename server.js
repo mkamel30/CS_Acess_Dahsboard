@@ -128,7 +128,7 @@ if (appCfg.isCloudServer) {
 }
 const SYNC_SECRET   = appCfg.syncSecret   || process.env.SYNC_SECRET   || 'smartcs-cloud-secret-2026';
 const WEBHOOK_SECRET = appCfg.webhookSecret || process.env.WEBHOOK_SECRET || '';
-const ADMIN_SECRET   = appCfg.adminSecret   || process.env.ADMIN_SECRET   || '';
+const ADMIN_SECRET   = appCfg.adminSecret   || process.env.ADMIN_SECRET   || (appCfg.isCloudServer ? 'smartcs-admin-2026' : '');
 
 // Timing-safe secret comparison to prevent timing attacks
 function safeCompareSecret(provided, expected) {
@@ -142,12 +142,19 @@ function safeCompareSecret(provided, expected) {
 }
 
 // Admin-guard middleware: protects destructive endpoints
-// If ADMIN_SECRET is configured, require x-admin-secret header; otherwise allow (backward-compat)
 function requireAdmin(req, res, next) {
-    if (!ADMIN_SECRET) return next(); // No secret configured = legacy open mode
+    // Localhost bypass on local machines (safe behind office LAN)
+    const clientIp = req.ip || req.socket?.remoteAddress || '';
+    const isLocal = !appCfg.isCloudServer && (clientIp === '127.0.0.1' || clientIp === '::1' || clientIp.includes('127.0.0.1'));
+    if (isLocal) return next();
+
+    const activeSecret = ADMIN_SECRET || (appCfg.isCloudServer ? 'smartcs-admin-2026' : '');
+    if (!activeSecret) return next(); // Local mode without password configured
+
     const provided = req.headers['x-admin-secret'] || req.query.admin_secret;
-    if (provided === ADMIN_SECRET) return next();
-    return res.status(403).json({ success: false, error: 'Forbidden: Admin authentication required' });
+    if (safeCompareSecret(provided, activeSecret)) return next();
+
+    return res.status(403).json({ success: false, error: 'Forbidden: Admin authentication required. Please provide x-admin-secret header.' });
 }
 
 // SQLite connection
