@@ -1714,9 +1714,9 @@ app.get('/api/inventory/installments-dashboard', async (req, res) => {
                 SELECT 
                     pos_number,
                     MAX(payer) as payer_max,
-                    SUM(CASE WHEN payment_reason LIKE '%قسط%' AND payment_reason NOT LIKE '%مقدم%' THEN CAST(payment_amount AS REAL) ELSE 0 END) as paid_installments_sum,
-                    SUM(CASE WHEN payment_reason LIKE '%مقدم%' THEN CAST(payment_amount AS REAL) ELSE 0 END) as paid_downpayment_sum,
-                    SUM(CAST(payment_amount AS REAL)) as total_paid_sum,
+                    SUM(CASE WHEN payment_reason LIKE '%قسط%' AND payment_reason NOT LIKE '%مقدم%' THEN CAST(NULLIF(payment_amount, '') AS REAL) ELSE 0 END) as paid_installments_sum,
+                    SUM(CASE WHEN payment_reason LIKE '%مقدم%' THEN CAST(NULLIF(payment_amount, '') AS REAL) ELSE 0 END) as paid_downpayment_sum,
+                    SUM(CAST(NULLIF(payment_amount, '') AS REAL)) as total_paid_sum,
                     MIN(CASE WHEN payment_reason LIKE '%قسط%' OR payment_reason LIKE '%مقدم%' THEN payment_date ELSE NULL END) as first_send_date,
                     MAX(payment_date) as last_payment_date
                 FROM payments_raw
