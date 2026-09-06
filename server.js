@@ -6,7 +6,6 @@ require('dotenv').config();
 const sqlite3 = require('sqlite3').verbose();
 const { Pool } = require('pg');
 const fs = require('fs');
-const XLSX = require('xlsx');
 const rateLimit = require('express-rate-limit');
 const syncEngine = require('./sync_engine');
 
@@ -37,6 +36,7 @@ if (fs.existsSync(CONFIG_FILE)) {
 }
 
 const app = express();
+app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal']);
 const compression = require('compression');
 const apiEngine = require('./api_engine');
 const PORT = process.env.PORT || configuredPort || 8970;
@@ -52,7 +52,29 @@ process.on('unhandledRejection', (reason) => {
 app.use(compression());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-app.use(express.static(path.join(__dirname)));
+// Block access to database files, environment configs and source scripts
+app.use((req, res, next) => {
+    const p = (req.path || '').toLowerCase();
+    if (
+        p.endsWith('.db') || p.endsWith('.sqlite') || p.includes('.env') ||
+        p.endsWith('.vbs') || p.endsWith('.bat') || p.endsWith('.ps1') ||
+        p.endsWith('config.json') || p.endsWith('package.json') || p.endsWith('package-lock.json') ||
+        p.endsWith('server.js') || p.endsWith('sync_engine.js') || p.endsWith('db_translator.js')
+    ) {
+        return res.status(403).json({ success: false, error: 'Access denied: sensitive resource' });
+    }
+    next();
+});
+
+app.use(express.static(path.join(__dirname), {
+    setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html') || filePath.endsWith('sw.js')) {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        } else {
+            res.setHeader('Cache-Control', 'public, max-age=86400');
+        }
+    }
+}));
 
 // Global API rate limit
 const apiLimiter = rateLimit({
@@ -479,7 +501,7 @@ app.get('/api/explorer/:table', async (req, res) => {
         let countParams = [];
 
         if (search && colNames.length > 0) {
-            const searchConditions = colNames.map(c => `"${c}" LIKE ?`).join(' OR ');
+            const searchConditions = colNames.map(c => `CAST("${c}" AS TEXT) LIKE ?`).join(' OR ');
             whereClause = `WHERE (${searchConditions})`;
             const searchVal = `%${search}%`;
             colNames.forEach(() => {
@@ -596,7 +618,7 @@ app.get('/api/settings/db-path', (req, res) => {
 });
 
 // Update & Save Access DB path
-app.post('/api/settings/db-path', (req, res) => {
+app.post('/api/settings/db-path', requireAdmin, (req, res) => {
     try {
         const { path: newPath } = req.body;
         if (!newPath) {
@@ -694,7 +716,7 @@ app.get('/api/sync/status', async (req, res) => {
 });
 
 // Trigger full sync from Access Database
-app.post('/api/sync/run', async (req, res) => {
+app.post('/api/sync/run', requireAdmin, async (req, res) => {
     try {
         const config = readAppConfig();
         if (config.isCloudServer) {
@@ -4185,7 +4207,7 @@ app.get('/api/system/check-updates', async (req, res) => {
     }
 });
 
-app.post('/api/system/auto-update', async (req, res) => {
+app.post('/api/system/auto-update', requireAdmin, async (req, res) => {
     try {
         const result = await updater.performUpdate();
         if (result.success) {
@@ -4900,6 +4922,17 @@ app.post('/api/diagnostics/reseed-vps', requireAdmin, async (req, res) => {
 });
 
 // Start Server (Listen on 0.0.0.0 for LAN / Network Sharing)
+
+// Global Express Centralized Error Handler
+app.use((err, req, res, next) => {
+    logSystemError('EXPRESS_GLOBAL', req.path || '/', err, req, 'ERROR');
+    if (res.headersSent) return next(err);
+    res.status(err.status || 500).json({
+        success: false,
+        error: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message
+    });
+});
+
 app.listen(PORT, '0.0.0.0', () => {
     const localIp = getLocalIpAddress();
     console.log(`================================================================`);

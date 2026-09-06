@@ -1,5 +1,5 @@
 // Smart Cards PWA Service Worker
-const CACHE_NAME = 'smartcards-v27';
+const CACHE_NAME = 'smartcards-v28';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -33,6 +33,6 @@ self.addEventListener('fetch', (e) => {
     return; // Pass through to network directly
   }
   e.respondWith(
-    fetch(e.request).catch(() => caches.match(e.request))
+    fetch(e.request).catch(() => caches.match(e.request, { ignoreSearch: true }))
   );
 });

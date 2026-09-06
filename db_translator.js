@@ -60,15 +60,11 @@ function translateSqliteToPostgres(sql, params) {
     }
     else if (pgSql.match(/INSERT OR IGNORE INTO/i)) {
         pgSql = pgSql.replace(/INSERT OR IGNORE INTO/i, "INSERT INTO");
-        if (pgSql.includes("temp_transfer")) {
-            // best effort for other tables, just ignore on conflict
-            // Assuming no specific conflict target, Postgres requires a target for DO NOTHING unless it's a constraint, but we'll try DO NOTHING on id.
-        }
     }
     
-    pgSql = pgSql.replace(/datetime\('now', '-24 hours', 'localtime'\)/ig, "to_char(NOW() - INTERVAL '24 hours', 'YYYY-MM-DD HH24:MI:SS')");
-    pgSql = pgSql.replace(/datetime\('now', '-90 days'\)/ig, "to_char(NOW() - INTERVAL '90 days', 'YYYY-MM-DD HH24:MI:SS')");
-    pgSql = pgSql.replace(/datetime\('now', 'localtime'\)/ig, "to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')");
+    pgSql = pgSql.replace(/datetime\('now',\s*'-24 hours',\s*'localtime'\)/ig, "to_char(NOW() - INTERVAL '24 hours', 'YYYY-MM-DD HH24:MI:SS')");
+    pgSql = pgSql.replace(/datetime\('now',\s*'-90 days'\)/ig, "to_char(NOW() - INTERVAL '90 days', 'YYYY-MM-DD HH24:MI:SS')");
+    pgSql = pgSql.replace(/datetime\('now',\s*'localtime'\)/ig, "to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')");
     pgSql = pgSql.replace(/datetime\('now'\)/ig, "to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')");
     pgSql = pgSql.replace(/\bDATETIME\b/ig, 'TEXT');
     pgSql = pgSql.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/ig, 'SERIAL PRIMARY KEY');
@@ -79,39 +75,37 @@ function translateSqliteToPostgres(sql, params) {
     // Auto-convert SQLite case-insensitive LIKE to PostgreSQL ILIKE
     pgSql = pgSql.replace(/\bLIKE\b/ig, 'ILIKE');
 
-    // Auto-convert SQLite rowid references for PostgreSQL compatibility
-    pgSql = pgSql.replace(/\b(\w+\.)?rowid\s+as\s+id\b/ig, '1 as id');
-    pgSql = pgSql.replace(/\bORDER\s+BY\s+(\w+\.)?rowid(\s+(ASC|DESC))?/ig, 'ORDER BY 1 $2');
-    pgSql = pgSql.replace(/\b(\w+\.)?rowid\b/ig, '1');
+    // Auto-convert SQLite rowid references for PostgreSQL compatibility (map to real id column)
+    pgSql = pgSql.replace(/\b(\w+\.)?rowid\s+as\s+id\b/ig, '$1id as id');
+    pgSql = pgSql.replace(/\bORDER\s+BY\s+(\w+\.)?rowid(\s+(ASC|DESC))?/ig, 'ORDER BY $1id $2');
+    pgSql = pgSql.replace(/\b(\w+\.)?rowid\b/ig, '$1id');
 
-    // Quote case-sensitive column names from RAW tables for PostgreSQL
-    pgSql = pgSql.replace(/\b([amtps]\.)?Serial\b/g, '$1"Serial"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?ID\b/g, '$1"ID"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?Model\b/g, '$1"Model"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?Owner\b/g, '$1"Owner"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?POS\b/g, '$1"POS"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?POSID\b/g, '$1"POSID"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?FormNo\b/g, '$1"FormNo"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?NationalD\b/g, '$1"NationalD"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?Contact_person\b/g, '$1"Contact_person"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?GrocerNumber\b/g, '$1"GrocerNumber"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?POSN\b/g, '$1"POSN"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?GrocerName\b/g, '$1"GrocerName"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?ActionDate\b/g, '$1"ActionDate"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?IssueDate\b/g, '$1"IssueDate"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?ActionType\b/g, '$1"ActionType"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?NoteG\b/g, '$1"NoteG"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?NoteD\b/g, '$1"NoteD"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?Fees\b/g, '$1"Fees"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?Paid\b/g, '$1"Paid"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?FeesAmount\b/g, '$1"FeesAmount"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?Procedure\b/g, '$1"Procedure"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?Place\b/g, '$1"Place"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?SupplyOffice\b/g, '$1"SupplyOffice"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?ReplacedDate\b/g, '$1"ReplacedDate"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?PinpadSerial\b/g, '$1"PinpadSerial"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?Commercial_register\b/g, '$1"Commercial_register"');
-    pgSql = pgSql.replace(/\b([amtps]\.)?Tax_Card\b/g, '$1"Tax_Card"');
+    // List of RAW table case-sensitive columns that need quotes in PostgreSQL
+    const RAW_CASE_COLUMNS = [
+        'Serial', 'ID', 'Model', 'Owner', 'POS', 'POSID', 'FormNo',
+        'NationalD', 'Contact_person', 'GrocerNumber', 'POSN', 'GrocerName',
+        'ActionDate', 'IssueDate', 'ActionType', 'NoteG', 'NoteD', 'Fees',
+        'Paid', 'FeesAmount', 'Procedure', 'Place', 'SupplyOffice',
+        'ReplacedDate', 'PinpadSerial', 'Commercial_register', 'Tax_Card',
+        'Comments', 'Address', 'Condition', 'POS_2', 'Manufacturer',
+        'Manufacturer2', 'Manufacturer3', 'Model2', 'Model3', 'Cell_Serial',
+        'Cell_type', 'Cell_Serial3', 'Cell_type3', 'Acquired Date',
+        'Unit Serial', 'Checked In Date', 'Checked Out Date', 'Checked In Condition',
+        'Notes', 'FixID', 'FixName', 'FaultName'
+    ];
+
+    // Quote case-sensitive column names from RAW tables ONLY when NOT already enclosed in quotes
+    for (const col of RAW_CASE_COLUMNS) {
+        // Match: (alias.)?Col only if not preceded by " and not followed by "
+        const reg = new RegExp('(?<![\\w"])([a-zA-Z0-9_]+\\.)?' + col + '(?![\\w"])', 'g');
+        pgSql = pgSql.replace(reg, (match, p1) => {
+            const prefix = p1 || '';
+            return `${prefix}"${col}"`;
+        });
+    }
+
+    // Safety cleanup: collapse any accidentally created double-double quotes
+    pgSql = pgSql.replace(/""+/g, '"');
 
     // Fix empty string comparisons with double quotes: != "" -> != ''
     pgSql = pgSql.replace(/!=\s*""/g, "!= ''");

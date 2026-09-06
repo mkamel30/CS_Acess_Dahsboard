@@ -170,7 +170,11 @@ function startFileWatcher(db) {
             if (!triggerFile) return;
 
             const lower = triggerFile.toLowerCase();
-            if (lower.includes(baseTarget) || lower.endsWith('.accdb') || lower.endsWith('.laccdb') || lower.endsWith('.ldb')) {
+            // Ignore lock files, temporary files, and backup files to avoid false sync triggers
+            if (lower.endsWith('.laccdb') || lower.endsWith('.ldb') || lower.startsWith('~$') || lower.endsWith('.tmp')) {
+                return;
+            }
+            if (lower.includes(baseTarget) || lower.endsWith('.accdb')) {
                 triggerAutoSync(`detected modification in ${triggerFile}`);
             }
         });
@@ -325,6 +329,18 @@ async function initSyncDatabase(db) {
         );
     `);
 
+    await dbRun(db, `
+        CREATE TABLE IF NOT EXISTS delta_outbox_dlq (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            original_id INTEGER,
+            payload TEXT NOT NULL,
+            changes_count INTEGER DEFAULT 0,
+            attempts INTEGER DEFAULT 0,
+            last_error TEXT,
+            archived_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+    `);
+
     // Safely add missing columns for backward compatibility
     try { await dbRun(db, `ALTER TABLE sync_history ADD COLUMN sync_type TEXT DEFAULT 'LOCAL_ACCESS';`); } catch(e){}
     try { await dbRun(db, `ALTER TABLE sync_history ADD COLUMN message TEXT;`); } catch(e){}
@@ -369,6 +385,7 @@ async function initSyncDatabase(db) {
     // Ensure sequences exist for PostgreSQL cloud database
     try { await dbRun(db, `CREATE SEQUENCE IF NOT EXISTS devices_id_seq; ALTER TABLE devices ALTER COLUMN id SET DEFAULT nextval('devices_id_seq');`); } catch(e){}
     try { await dbRun(db, `CREATE SEQUENCE IF NOT EXISTS sim_cards_id_seq; ALTER TABLE sim_cards ALTER COLUMN id SET DEFAULT nextval('sim_cards_id_seq');`); } catch(e){}
+    try { await dbRun(db, `CREATE SEQUENCE IF NOT EXISTS tickets_id_seq; ALTER TABLE tickets ALTER COLUMN id SET DEFAULT nextval('tickets_id_seq');`); } catch(e){}
 
     await dbRun(db, `
         CREATE TABLE IF NOT EXISTS merchant_assets (
@@ -1183,7 +1200,7 @@ async function syncHighLevelDomainEntities(db) {
     await dbRun(db, `
         UPDATE spare_parts 
         SET quantity_in_stock = COALESCE((
-            SELECT SUM(CAST(COALESCE(count_in, '0') AS INTEGER)) - SUM(CAST(COALESCE(count_out, '0') AS INTEGER))
+            SELECT SUM(CAST(COALESCE(NULLIF(TRIM(count_in), ''), '0') AS INTEGER)) - SUM(CAST(COALESCE(NULLIF(TRIM(count_out), ''), '0') AS INTEGER))
             FROM store_sp_raw
             WHERE type = spare_parts.part_name
         ), 0);
@@ -1416,6 +1433,9 @@ async function pushDeltaToCloud(db, deltaChanges) {
     console.log(`[CLOUD DELTA SYNC] Pushing ${deltaChanges.length} incremental change(s) to Oracle Cloud VPS...`);
     try {
         const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
+        const timeoutSignal = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) 
+            ? AbortSignal.timeout(15000) 
+            : undefined;
         const response = await fetchFn(cloudEndpoint, {
             method: 'POST',
             headers: {
@@ -1425,7 +1445,8 @@ async function pushDeltaToCloud(db, deltaChanges) {
             body: JSON.stringify({
                 changes: deltaChanges,
                 timestamp: new Date().toISOString()
-            })
+            }),
+            signal: timeoutSignal
         });
         const data = await response.json();
         const duration = Date.now() - startTime;
@@ -1498,14 +1519,25 @@ async function flushDeltaOutbox(db) {
         const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
 
         for (const item of pending) {
-            // Skip poison-pill items that have exceeded max retry attempts
+            // Move poison-pill items that have exceeded max retry attempts to Dead Letter Queue (DLQ)
             if (item.attempts >= 15) {
-                console.warn(`[CLOUD DELTA OUTBOX] Archiving failed outbox #${item.id} after ${item.attempts} attempts: ${item.last_error}`);
+                console.warn(`[CLOUD DELTA OUTBOX] Archiving failed outbox #${item.id} to DLQ after ${item.attempts} attempts: ${item.last_error}`);
+                try {
+                    await dbRun(db, `
+                        INSERT INTO delta_outbox_dlq (original_id, payload, changes_count, attempts, last_error)
+                        VALUES (?, ?, ?, ?, ?);
+                    `, [item.id, item.payload, item.changes_count, item.attempts, item.last_error]);
+                } catch (dlqErr) {
+                    console.error('[CLOUD DELTA OUTBOX] DLQ insert failed:', dlqErr.message);
+                }
                 await dbRun(db, `DELETE FROM delta_outbox WHERE id = ?;`, [item.id]);
                 continue;
             }
             try {
                 const changes = JSON.parse(item.payload);
+                const timeoutSignal = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) 
+                    ? AbortSignal.timeout(15000) 
+                    : undefined;
                 const response = await fetchFn(cloudEndpoint, {
                     method: 'POST',
                     headers: {
@@ -1515,7 +1547,8 @@ async function flushDeltaOutbox(db) {
                     body: JSON.stringify({
                         changes: changes,
                         timestamp: new Date().toISOString()
-                    })
+                    }),
+                    signal: timeoutSignal
                 });
                 const data = await response.json();
                 if (data.success) {

@@ -2777,7 +2777,7 @@ async function loadSparePartsInventory() {
                 loadSparePartsInventory();
             });
             document.getElementById('sp-page-size-select')?.addEventListener('change', (e) => {
-                SparePartsTableState.pageSize = e.target.value === 'all' ? 99999 : parseInt(e.target.value, 10);
+                SparePartsTableState.pageSize = e.target.value === 'all' ? 250 : parseInt(e.target.value, 10);
                 SparePartsTableState.page = 1;
                 renderSparePartsTable();
             });
@@ -2983,7 +2983,7 @@ function renderSparePartsTable() {
         return;
     }
 
-    pagedList.forEach((m, idx) => {
+    const rowsHtml = pagedList.map((m, idx) => {
         let badgeHtml = '';
         let channelBadge = '';
 
@@ -3019,7 +3019,7 @@ function renderSparePartsTable() {
                     `;
                 }).join('') + `</div>`;
             } else if (uniquePayments.some(p => p.status === 'FREE_WARRANTY')) {
-                channelBadge = `<span class="badge" style="background:rgba(6,182,212,0.12); color:#06b6d4; font-size:10px; font-weight:700;"><i data-lucide="shield-check" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> مجاني</span>`;
+                channelBadge = `<span class="badge" style="background:rgba(6,182,212,0.12); color:#06b6d4; font-size:10px; font-weight:700;"><i data-lucide="shield-check" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> صيانة مجانية</span>`;
             } else if (uniquePayments.some(p => p.status === 'DEFERRED_PENDING')) {
                 channelBadge = `<span class="badge" style="background:rgba(239,68,68,0.12); color:#ef4444; font-size:10px; font-weight:700;"><i data-lucide="clock" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> مؤجل</span>`;
             } else {
@@ -3064,7 +3064,7 @@ function renderSparePartsTable() {
             ? `<a href="javascript:void(0)" onclick="openAssetTimeline('${m.pos_serial}')" style="font-family:var(--font-en); font-weight:800; color:var(--color-primary); text-decoration:underline;">${m.pos_serial}</a>`
             : '<span style="color:var(--text-muted);">-</span>';
 
-        const rowHtml = `
+        return `
             <tr>
                 <td style="font-family:var(--font-en); color:var(--text-muted); font-size:12px;">${startIdx + idx + 1}</td>
                 <td>${formatDateTimeCell(m.date)}</td>
@@ -3100,8 +3100,9 @@ function renderSparePartsTable() {
                 </td>
             </tr>
         `;
-        tableBody.insertAdjacentHTML('beforeend', rowHtml);
-    });
+    }).join('');
+
+    tableBody.innerHTML = rowsHtml;
 
     refreshIcons();
 }
