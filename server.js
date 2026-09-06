@@ -1695,10 +1695,10 @@ app.get('/api/inventory/installments-dashboard', async (req, res) => {
             SELECT 
                 t.id,
                 t.pos as pos_serial,
-                CAST(NULLIF(TRIM(t.installments), '') AS INTEGER) as duration_months,
-                CAST(NULLIF(TRIM(t.unitprice), '') AS REAL) as unit_price,
-                CAST(NULLIF(TRIM(t.finalunitprice), '') AS REAL) as final_unit_price,
-                CAST(NULLIF(TRIM(t.monthlyinstallmentprice), '') AS REAL) as monthly_installment_price,
+                CAST(CASE WHEN CAST(t.installments AS TEXT) = '' THEN NULL ELSE t.installments END AS INTEGER) as duration_months,
+                CAST(CASE WHEN CAST(t.unitprice AS TEXT) = '' THEN NULL ELSE t.unitprice END AS REAL) as unit_price,
+                CAST(CASE WHEN CAST(t.finalunitprice AS TEXT) = '' THEN NULL ELSE t.finalunitprice END AS REAL) as final_unit_price,
+                CAST(CASE WHEN CAST(t.monthlyinstallmentprice AS TEXT) = '' THEN NULL ELSE t.monthlyinstallmentprice END AS REAL) as monthly_installment_price,
                 COALESCE(m.name, p.payer_max, '-') as merchant_name,
                 COALESCE(m.merchant_code, '-') as merchant_code,
                 COALESCE(m.government, '-') as government,
@@ -1714,9 +1714,9 @@ app.get('/api/inventory/installments-dashboard', async (req, res) => {
                 SELECT 
                     pos_number,
                     MAX(payer) as payer_max,
-                    SUM(CASE WHEN payment_reason LIKE '%قسط%' AND payment_reason NOT LIKE '%مقدم%' THEN CAST(NULLIF(TRIM(payment_amount), '') AS REAL) ELSE 0 END) as paid_installments_sum,
-                    SUM(CASE WHEN payment_reason LIKE '%مقدم%' THEN CAST(NULLIF(TRIM(payment_amount), '') AS REAL) ELSE 0 END) as paid_downpayment_sum,
-                    SUM(CAST(NULLIF(TRIM(payment_amount), '') AS REAL)) as total_paid_sum,
+                    SUM(CASE WHEN payment_reason LIKE '%قسط%' AND payment_reason NOT LIKE '%مقدم%' THEN CAST(CASE WHEN CAST(payment_amount AS TEXT) = '' THEN NULL ELSE payment_amount END AS REAL) ELSE 0 END) as paid_installments_sum,
+                    SUM(CASE WHEN payment_reason LIKE '%مقدم%' THEN CAST(CASE WHEN CAST(payment_amount AS TEXT) = '' THEN NULL ELSE payment_amount END AS REAL) ELSE 0 END) as paid_downpayment_sum,
+                    SUM(CAST(CASE WHEN CAST(payment_amount AS TEXT) = '' THEN NULL ELSE payment_amount END AS REAL)) as total_paid_sum,
                     MIN(CASE WHEN payment_reason LIKE '%قسط%' OR payment_reason LIKE '%مقدم%' THEN payment_date ELSE NULL END) as first_send_date,
                     MAX(payment_date) as last_payment_date
                 FROM payments_raw
