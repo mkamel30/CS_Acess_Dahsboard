@@ -4839,7 +4839,39 @@ app.post('/api/sync/full-seed', express.json({ limit: '100mb' }), async (req, re
     }
 });
 
-// 7. Reseed Cloud VPS from Local Database (1-Click Action)
+// Real-time Cloud Reseed Progress State
+let cloudReseedState = {
+    inProgress: false,
+    percent: 0,
+    stage: 'idle', // 'counting', 'transferring', 'rebuilding_domain', 'completed', 'error'
+    currentTable: '',
+    currentTableAr: '',
+    tableIndex: 0,
+    totalTables: CORE_RECONCILIATION_TABLES.length,
+    chunkIndex: 0,
+    totalChunks: 0,
+    recordsProcessed: 0,
+    totalRecords: 0,
+    detail: 'في وضع الاستعداد',
+    startedAt: null,
+    durationMs: 0,
+    error: null,
+    completedTables: []
+};
+
+function broadcastReseedProgress(updates = {}) {
+    Object.assign(cloudReseedState, updates);
+    if (typeof broadcastSseEvent === 'function') {
+        broadcastSseEvent('reseed_progress', { ...cloudReseedState });
+    }
+}
+
+// Reseed status endpoint for polling fallback
+app.get('/api/diagnostics/reseed-status', (req, res) => {
+    res.json({ success: true, ...cloudReseedState });
+});
+
+// 7. Reseed Cloud VPS from Local Database (1-Click Action with Live Progress)
 app.post('/api/diagnostics/reseed-vps', requireAdmin, async (req, res) => {
     try {
         const config = readAppConfig();
@@ -4847,26 +4879,94 @@ app.post('/api/diagnostics/reseed-vps', requireAdmin, async (req, res) => {
             return res.status(400).json({ success: false, error: 'Cannot reseed cloud from cloud itself.' });
         }
 
-        console.log('[DIAGNOSTICS] Starting 1-Click Batched Cloud Reseed from Local SQLite...');
+        if (cloudReseedState.inProgress) {
+            return res.status(409).json({ success: false, error: 'عملية تأسيس السيرفر السحابي قيد التنفيذ بالفعل، يرجى الانتظار...' });
+        }
+
+        console.log('[DIAGNOSTICS] Starting 1-Click Batched Cloud Reseed from Local SQLite with Real-Time Progress...');
         const startTime = Date.now();
-        let totalCount = 0;
 
-        const cloudUrl = (config.cloudEndpoint || 'https://smartcs.m-kamel.workers.dev/api/sync/delta').replace(/\/api\/sync\/delta.*$/, '/api/sync/full-seed');
-        const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
+        cloudReseedState = {
+            inProgress: true,
+            percent: 2,
+            stage: 'counting',
+            currentTable: '',
+            currentTableAr: '',
+            tableIndex: 0,
+            totalTables: CORE_RECONCILIATION_TABLES.length,
+            chunkIndex: 0,
+            totalChunks: 0,
+            recordsProcessed: 0,
+            totalRecords: 0,
+            detail: 'حساب إجمالي السجلات في الجداول الـ 13 محلياً...',
+            startedAt: new Date().toISOString(),
+            durationMs: 0,
+            error: null,
+            completedTables: []
+        };
+        broadcastReseedProgress();
 
-        for (const item of CORE_RECONCILIATION_TABLES) {
+        // 1. Upfront count across all tables
+        let overallTotalRecords = 0;
+        const tableRowsMap = new Map();
+        for (let i = 0; i < CORE_RECONCILIATION_TABLES.length; i++) {
+            const item = CORE_RECONCILIATION_TABLES[i];
             let rows = [];
             try {
                 rows = await allQuery(`SELECT * FROM "${item.table}"`) || [];
             } catch(e) {
                 rows = [];
             }
-            if (rows.length === 0) continue;
+            tableRowsMap.set(item.table, rows);
+            overallTotalRecords += rows.length;
+        }
+
+        cloudReseedState.totalRecords = overallTotalRecords;
+        cloudReseedState.stage = 'transferring';
+        cloudReseedState.percent = 5;
+        broadcastReseedProgress({
+            detail: `تم إحصاء ${overallTotalRecords.toLocaleString('ar-EG')} سجل عبر 13 جدولاً. بدء الإرسال السحابي...`
+        });
+
+        let totalCount = 0;
+        const cloudUrl = (config.cloudEndpoint || 'https://smartcs.m-kamel.workers.dev/api/sync/delta').replace(/\/api\/sync\/delta.*$/, '/api/sync/full-seed');
+        const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
+
+        for (let tIdx = 0; tIdx < CORE_RECONCILIATION_TABLES.length; tIdx++) {
+            const item = CORE_RECONCILIATION_TABLES[tIdx];
+            const rows = tableRowsMap.get(item.table) || [];
+
+            if (rows.length === 0) {
+                cloudReseedState.completedTables.push(item.name_ar);
+                broadcastReseedProgress({
+                    currentTable: item.table,
+                    currentTableAr: item.name_ar,
+                    tableIndex: tIdx + 1,
+                    detail: `${item.name_ar} (جدول فارغ - تم التخطي)`
+                });
+                continue;
+            }
 
             const CHUNK_SIZE = 500;
-            for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
-                const chunk = rows.slice(i, i + CHUNK_SIZE);
-                const isFirst = (i === 0);
+            const totalChunks = Math.ceil(rows.length / CHUNK_SIZE);
+
+            for (let cIdx = 0; cIdx < totalChunks; cIdx++) {
+                const chunk = rows.slice(cIdx * CHUNK_SIZE, (cIdx + 1) * CHUNK_SIZE);
+                const isFirst = (cIdx === 0);
+
+                const currentPercent = overallTotalRecords > 0 
+                    ? Math.min(90, Math.round((totalCount / overallTotalRecords) * 90))
+                    : 10;
+
+                broadcastReseedProgress({
+                    percent: Math.max(5, currentPercent),
+                    currentTable: item.table,
+                    currentTableAr: item.name_ar,
+                    tableIndex: tIdx + 1,
+                    chunkIndex: cIdx + 1,
+                    totalChunks: totalChunks,
+                    detail: `جاري نقل ${item.name_ar} (دفعة ${cIdx + 1} من ${totalChunks})`
+                });
 
                 const cloudResp = await fetchFn(cloudUrl, {
                     method: 'POST',
@@ -4893,36 +4993,58 @@ app.post('/api/diagnostics/reseed-vps', requireAdmin, async (req, res) => {
                 if (!cloudResult.success) {
                     throw new Error(cloudResult.error || `خطأ في مزامنة جدول ${item.name_ar}`);
                 }
+
+                totalCount += chunk.length;
+                cloudReseedState.recordsProcessed = totalCount;
             }
-            totalCount += rows.length;
+
+            cloudReseedState.completedTables.push(item.name_ar);
+            broadcastReseedProgress();
         }
 
         // Final trigger to rebuild domain entities on cloud
-        try {
-            await fetchFn(cloudUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-sync-secret': SYNC_SECRET
-                },
-                body: JSON.stringify({
-                    tablesData: {},
-                    rebuildDomain: true,
-                    timestamp: new Date().toISOString()
-                })
-            });
-        } catch(e){}
+        broadcastReseedProgress({
+            stage: 'rebuilding_domain',
+            percent: 93,
+            detail: 'إعادة بناء محفظة الأقساط وجداول الأجهزة والصيانة على السيرفر السحابي (VPS)...'
+        });
+
+        await fetchFn(cloudUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-sync-secret': SYNC_SECRET
+            },
+            body: JSON.stringify({
+                tablesData: {},
+                rebuildDomain: true,
+                timestamp: new Date().toISOString()
+            })
+        });
 
         const duration = Date.now() - startTime;
         console.log(`[DIAGNOSTICS] Full Reseed Successful: ${totalCount} records synced to Cloud VPS in ${duration}ms!`);
+
+        cloudReseedState.inProgress = false;
+        cloudReseedState.stage = 'completed';
+        cloudReseedState.percent = 100;
+        cloudReseedState.durationMs = duration;
+        cloudReseedState.detail = `تمت المزامنة والتأسيس الشامل بنجاح لجميع الجداول (${totalCount.toLocaleString('ar-EG')} سجل) ⚡`;
+        broadcastReseedProgress();
 
         res.json({
             success: true,
             total_records: totalCount,
             duration_ms: duration,
-            message: `تمت المزامنة وإعادة التأسيس الشامل بنجاح لجميع الجداول (${totalCount} سجل) على السيرفر السحابي ⚡`
+            message: `تمت المزامنة وإعادة التأسيس الشامل بنجاح لجميع الجداول (${totalCount.toLocaleString('ar-EG')} سجل) على السيرفر السحابي ⚡`
         });
     } catch (err) {
+        cloudReseedState.inProgress = false;
+        cloudReseedState.stage = 'error';
+        cloudReseedState.error = err.message;
+        cloudReseedState.detail = `فشلت العملية: ${err.message}`;
+        broadcastReseedProgress();
+
         logSystemError('RESEED_VPS', '/api/diagnostics/reseed-vps', err, req);
         res.status(500).json({ success: false, error: err.message });
     }

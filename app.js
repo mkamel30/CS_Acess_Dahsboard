@@ -4294,6 +4294,16 @@ function initLiveSyncStream() {
                 setTimeout(() => window.location.reload(), 2000);
             } catch (err) {}
         });
+
+        sse.addEventListener('reseed_progress', (e) => {
+            try {
+                const data = JSON.parse(e.data);
+                if (typeof handleReseedProgressUpdate === 'function') {
+                    handleReseedProgressUpdate(data);
+                }
+            } catch (err) {}
+        });
+
         sse.onmessage = (e) => handleSyncEvent(e.data);
 
         sse.onerror = () => {
@@ -6788,6 +6798,157 @@ async function loadReconciliationMatrix() {
 }
 window.loadReconciliationMatrix = loadReconciliationMatrix;
 
+let reseedStartTime = null;
+let reseedTimerInterval = null;
+let reseedPollInterval = null;
+
+function openReseedProgressModal() {
+    const modal = document.getElementById('reseed-progress-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+
+    // Reset fields
+    const percentEl = document.getElementById('reseed-percent-display');
+    const recordsEl = document.getElementById('reseed-records-counter');
+    const tablesEl = document.getElementById('reseed-tables-counter');
+    const barEl = document.getElementById('reseed-progress-bar');
+    const headingEl = document.getElementById('reseed-status-heading');
+    const detailEl = document.getElementById('reseed-status-detail');
+    const badgeEl = document.getElementById('reseed-modal-badge');
+    const spinnerEl = document.getElementById('reseed-status-spinner');
+    const finishBtn = document.getElementById('btn-reseed-modal-finish');
+    const closeBtn = document.getElementById('btn-reseed-modal-close');
+    const tablesList = document.getElementById('reseed-tables-list');
+
+    if (percentEl) percentEl.textContent = '0%';
+    if (recordsEl) recordsEl.textContent = '0 / 0 سجل';
+    if (tablesEl) tablesEl.textContent = 'الجدول 0 من 13';
+    if (barEl) {
+        barEl.style.width = '0%';
+        barEl.style.background = 'linear-gradient(90deg, #0284c7, #38bdf8, #818cf8)';
+    }
+    if (headingEl) headingEl.textContent = 'بدء الاتصال...';
+    if (detailEl) detailEl.textContent = 'حساب إجمالي السجلات وتجهيز الدفعات';
+    if (badgeEl) {
+        badgeEl.textContent = 'جاري التنفيذ ⚡';
+        badgeEl.style.background = 'rgba(56,189,248,0.15)';
+        badgeEl.style.color = '#38bdf8';
+        badgeEl.style.borderColor = 'rgba(56,189,248,0.3)';
+    }
+    if (spinnerEl) spinnerEl.style.display = 'block';
+    if (finishBtn) finishBtn.style.display = 'none';
+    if (closeBtn) closeBtn.style.display = 'none';
+    if (tablesList) tablesList.innerHTML = '';
+
+    reseedStartTime = Date.now();
+    if (reseedTimerInterval) clearInterval(reseedTimerInterval);
+    reseedTimerInterval = setInterval(() => {
+        const elapsedSec = Math.floor((Date.now() - reseedStartTime) / 1000);
+        const timerEl = document.getElementById('reseed-time-elapsed');
+        if (timerEl) timerEl.textContent = `الزمن المنقضي: ${elapsedSec} ثانية`;
+    }, 1000);
+
+    refreshIcons();
+}
+window.openReseedProgressModal = openReseedProgressModal;
+
+function closeReseedProgressModal() {
+    const modal = document.getElementById('reseed-progress-modal');
+    if (modal) modal.style.display = 'none';
+    if (reseedTimerInterval) { clearInterval(reseedTimerInterval); reseedTimerInterval = null; }
+    if (reseedPollInterval) { clearInterval(reseedPollInterval); reseedPollInterval = null; }
+}
+window.closeReseedProgressModal = closeReseedProgressModal;
+
+function handleReseedProgressUpdate(data) {
+    if (!data) return;
+    const modal = document.getElementById('reseed-progress-modal');
+    if (modal && modal.style.display === 'none' && data.inProgress) {
+        openReseedProgressModal();
+    }
+
+    const percent = Math.min(100, Math.max(0, data.percent || 0));
+    const percentEl = document.getElementById('reseed-percent-display');
+    const barEl = document.getElementById('reseed-progress-bar');
+    const recordsEl = document.getElementById('reseed-records-counter');
+    const tablesEl = document.getElementById('reseed-tables-counter');
+    const headingEl = document.getElementById('reseed-status-heading');
+    const detailEl = document.getElementById('reseed-status-detail');
+    const badgeEl = document.getElementById('reseed-modal-badge');
+    const spinnerEl = document.getElementById('reseed-status-spinner');
+    const finishBtn = document.getElementById('btn-reseed-modal-finish');
+    const closeBtn = document.getElementById('btn-reseed-modal-close');
+    const tablesList = document.getElementById('reseed-tables-list');
+
+    if (percentEl) percentEl.textContent = `${percent}%`;
+    if (barEl) barEl.style.width = `${percent}%`;
+
+    if (recordsEl && data.totalRecords !== undefined) {
+        recordsEl.textContent = `${(data.recordsProcessed || 0).toLocaleString('ar-EG')} / ${(data.totalRecords || 0).toLocaleString('ar-EG')} سجل`;
+    }
+
+    if (tablesEl) {
+        tablesEl.textContent = `الجدول ${data.tableIndex || 0} من ${data.totalTables || 13}`;
+    }
+
+    if (headingEl) {
+        if (data.stage === 'counting') headingEl.textContent = 'إحصاء السجلات المحلية...';
+        else if (data.stage === 'transferring') headingEl.textContent = data.currentTableAr || 'نقل السجلات...';
+        else if (data.stage === 'rebuilding_domain') headingEl.textContent = 'إعادة بناء الكيانات السحابية...';
+        else if (data.stage === 'completed') headingEl.textContent = 'اكتمل التأسيس بنجاح!';
+        else if (data.stage === 'error') headingEl.textContent = 'فشلت عملية التأسيس';
+    }
+
+    if (detailEl && data.detail) {
+        detailEl.textContent = data.detail;
+    }
+
+    if (tablesList && Array.isArray(data.completedTables)) {
+        tablesList.innerHTML = data.completedTables.map(t => `
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:5px 10px; margin-bottom:4px; border-radius:6px; background:rgba(16, 185, 129, 0.08); border:1px solid rgba(16, 185, 129, 0.2); font-size:11px; color:#6ee7b7;">
+                <span style="font-weight:700;">${t}</span>
+                <span style="font-size:10px; color:#10b981;">تم بنجاح ✓</span>
+            </div>
+        `).join('') + (data.currentTableAr && data.stage === 'transferring' ? `
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:5px 10px; border-radius:6px; background:rgba(56, 189, 248, 0.12); border:1px solid rgba(56, 189, 248, 0.3); font-size:11px; color:#38bdf8;">
+                <span style="font-weight:700;">${data.currentTableAr}</span>
+                <span style="font-size:10px; color:#38bdf8;">جاري النقل ⚡</span>
+            </div>
+        ` : '');
+    }
+
+    if (data.stage === 'completed') {
+        if (badgeEl) {
+            badgeEl.textContent = 'مكتمل بنجاح ✅';
+            badgeEl.style.background = 'rgba(16, 185, 129, 0.15)';
+            badgeEl.style.color = '#10b981';
+            badgeEl.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+        }
+        if (barEl) barEl.style.background = 'linear-gradient(90deg, #10b981, #059669)';
+        if (spinnerEl) spinnerEl.style.display = 'none';
+        if (finishBtn) finishBtn.style.display = 'inline-flex';
+        if (closeBtn) closeBtn.style.display = 'inline-block';
+        if (reseedTimerInterval) { clearInterval(reseedTimerInterval); reseedTimerInterval = null; }
+        if (reseedPollInterval) { clearInterval(reseedPollInterval); reseedPollInterval = null; }
+
+        if (typeof loadReconciliationMatrix === 'function') loadReconciliationMatrix();
+        if (typeof checkDiagnosticsPulse === 'function') checkDiagnosticsPulse();
+    } else if (data.stage === 'error') {
+        if (badgeEl) {
+            badgeEl.textContent = 'خطأ ❌';
+            badgeEl.style.background = 'rgba(239, 68, 68, 0.15)';
+            badgeEl.style.color = '#ef4444';
+            badgeEl.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+        }
+        if (barEl) barEl.style.background = '#ef4444';
+        if (spinnerEl) spinnerEl.style.display = 'none';
+        if (closeBtn) closeBtn.style.display = 'inline-block';
+        if (reseedTimerInterval) { clearInterval(reseedTimerInterval); reseedTimerInterval = null; }
+        if (reseedPollInterval) { clearInterval(reseedPollInterval); reseedPollInterval = null; }
+    }
+}
+window.handleReseedProgressUpdate = handleReseedProgressUpdate;
+
 async function triggerFullCloudReseed() {
     const btn = document.getElementById('btn-reseed-vps-action');
     const icon = document.getElementById('icon-reseed-vps');
@@ -6798,20 +6959,46 @@ async function triggerFullCloudReseed() {
     if (btn) btn.disabled = true;
     if (icon) icon.classList.add('spin-animation');
 
+    openReseedProgressModal();
+
+    // Start fallback polling every 1200ms
+    if (reseedPollInterval) clearInterval(reseedPollInterval);
+    reseedPollInterval = setInterval(async () => {
+        try {
+            const res = await fetch('/api/diagnostics/reseed-status');
+            if (res.ok) {
+                const statusData = await res.json();
+                handleReseedProgressUpdate(statusData);
+            }
+        } catch (e) {}
+    }, 1200);
+
     try {
         const res = await fetch('/api/diagnostics/reseed-vps', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 
+                'Content-Type': 'application/json',
+                'x-admin-secret': 'TITI'
+            }
         });
         const data = await res.json();
 
         if (!res.ok || !data.success) throw new Error(data.error || 'فشلت المزامنة الشاملة');
 
-        alert(`✅ نجحت العملية!\n${data.message}\n(المدة: ${data.duration_ms || 0} ms)`);
-        loadReconciliationMatrix();
-        checkDiagnosticsPulse();
+        handleReseedProgressUpdate({
+            stage: 'completed',
+            percent: 100,
+            recordsProcessed: data.total_records || 0,
+            totalRecords: data.total_records || 0,
+            detail: data.message || 'تمت العملية بنجاح'
+        });
     } catch (err) {
-        alert(`❌ حدث خطأ أثناء المزامنة: ${err.message}`);
+        handleReseedProgressUpdate({
+            stage: 'error',
+            percent: 100,
+            error: err.message,
+            detail: `حدث خطأ: ${err.message}`
+        });
     } finally {
         if (btn) btn.disabled = false;
         if (icon) icon.classList.remove('spin-animation');
