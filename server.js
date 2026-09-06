@@ -888,7 +888,7 @@ app.get('/api/maintenance/technicians-performance', async (req, res) => {
     try {
         const techsRaw = await allQuery(`
             SELECT 
-                COALESCE(NULLIF(technician_name, ''), 'فني الصيانة') as tech_name,
+                COALESCE(NULLIF(TRIM(technician_name), ''), 'فني الصيانة') as tech_name,
                 COUNT(*) as total_tickets,
                 SUM(CASE WHEN status = 'completed' OR (close_date IS NOT NULL AND close_date != '') THEN 1 ELSE 0 END) as completed_count,
                 SUM(CASE WHEN status != 'completed' AND (close_date IS NULL OR close_date = '') THEN 1 ELSE 0 END) as pending_count
@@ -1695,10 +1695,10 @@ app.get('/api/inventory/installments-dashboard', async (req, res) => {
             SELECT 
                 t.id,
                 t.pos as pos_serial,
-                CAST(NULLIF(t.installments, '') AS INTEGER) as duration_months,
-                CAST(NULLIF(t.unitprice, '') AS REAL) as unit_price,
-                CAST(NULLIF(t.finalunitprice, '') AS REAL) as final_unit_price,
-                CAST(NULLIF(t.monthlyinstallmentprice, '') AS REAL) as monthly_installment_price,
+                CAST(NULLIF(TRIM(t.installments), '') AS INTEGER) as duration_months,
+                CAST(NULLIF(TRIM(t.unitprice), '') AS REAL) as unit_price,
+                CAST(NULLIF(TRIM(t.finalunitprice), '') AS REAL) as final_unit_price,
+                CAST(NULLIF(TRIM(t.monthlyinstallmentprice), '') AS REAL) as monthly_installment_price,
                 COALESCE(m.name, p.payer_max, '-') as merchant_name,
                 COALESCE(m.merchant_code, '-') as merchant_code,
                 COALESCE(m.government, '-') as government,
@@ -1714,9 +1714,9 @@ app.get('/api/inventory/installments-dashboard', async (req, res) => {
                 SELECT 
                     pos_number,
                     MAX(payer) as payer_max,
-                    SUM(CASE WHEN payment_reason LIKE '%قسط%' AND payment_reason NOT LIKE '%مقدم%' THEN CAST(NULLIF(payment_amount, '') AS REAL) ELSE 0 END) as paid_installments_sum,
-                    SUM(CASE WHEN payment_reason LIKE '%مقدم%' THEN CAST(NULLIF(payment_amount, '') AS REAL) ELSE 0 END) as paid_downpayment_sum,
-                    SUM(CAST(NULLIF(payment_amount, '') AS REAL)) as total_paid_sum,
+                    SUM(CASE WHEN payment_reason LIKE '%قسط%' AND payment_reason NOT LIKE '%مقدم%' THEN CAST(NULLIF(TRIM(payment_amount), '') AS REAL) ELSE 0 END) as paid_installments_sum,
+                    SUM(CASE WHEN payment_reason LIKE '%مقدم%' THEN CAST(NULLIF(TRIM(payment_amount), '') AS REAL) ELSE 0 END) as paid_downpayment_sum,
+                    SUM(CAST(NULLIF(TRIM(payment_amount), '') AS REAL)) as total_paid_sum,
                     MIN(CASE WHEN payment_reason LIKE '%قسط%' OR payment_reason LIKE '%مقدم%' THEN payment_date ELSE NULL END) as first_send_date,
                     MAX(payment_date) as last_payment_date
                 FROM payments_raw
