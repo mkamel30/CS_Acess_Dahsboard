@@ -1724,7 +1724,7 @@ app.get('/api/inventory/installments-dashboard', async (req, res) => {
             ) p ON t.pos = p.pos_number
             LEFT JOIN devices d ON d.serial = t.pos
             LEFT JOIN (
-                SELECT device_id, merchant_code FROM merchant_assets GROUP BY device_id
+                SELECT device_id, MIN(merchant_code) as merchant_code FROM merchant_assets GROUP BY device_id
             ) ma ON ma.device_id = d.id
             LEFT JOIN merchants m ON m.merchant_code = ma.merchant_code
             ORDER BY CAST(t.id AS INTEGER) ASC
