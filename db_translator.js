@@ -82,7 +82,7 @@ function translateSqliteToPostgres(sql, params) {
 
     // List of RAW table case-sensitive columns that need quotes in PostgreSQL
     const RAW_CASE_COLUMNS = [
-        'Serial', 'ID', 'Model', 'Owner', 'POS', 'POSID', 'FormNo',
+        'Serial', 'ID', 'Model', 'Owner', 'POS', 'POSID', 'FormNo', 'formNo',
         'NationalD', 'Contact_person', 'GrocerNumber', 'POSN', 'GrocerName',
         'ActionDate', 'IssueDate', 'ActionType', 'NoteG', 'NoteD', 'Fees',
         'Paid', 'FeesAmount', 'Procedure', 'Place', 'SupplyOffice',
@@ -91,7 +91,9 @@ function translateSqliteToPostgres(sql, params) {
         'Manufacturer2', 'Manufacturer3', 'Model2', 'Model3', 'Cell_Serial',
         'Cell_type', 'Cell_Serial3', 'Cell_type3', 'Acquired Date',
         'Unit Serial', 'Checked In Date', 'Checked Out Date', 'Checked In Condition',
-        'Notes', 'FixID', 'FixName', 'FaultName'
+        'Checked Out Condition', 'Checked Out To', 'Unit Type', 'Manufactor',
+        'Notes', 'FixID', 'FixName', 'FaultID', 'FaultName', 'GateNo', 'GoldenCard',
+        'Pinpad_2', 'Payment_amount', 'Retired Date'
     ];
 
     // Quote case-sensitive column names from RAW tables ONLY when NOT already enclosed in quotes

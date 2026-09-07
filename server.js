@@ -3202,7 +3202,7 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
         // If not found, lookup maintenance_raw
         if (!detectedModel) {
             const maintModel = await getQuery(`
-                SELECT Model, Manufactor
+                SELECT Model, [Manufactor]
                 FROM maintenance_raw
                 WHERE [Unit Serial] = ? OR [Unit Serial] LIKE ?
                 LIMIT 1
@@ -3449,7 +3449,7 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
                    m.spstatus as hq_parts_note,
                    m.Procedure as technician,
                    m.Model as model,
-                   m.Manufactor as manufacturer
+                   m.[Manufactor] as manufacturer
             FROM maintenance_raw m
             WHERE m.[Unit Serial] = ? OR m.[Unit Serial] LIKE ?
             ORDER BY m.ID DESC
@@ -3465,7 +3465,7 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
                 `, [cycle.form_no, s]);
                 cycle.hq_parts_replaced = parts.map(p => ({
                     part_name: p.type || p.PartName || 'بوردة / قطعة رئيسية',
-                    quantity: p.count_in || 1,
+                    quantity: p.count_in || p.count_out || 1,
                     notes: p.notes || '-'
                 }));
             } else {
