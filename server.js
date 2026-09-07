@@ -3003,6 +3003,24 @@ function parseDateScore(dStr) {
     return new Date(year, month - 1, day).getTime();
 }
 
+function parseDateHelper(dateStr) {
+    if (!dateStr || dateStr === '-' || dateStr === 'null') return null;
+    const clean = String(dateStr).trim();
+    const match = clean.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})/);
+    if (match) {
+        const months = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };
+        const m = months[match[2].toLowerCase()];
+        if (m !== undefined) {
+            let yr = parseInt(match[3], 10);
+            if (yr < 100) yr += (yr >= 70 ? 1900 : 2000);
+            const day = parseInt(match[1], 10);
+            return new Date(Date.UTC(yr, m, day, 12, 0, 0));
+        }
+    }
+    const d = new Date(clean);
+    return isNaN(d.getTime()) ? null : d;
+}
+
 function resolveMaintenanceServiceDetails(t, allSp = [], allPayments = [], priceMap = new Map()) {
     const noteD = String(t.NoteD || t.action_taken || '').trim();
     const noteG = String(t.NoteG || t.complaint || '').trim();
@@ -3508,24 +3526,6 @@ app.get('/api/inventory/time-machine', async (req, res) => {
 
         const dateIso = targetDate.toISOString().slice(0, 10);
 
-        function parseDateHelper(dateStr) {
-            if (!dateStr || dateStr === '-' || dateStr === 'null') return null;
-            const clean = String(dateStr).trim();
-            const match = clean.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})/);
-            if (match) {
-                const months = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };
-                const m = months[match[2].toLowerCase()];
-                if (m !== undefined) {
-                    let yr = parseInt(match[3], 10);
-                    if (yr < 100) yr += (yr >= 70 ? 1900 : 2000);
-                    const day = parseInt(match[1], 10);
-                    return new Date(Date.UTC(yr, m, day, 12, 0, 0));
-                }
-            }
-            const d = new Date(clean);
-            return isNaN(d.getTime()) ? null : d;
-        }
-
         // 1. Spare Parts Point-in-Time Inventory
         const priceCatalogRows = await allQuery(`SELECT type, price FROM failure_points_raw WHERE price IS NOT NULL AND price != ''`);
         const priceMap = new Map();
@@ -3815,16 +3815,17 @@ app.get('/api/assets/timeline', async (req, res) => {
         }
 
         // 1. Events from transactions_raw (Complete Service History)
+        let assetTransactions = [];
         if (allPossibleCodes.length > 0) {
             const transParams = [...allPossibleCodes, ...allPossibleCodes];
-            const transactions = await allQuery(`
+            assetTransactions = await allQuery(`
                 SELECT t.*
                 FROM transactions_raw t
                 WHERE t.POSN IN (${placeholders}) OR t.GrocerName IN (${placeholders})
                 ORDER BY t.ID DESC
             `, transParams);
 
-            transactions.forEach(t => {
+            assetTransactions.forEach(t => {
                 let tech = t.Procedure || '';
                 if (tech.toUpperCase() === 'AHMEDMAHDY') tech = 'أحمد المهدي محفوظ المهدي';
                 else if (tech.toUpperCase() === 'ELFAKHARANY') tech = 'أحمد فؤاد سيد الفخراني';
@@ -4160,7 +4161,7 @@ app.get('/api/assets/timeline', async (req, res) => {
         });
     } catch (err) {
         console.error("Asset timeline error:", err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
