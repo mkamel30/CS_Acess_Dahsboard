@@ -6767,6 +6767,10 @@ async function loadReconciliationMatrix() {
                 ? `<span style="color:var(--cyber-neon-green); font-weight:800; font-size:13px;">0</span>`
                 : `<span style="color:var(--cyber-neon-red); font-weight:900; font-size:13px; text-shadow:0 0 8px rgba(255,0,85,0.4);">${t.diff > 0 ? '+' : ''}${t.diff}</span>`;
 
+            const cloudCountText = t.cloud_count !== null 
+                ? Number(t.cloud_count).toLocaleString('en-US')
+                : (data.cloud_fetch_error ? `<span style="color:#ef4444; font-size:10px;">[LINK_OFFLINE]</span>` : '-');
+
             const actionCell = isMatched
                 ? `<span style="color:#10b981; font-size:11px; font-weight:700;"><i data-lucide="check" style="width:12px;height:12px;vertical-align:middle;"></i> متطابق ✓</span>`
                 : `<button type="button" class="cyber-btn-primary" style="padding:4px 10px; font-size:11px; white-space:nowrap; background:linear-gradient(135deg, #0284c7, #0369a1);" id="btn-sync-tbl-${t.table}" onclick="syncSingleTable('${t.table}', '${t.name_ar}')">
