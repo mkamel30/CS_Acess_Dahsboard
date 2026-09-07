@@ -4637,6 +4637,91 @@ app.post('/api/diagnostics/clear-errors', requireAdmin, async (req, res) => {
     }
 });
 
+// 3b. Delete Single System Error Log
+app.post('/api/diagnostics/delete-error', requireAdmin, async (req, res) => {
+    try {
+        const { id } = req.body || {};
+        if (!id) return res.status(400).json({ success: false, error: 'Error ID required' });
+        await runQuery('DELETE FROM system_error_logs WHERE id = ?', [id]);
+        res.json({ success: true, message: 'تم مسح وتجاوز السجل بنجاح' });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// 3c. 1-Click Targeted Single Table Sync (Self-Healing)
+app.post('/api/diagnostics/sync-table', requireAdmin, async (req, res) => {
+    try {
+        const config = readAppConfig();
+        if (config.isCloudServer) {
+            return res.status(400).json({ success: false, error: 'Cannot push from cloud server' });
+        }
+        const { table } = req.body || {};
+        if (!table) return res.status(400).json({ success: false, error: 'Table name required' });
+
+        const tableItem = CORE_RECONCILIATION_TABLES.find(t => t.table === table);
+        if (!tableItem) {
+            return res.status(400).json({ success: false, error: `Invalid table name: ${table}` });
+        }
+
+        const rows = await allQuery(`SELECT * FROM "${table}"`) || [];
+        const cloudUrl = (config.cloudEndpoint || 'https://smartcs.m-kamel.workers.dev/api/sync/delta').replace(/\/api\/sync\/delta.*$/, '/api/sync/full-seed');
+        const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
+
+        const CHUNK_SIZE = 500;
+        const totalChunks = Math.ceil(rows.length / CHUNK_SIZE) || 1;
+        const startTime = Date.now();
+
+        for (let cIdx = 0; cIdx < totalChunks; cIdx++) {
+            const chunk = rows.slice(cIdx * CHUNK_SIZE, (cIdx + 1) * CHUNK_SIZE);
+            const isFirst = (cIdx === 0);
+
+            const cloudResp = await fetchFn(cloudUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-sync-secret': SYNC_SECRET
+                },
+                body: JSON.stringify({
+                    tablesData: { [table]: chunk },
+                    isAppend: !isFirst,
+                    rebuildDomain: false,
+                    timestamp: new Date().toISOString()
+                })
+            });
+
+            const rawText = await cloudResp.text();
+            let cloudResult = {};
+            try { cloudResult = JSON.parse(rawText); } catch(e) {}
+            if (!cloudResult.success) {
+                throw new Error(cloudResult.error || `خطأ في مزامنة جدول ${tableItem.name_ar}`);
+            }
+        }
+
+        // Trigger domain rebuild if relevant table
+        if (['installments_raw', 'transactions_raw', 'store_sp_raw', 'assets_raw'].includes(table)) {
+            fetchFn(cloudUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-sync-secret': SYNC_SECRET },
+                body: JSON.stringify({ tablesData: {}, rebuildDomain: true, timestamp: new Date().toISOString() })
+            }).catch(() => {});
+        }
+
+        const duration = Date.now() - startTime;
+        res.json({
+            success: true,
+            table,
+            name_ar: tableItem.name_ar,
+            synced_count: rows.length,
+            duration_ms: duration,
+            message: `تمت مزامنة وتحديث ${tableItem.name_ar} بنجاح (${rows.length.toLocaleString('ar-EG')} سجل) في ${duration}ms ⚡`
+        });
+    } catch (err) {
+        logSystemError('SYNC_SINGLE_TABLE', '/api/diagnostics/sync-table', err, req);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // 4. Get Table Counts on Current Node
 app.get('/api/diagnostics/table-counts', async (req, res) => {
     try {
