@@ -2765,8 +2765,8 @@ app.get('/api/customers/profile/:code', async (req, res) => {
         const cleanCode = code.trim().replace(/^M-/i, '');
         const altCode = 'M-' + cleanCode;
 
-        // 1. Fetch Master Info from assets_raw
-        const asset = await getQuery(`
+        // 1. Fetch Master Info from assets_raw (support merchants with multiple POS records/terminals)
+        const allAssetRows = await allQuery(`
             SELECT a.*,
                    COALESCE(a.bkcode, a.POSID) as clean_code,
                    COALESCE(a.Owner, a.Contact_person, 'مخبز') as clean_name,
@@ -2774,59 +2774,137 @@ app.get('/api/customers/profile/:code', async (req, res) => {
             FROM assets_raw a
             WHERE a.bkcode = ? OR a.POSID = ? OR a.bkcode = ? OR a.POSID = ?
                OR a.bkcode = ? OR a.POS = ? OR a.POS_2 = ?
-            LIMIT 1
-        `, [code, code, cleanCode, cleanCode, altCode, code, code]);
+            ORDER BY CASE WHEN a.bkcode = ? THEN 0 ELSE 1 END, a.ID ASC
+        `, [code, code, cleanCode, cleanCode, altCode, code, code, cleanCode]);
 
-        if (!asset) {
+        if (!allAssetRows || allAssetRows.length === 0) {
             return res.status(404).json({ success: false, error: "لم يتم العثور على العميل" });
         }
 
-        const merchantCode = asset.clean_code || code;
+        // Pick primary asset row (prefer one with contact/address details or matching bkcode)
+        const asset = allAssetRows.find(r => r.telephone_1 || r.Address || r.NationalD) || allAssetRows[0];
+        const merchantCode = asset.clean_code || cleanCode || code;
 
-        // 2. Resolve all POS devices linked to this customer
+        // 2. Resolve ALL POS devices linked to this customer from all asset records
         const posSet = new Map();
-        if (asset.POS && asset.POS !== '-') {
-            const spec = resolveDeviceSpecs(asset.POS, asset);
-            posSet.set(asset.POS, {
-                serial: asset.POS,
-                slot: 'الماكينة الرئيسية (POS 1)',
-                model: spec.model,
-                manufacturer: spec.manufacturer,
-                is_branch_backup: spec.is_branch_backup,
-                badge_tag: spec.badge_tag,
-                condition: asset.Condition || 'سليمة',
-                acquired_date: asset['Acquired Date'] || '-',
-                pinpad: asset.PinpadSerial || '-'
+
+        allAssetRows.forEach(r => {
+            const rowPosId = String(r.POSID || '').trim();
+            const isSecondaryRow = rowPosId && rowPosId !== merchantCode;
+
+            if (r.POS && r.POS !== '-' && r.POS !== 'null') {
+                const cleanPos = String(r.POS).trim();
+                if (!posSet.has(cleanPos)) {
+                    const spec = resolveDeviceSpecs(cleanPos, r);
+                    const slotLabel = isSecondaryRow 
+                        ? `نقطة بيع #${rowPosId}` 
+                        : (posSet.size === 0 ? 'الماكينة الرئيسية (POS 1)' : `ماكينة مسجلة #${posSet.size + 1}`);
+                    posSet.set(cleanPos, {
+                        serial: cleanPos,
+                        slot: slotLabel,
+                        model: spec.model,
+                        manufacturer: spec.manufacturer,
+                        is_branch_backup: spec.is_branch_backup,
+                        badge_tag: spec.badge_tag,
+                        condition: r.Condition || 'سليمة',
+                        acquired_date: r['Acquired Date'] || '-',
+                        pinpad: r.PinpadSerial || '-'
+                    });
+                }
+            }
+
+            if (r.POS_2 && r.POS_2 !== '-' && r.POS_2 !== 'null') {
+                const cleanPos2 = String(r.POS_2).trim();
+                if (!posSet.has(cleanPos2)) {
+                    const spec = resolveDeviceSpecs(cleanPos2, r);
+                    posSet.set(cleanPos2, {
+                        serial: cleanPos2,
+                        slot: 'الماكينة الإضافية (POS 2)',
+                        model: spec.model,
+                        manufacturer: spec.manufacturer,
+                        is_branch_backup: spec.is_branch_backup,
+                        badge_tag: spec.badge_tag,
+                        condition: 'سليمة',
+                        acquired_date: '-',
+                        pinpad: r.Pinpad_2 || '-'
+                    });
+                }
+            }
+
+            if (r.pos_3 && r.pos_3 !== '-' && r.pos_3 !== 'null') {
+                const cleanPos3 = String(r.pos_3).trim();
+                if (!posSet.has(cleanPos3)) {
+                    const spec = resolveDeviceSpecs(cleanPos3, r);
+                    posSet.set(cleanPos3, {
+                        serial: cleanPos3,
+                        slot: 'الماكينة الثالثة (POS 3)',
+                        model: spec.model,
+                        manufacturer: spec.manufacturer,
+                        is_branch_backup: spec.is_branch_backup,
+                        badge_tag: spec.badge_tag,
+                        condition: 'سليمة',
+                        acquired_date: '-',
+                        pinpad: '-'
+                    });
+                }
+            }
+        });
+
+        // Also resolve devices linked via devices & merchant_assets
+        try {
+            const extraDevices = await allQuery(`
+                SELECT d.serial, d.model, d.manufacturer, ma.slot_label
+                FROM devices d
+                JOIN merchant_assets ma ON ma.device_id = d.id
+                WHERE ma.merchant_code = ? OR ma.merchant_code = ?
+            `, [merchantCode, cleanCode]);
+
+            extraDevices.forEach(ed => {
+                const s = String(ed.serial || '').trim();
+                if (s && s !== '-' && !posSet.has(s)) {
+                    const spec = resolveDeviceSpecs(s);
+                    posSet.set(s, {
+                        serial: s,
+                        slot: ed.slot_label || `ماكينة مسجلة #${posSet.size + 1}`,
+                        model: ed.model || spec.model,
+                        manufacturer: ed.manufacturer || spec.manufacturer,
+                        is_branch_backup: spec.is_branch_backup,
+                        badge_tag: spec.badge_tag,
+                        condition: 'سليمة',
+                        acquired_date: '-',
+                        pinpad: '-'
+                    });
+                }
             });
-        }
-        if (asset.POS_2 && asset.POS_2 !== '-') {
-            const spec = resolveDeviceSpecs(asset.POS_2, asset);
-            posSet.set(asset.POS_2, {
-                serial: asset.POS_2,
-                slot: 'الماكينة الإضافية (POS 2)',
-                model: spec.model,
-                manufacturer: spec.manufacturer,
-                is_branch_backup: spec.is_branch_backup,
-                badge_tag: spec.badge_tag,
-                condition: 'سليمة',
-                acquired_date: '-',
-                pinpad: asset.Pinpad_2 || '-'
+        } catch (e) {}
+
+        // Also check if any machine was transferred to this merchant in temp_transfer_raw
+        try {
+            const transferDevices = await allQuery(`
+                SELECT tt.NewPOS, tt.NewType, tt.Transfer_Date, tt.procedure
+                FROM temp_transfer_raw tt
+                WHERE (tt.bkCode = ? OR tt.bkCode = ?) AND tt.NewPOS IS NOT NULL AND tt.NewPOS != '' AND tt.NewPOS != '-'
+                ORDER BY tt.Transfer_Date DESC
+            `, [merchantCode, cleanCode]);
+
+            transferDevices.forEach(td => {
+                const s = String(td.NewPOS || '').trim();
+                if (s && s !== '-' && !posSet.has(s)) {
+                    const spec = resolveDeviceSpecs(s);
+                    posSet.set(s, {
+                        serial: s,
+                        slot: 'ماكينة بديلة منصرفة (استبدال)',
+                        model: td.NewType || spec.model,
+                        manufacturer: spec.manufacturer,
+                        is_branch_backup: spec.is_branch_backup,
+                        badge_tag: spec.badge_tag,
+                        condition: 'سليمة',
+                        acquired_date: td.Transfer_Date || '-',
+                        pinpad: '-'
+                    });
+                }
             });
-        }
-        if (asset.pos_3 && asset.pos_3 !== '-') {
-            const spec = resolveDeviceSpecs(asset.pos_3, asset);
-            posSet.set(asset.pos_3, {
-                serial: asset.pos_3,
-                slot: 'الماكينة الثالثة (POS 3)',
-                model: spec.model,
-                manufacturer: spec.manufacturer,
-                is_branch_backup: spec.is_branch_backup,
-                badge_tag: spec.badge_tag,
-                condition: 'سليمة',
-                acquired_date: '-',
-                pinpad: '-'
-            });
-        }
+        } catch (e) {}
 
         // Check if any other devices appear in transactions_raw for this merchant
         const histDevices = await allQuery(`
@@ -2836,10 +2914,11 @@ app.get('/api/customers/profile/:code', async (req, res) => {
         `, [merchantCode, cleanCode]);
 
         histDevices.forEach(h => {
-            if (!posSet.has(h.POSN)) {
-                const spec = resolveDeviceSpecs(h.POSN, asset);
-                posSet.set(h.POSN, {
-                    serial: h.POSN,
+            const s = String(h.POSN || '').trim();
+            if (s && s !== '-' && !posSet.has(s)) {
+                const spec = resolveDeviceSpecs(s, asset);
+                posSet.set(s, {
+                    serial: s,
                     slot: 'ماكينة تاريخية مسجلة بالبلاغات',
                     model: spec.model,
                     manufacturer: spec.manufacturer,
@@ -2852,7 +2931,6 @@ app.get('/api/customers/profile/:code', async (req, res) => {
             }
         });
 
-        // 3. Resolve all SIM cards
         // 3. Resolve all SIM cards (All possible SIMs linked to customer)
         const simMap = new Map();
         
@@ -2870,11 +2948,14 @@ app.get('/api/customers/profile/:code', async (req, res) => {
             }
         }
 
-        if (asset.Cell_Serial) addSim(asset.Cell_Serial, 'الشريحة الرئيسية (SIM 1)', asset.Cell_type, asset.telephone_1);
-        if (asset['cell_2-ser']) addSim(asset['cell_2-ser'], 'الشريحة الثانية (SIM 2)', asset['Cell_type-2'], asset.telephone_2);
-        if (asset.Cell_Serial3) addSim(asset.Cell_Serial3, 'الشريحة الثالثة (SIM 3)', asset.Cell_type3, asset.telephone_3);
-        if (asset.Cell_Serial4) addSim(asset.Cell_Serial4, 'الشريحة الرابعة (SIM 4)', asset.Cell_type4, null);
-        if (asset.Cell_Serial5) addSim(asset.Cell_Serial5, 'الشريحة الخامسة (SIM 5)', asset.Cell_type5, null);
+        allAssetRows.forEach((r, idx) => {
+            const prefix = allAssetRows.length > 1 ? ` (سجل #${idx + 1})` : '';
+            if (r.Cell_Serial) addSim(r.Cell_Serial, `الشريحة الرئيسية (SIM 1)${prefix}`, r.Cell_type, r.telephone_1);
+            if (r['cell_2-ser']) addSim(r['cell_2-ser'], `الشريحة الثانية (SIM 2)${prefix}`, r['Cell_type-2'], r.telephone_2);
+            if (r.Cell_Serial3) addSim(r.Cell_Serial3, `الشريحة الثالثة (SIM 3)${prefix}`, r.Cell_type3, r.telephone_3);
+            if (r.Cell_Serial4) addSim(r.Cell_Serial4, `الشريحة الرابعة (SIM 4)${prefix}`, r.Cell_type4, null);
+            if (r.Cell_Serial5) addSim(r.Cell_Serial5, `الشريحة الخامسة (SIM 5)${prefix}`, r.Cell_type5, null);
+        });
 
         // Also look up any additional SIMs from sim_cards and merchant_assets or store_sim_raw
         try {
