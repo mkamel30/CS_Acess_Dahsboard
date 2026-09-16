@@ -538,6 +538,12 @@ async function initSyncDatabase(db) {
     await dbRun(db, `CREATE TABLE IF NOT EXISTS failure_points_raw (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, model TEXT, fees TEXT, price TEXT);`);
     await dbRun(db, `CREATE TABLE IF NOT EXISTS failure_points_price_history (id INTEGER PRIMARY KEY AUTOINCREMENT, part_name TEXT NOT NULL, model TEXT, old_price REAL NOT NULL, new_price REAL NOT NULL, change_date TEXT, effective_from TEXT, change_source TEXT);`);
 
+    const cfg = readConfigSafely();
+    if (cfg.isCloudServer) {
+        await dbRun(db, `ALTER TABLE store_pos_raw ADD COLUMN IF NOT EXISTS id SERIAL;`).catch(() => {});
+        await dbRun(db, `ALTER TABLE store_sim_raw ADD COLUMN IF NOT EXISTS id SERIAL;`).catch(() => {});
+    }
+
     await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_audit_table_time ON audit_change_logs(table_name, timestamp DESC);`);
     await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_audit_type ON audit_change_logs(change_type);`);
 }

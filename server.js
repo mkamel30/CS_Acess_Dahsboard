@@ -1186,7 +1186,7 @@ app.get('/api/inventory/warehouse-dashboard', async (req, res) => {
                 LEFT JOIN merchant_assets ma ON ma.device_id = d.id
                 LEFT JOIN merchants m ON m.merchant_code = ma.merchant_code
             `),
-            allQuery('SELECT * FROM store_pos_raw ORDER BY rowid ASC').catch(() => []),
+            allQuery('SELECT * FROM store_pos_raw ORDER BY "Serial" ASC').catch(() => []),
             allQuery('SELECT * FROM temp_transfer_raw ORDER BY rowid DESC').catch(() => []),
             allQuery('SELECT * FROM trade_raw ORDER BY rowid DESC').catch(() => []),
             allQuery('SELECT merchant_code, name, government FROM merchants').catch(() => [])
@@ -1415,7 +1415,7 @@ app.get('/api/inventory/sims-dashboard', async (req, res) => {
     try {
         const [allSims, rawStoreSims, merchantAssets, allMerchants] = await Promise.all([
             allQuery('SELECT * FROM sim_cards'),
-            allQuery('SELECT * FROM store_sim_raw ORDER BY rowid ASC'),
+            allQuery('SELECT * FROM store_sim_raw ORDER BY sim_serial ASC').catch(() => []),
             allQuery(`
                 SELECT ma.*, m.name as merchant_name, m.government
                 FROM merchant_assets ma
@@ -1978,11 +1978,11 @@ app.get('/api/inventory/spare-parts-dashboard', async (req, res) => {
                 JOIN merchants m ON m.merchant_code = ma.merchant_code
                 LEFT JOIN devices d ON d.id = ma.device_id
             `),
-            allQuery('SELECT ref_num, payment_place FROM payments WHERE ref_num IS NOT NULL AND ref_num != ""'),
+            allQuery("SELECT ref_num, payment_place FROM payments WHERE ref_num IS NOT NULL AND ref_num != ''"),
             allQuery(`
                 SELECT POSN, GrocerName, ActionDate, IssueDate 
                 FROM transactions_raw 
-                WHERE ActionDate IS NOT NULL AND ActionDate != ""
+                WHERE ActionDate IS NOT NULL AND ActionDate != ''
             `)
         ]);
 
@@ -2014,7 +2014,11 @@ app.get('/api/inventory/spare-parts-dashboard', async (req, res) => {
         const paymentsMap = new Map();
         allPayments.forEach(p => {
             if (p.ref_num) {
-                paymentsMap.set(p.ref_num.trim(), (p.payment_place || '').trim() || 'ضامن');
+                let place = (p.payment_place || '').trim();
+                if (place.includes('بريد')) place = 'البريد';
+                else if (place.includes('ضامن')) place = 'ضامن';
+                else if (!place) place = 'ضامن';
+                paymentsMap.set(p.ref_num.trim(), place);
             }
         });
         // Transactions Lookup Map for Date Override
@@ -2138,17 +2142,19 @@ app.get('/api/inventory/spare-parts-dashboard', async (req, res) => {
                 }
             }
 
-            // Extract Merchant Code & Receipt Number
+            // Extract Receipt Number & Merchant Code
             const combinedText = `${rawSerial} ${rawNotes}`;
+            let receiptNum = '-';
+            const receiptMatch = combinedText.match(/(202\d{11}|401\d{10,12}|402\d{10,12}|851\d{10,12})/);
+            if (receiptMatch) receiptNum = receiptMatch[0];
+
+            // Strip receipt number to avoid matching digits from 14-digit receipts as merchant code
+            const textWithoutReceipt = receiptNum !== '-' ? combinedText.replace(receiptNum, '') : combinedText;
             let extractedMerchantCode = null;
-            const mCodeMatch = combinedText.match(/\b0?(\d{5,6})\b/);
-            if (mCodeMatch && !mCodeMatch[0].startsWith('401') && !mCodeMatch[0].startsWith('402')) {
+            const mCodeMatch = textWithoutReceipt.match(/\b0?(\d{5,6})\b/);
+            if (mCodeMatch && !mCodeMatch[0].startsWith('401') && !mCodeMatch[0].startsWith('402') && !mCodeMatch[0].startsWith('202')) {
                 extractedMerchantCode = mCodeMatch[0].padStart(6, '0');
             }
-
-            let receiptNum = '-';
-            const receiptMatch = combinedText.match(/(401\d{10,12}|402\d{10,12}|851\d{10,12})/);
-            if (receiptMatch) receiptNum = receiptMatch[0];
 
             // Resolve Merchant Object & Government
             const devAsset = posSerial ? (deviceAssetMap.get(posSerial.toUpperCase()) || deviceAssetMap.get(posSerial)) : null;
@@ -2186,9 +2192,24 @@ app.get('/api/inventory/spare-parts-dashboard', async (req, res) => {
                 paymentChannel = 'تحصيل مؤجل / مستحق ⚠️';
             } else if (receiptNum !== '-') {
                 payKey = 'PAID_DIRECT';
-                const place = paymentsMap.get(receiptNum) || (receiptNum.startsWith('401') || receiptNum.startsWith('402') ? 'ضامن' : 'إيداع بنكي / بريدي');
+                let place = paymentsMap.get(receiptNum);
+                if (!place) {
+                    if (receiptNum.startsWith('202') || combinedText.includes('بريد')) {
+                        place = 'البريد';
+                    } else if (receiptNum.startsWith('401') || receiptNum.startsWith('402')) {
+                        place = 'ضامن';
+                    } else {
+                        place = 'إيداع بنكي / بريدي';
+                    }
+                } else if (place.includes('بريد')) {
+                    place = 'البريد';
+                }
                 payLabel = `مسدد بمقابل (${place})`;
                 paymentChannel = place;
+            } else if (combinedText.includes('بريد')) {
+                payKey = 'PAID_DIRECT';
+                payLabel = 'مسدد بمقابل (البريد)';
+                paymentChannel = 'البريد';
             } else {
                 payKey = 'PAID_DIRECT';
                 payLabel = 'مسدد بمقابل';
@@ -2473,7 +2494,7 @@ app.get('/api/reports/eod-detail', async (req, res) => {
         const allTransactionsEod = await allQuery(`
             SELECT POSN, GrocerName, ActionDate, IssueDate 
             FROM transactions_raw 
-            WHERE ActionDate IS NOT NULL AND ActionDate != ""
+            WHERE ActionDate IS NOT NULL AND ActionDate != ''
         `);
         const txMapEod = new Map();
         allTransactionsEod.forEach(t => {
@@ -2539,7 +2560,7 @@ app.get('/api/reports/eod-detail', async (req, res) => {
                 payment_status = 'DEFERRED';
             }
 
-            const receiptMatch = s.match(/(\d{10,20})/);
+            const receiptMatch = (s + ' ' + notes).match(/(202\d{11}|401\d{10,12}|402\d{10,12}|851\d{10,12}|\d{10,20})/);
             if (receiptMatch && payment_status === 'PAID') {
                 receipt_num = receiptMatch[1];
             }

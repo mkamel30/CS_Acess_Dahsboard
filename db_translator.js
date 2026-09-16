@@ -106,12 +106,13 @@ function translateSqliteToPostgres(sql, params) {
         });
     }
 
-    // Safety cleanup: collapse any accidentally created double-double quotes
-    pgSql = pgSql.replace(/""+/g, '"');
-
-    // Fix empty string comparisons with double quotes: != "" -> != ''
+    // Fix empty string comparisons with double quotes BEFORE quote cleanup: != "" -> != '', = "" -> = ''
     pgSql = pgSql.replace(/!=\s*""/g, "!= ''");
     pgSql = pgSql.replace(/=\s*""/g, "= ''");
+    pgSql = pgSql.replace(/(?<![\w"])""(?![\w"])/g, "''");
+
+    // Safety cleanup: collapse any accidentally created double-double quotes
+    pgSql = pgSql.replace(/""+/g, '"');
     
     // Translate SQLite ON CONFLICT(col) to PostgreSQL ON CONFLICT (col)
     pgSql = pgSql.replace(/ON CONFLICT\(([^)]+)\)/ig, 'ON CONFLICT ($1)');
