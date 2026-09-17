@@ -2963,10 +2963,23 @@
                                      <option value="qwen/qwen-2.5-coder-32b-instruct:free">OpenRouter: Qwen 2.5 Coder (32B)</option>
                                  </select>
                             </div>
-                            <div>
-                                <button type="button" class="btn btn-primary" onclick="saveAiSettings()" id="btn-save-ai-settings" style="width:100%; padding:11px 18px; font-size:13px; font-weight:700; border-radius:10px; background:linear-gradient(135deg, #9333ea, #6366f1); border:none; display:flex; align-items:center; justify-content:center; gap:8px;">
+                            <div style="grid-column: 1 / -1; margin-top: 4px;">
+                                <label style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:700; margin-bottom:6px; color:var(--md-sys-color-on-surface);">
+                                    <i data-lucide="brain-circuit" style="width:15px; height:15px; color:#a855f7;"></i>
+                                    <span>قاموس وتدريب الذكاء الاصطناعي (قواعد العمل ومصطلحات النظام الخاصة):</span>
+                                </label>
+                                <textarea id="ai-cfg-custom-knowledge" rows="3" placeholder="اكتب هنا أي قواعد أو توضيحات تريد من المساعد الذكي تطبيقها دائماً، مثلاً:
+- قطع الغيار في الفرع مسجلة في جدول store_sp_raw، أما مركز الصيانة الرئيسي في store_sp_maintenance_raw
+- كلمة 'موافقات' تعني أجهزة في انتظار رد العميل
+- أي قاعدة تكتبها هنا سيتعلمها فوراً بدون الحاجة لتعديل الكود!" style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container-low); color:var(--md-sys-color-on-surface); font-size:13px; font-family:inherit; resize:vertical; line-height:1.5;"></textarea>
+                                <span style="font-size:11px; color:var(--text-secondary); margin-top:3px; display:block;">
+                                    💡 يمكنك تدريب المساعد بنفسك هنا مباشرة في أي وقت لتلقينه أي مفاهيم أو مصطلحات جديدة دون تعديل الكود.
+                                </span>
+                            </div>
+                            <div style="grid-column: 1 / -1; display:flex; justify-content:flex-end;">
+                                <button type="button" class="btn btn-primary" onclick="saveAiSettings()" id="btn-save-ai-settings" style="min-width:220px; padding:12px 24px; font-size:13px; font-weight:700; border-radius:10px; background:linear-gradient(135deg, #9333ea, #6366f1); border:none; display:flex; align-items:center; justify-content:center; gap:8px;">
                                     <i data-lucide="check" style="width:16px; height:16px;"></i>
-                                    <span>حفظ وتفعيل المفتاح</span>
+                                    <span>حفظ التعديلات وقواعد التدريب</span>
                                 </button>
                             </div>
                         </div>
@@ -3907,6 +3920,6 @@
     </div>
 
     <!-- Main Client Application Script -->
-    <script src="app.js?v=4.8.4-ai"></script>
+    <script src="app.js?v=4.8.5-ai"></script>
 </body>
 </html>

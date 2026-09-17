@@ -7379,6 +7379,10 @@ async function loadAiAnalyticsTab() {
                 }
                 modelSelect.value = data.model;
             }
+            const knowledgeInput = document.getElementById('ai-cfg-custom-knowledge');
+            if (knowledgeInput && data.customKnowledge !== undefined) {
+                knowledgeInput.value = data.customKnowledge;
+            }
             const keyStatus = document.getElementById('ai-cfg-key-status');
             if (keyStatus) {
                 if (data.hasKey) {
@@ -7407,11 +7411,13 @@ window.toggleAiSettingsPanel = toggleAiSettingsPanel;
 async function saveAiSettings() {
     const keyInput = document.getElementById('ai-cfg-api-key');
     const modelSelect = document.getElementById('ai-cfg-model-select');
+    const knowledgeInput = document.getElementById('ai-cfg-custom-knowledge');
     const btn = document.getElementById('btn-save-ai-settings');
     const msg = document.getElementById('ai-settings-msg');
 
     const apiKey = keyInput ? keyInput.value.trim() : '';
     const model = modelSelect ? modelSelect.value : 'openrouter/free';
+    const customKnowledge = knowledgeInput ? knowledgeInput.value.trim() : '';
 
     if (btn) btn.disabled = true;
     if (msg) {
@@ -7421,7 +7427,7 @@ async function saveAiSettings() {
     }
 
     try {
-        const payload = { model };
+        const payload = { model, customKnowledge };
         if (apiKey) payload.apiKey = apiKey;
 
         const res = await fetch('/api/ai/config', {

@@ -618,6 +618,7 @@ app.get('/api/ai/config', (req, res) => {
             hasKey: !!activeKey,
             maskedKey: activeKey ? `${activeKey.slice(0, 10)}...${activeKey.slice(-4)}` : '',
             model: activeModel,
+            customKnowledge: cfg.customKnowledge || '',
             availableModels: [
                 { id: 'openai/gpt-oss-120b', name: '⚡ Groq: GPT-OSS 120B (فائق الذكاء والدقة 🧠)' },
                 { id: 'openai/gpt-oss-20b', name: '⚡ Groq: GPT-OSS 20B (سرعة فائقة أقل من ثانية ⚡)' },
@@ -635,7 +636,7 @@ app.get('/api/ai/config', (req, res) => {
 
 app.post('/api/ai/config', async (req, res) => {
     try {
-        const { apiKey, model } = req.body || {};
+        const { apiKey, model, customKnowledge } = req.body || {};
         const cfg = readAppConfig();
         if (apiKey !== undefined && apiKey.trim()) {
             const trimmedKey = apiKey.trim();
@@ -647,6 +648,7 @@ app.post('/api/ai/config', async (req, res) => {
             }
         }
         if (model !== undefined && model.trim()) cfg.openRouterModel = model.trim();
+        if (customKnowledge !== undefined) cfg.customKnowledge = customKnowledge.trim();
         cfg.updatedAt = new Date().toISOString();
         fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2));
         return res.json({ success: true, message: 'تم حفظ إعدادات المساعد الذكي بنجاح ✅' });
