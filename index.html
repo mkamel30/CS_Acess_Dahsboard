@@ -2925,7 +2925,49 @@
                                 <span class="sync-pulse" style="background:#a855f7; width:8px; height:8px;"></span>
                                 <span>الموديل: <strong id="ai-active-model-name">OpenRouter Auto (مجاني)</strong></span>
                             </div>
+                            <button type="button" class="btn btn-secondary" onclick="toggleAiSettingsPanel()" style="padding:6px 14px; border-radius:var(--md-shape-corner-full); border:1px solid rgba(168,85,247,0.3); font-size:12px; font-weight:700; display:flex; align-items:center; gap:6px; background:var(--md-sys-color-surface-container); color:var(--md-sys-color-on-surface);">
+                                <i data-lucide="settings" style="width:14px; height:14px; color:#a855f7;"></i>
+                                <span>إعدادات المفتاح والموديل ⚙️</span>
+                            </button>
                         </div>
+                    </div>
+
+                    <!-- AI Settings & API Key Panel (Collapsible) -->
+                    <div id="ai-settings-panel" style="display:none; padding:18px 22px; border-radius:16px; margin-bottom:20px; background:var(--md-sys-color-surface-container); border:1px solid rgba(168,85,247,0.4); box-shadow:0 8px 24px rgba(0,0,0,0.12);">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid var(--md-sys-color-outline-variant); padding-bottom:10px;">
+                            <h3 style="margin:0; font-size:15px; font-weight:800; display:flex; align-items:center; gap:8px; color:var(--md-sys-color-primary);">
+                                <i data-lucide="key" style="width:18px; height:18px;"></i>
+                                إعدادات OpenRouter API وموديل الذكاء الاصطناعي
+                            </h3>
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="toggleAiSettingsPanel(false)" style="padding:4px 10px; font-size:12px;">إغلاق ✕</button>
+                        </div>
+                        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:16px; align-items:flex-end;">
+                            <div>
+                                <label style="display:block; font-size:12px; font-weight:700; margin-bottom:6px; color:var(--md-sys-color-on-surface);">
+                                    مفتاح الـ API (OpenRouter API Key):
+                                </label>
+                                <input type="password" id="ai-cfg-api-key" placeholder="sk-or-v1-..." style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container-low); color:var(--md-sys-color-on-surface); font-size:13px; font-family:monospace;">
+                                <span style="font-size:11px; color:var(--text-secondary); margin-top:4px; display:block;" id="ai-cfg-key-status">الحالة: يتم الفحص...</span>
+                            </div>
+                            <div>
+                                <label style="display:block; font-size:12px; font-weight:700; margin-bottom:6px; color:var(--md-sys-color-on-surface);">
+                                    موديل الذكاء الاصطناعي (AI Model):
+                                </label>
+                                <select id="ai-cfg-model-select" style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container-low); color:var(--md-sys-color-on-surface); font-size:13px;">
+                                    <option value="openrouter/free">OpenRouter Auto (أفضل موديل مجاني تلقائياً) 🚀</option>
+                                    <option value="google/gemma-4-31b-it:free">Google Gemma 4 (31B) - دقيق ومجاني ⭐</option>
+                                    <option value="meta-llama/llama-3.3-70b-instruct:free">Meta Llama 3.3 (70B) - مجاني</option>
+                                    <option value="qwen/qwen-2.5-coder-32b-instruct:free">Qwen 2.5 Coder (32B) - كود وSQL</option>
+                                </select>
+                            </div>
+                            <div>
+                                <button type="button" class="btn btn-primary" onclick="saveAiSettings()" id="btn-save-ai-settings" style="width:100%; padding:11px 18px; font-size:13px; font-weight:700; border-radius:10px; background:linear-gradient(135deg, #9333ea, #6366f1); border:none; display:flex; align-items:center; justify-content:center; gap:8px;">
+                                    <i data-lucide="check" style="width:16px; height:16px;"></i>
+                                    <span>حفظ وتفعيل المفتاح</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="ai-settings-msg" style="margin-top:10px; font-size:12px; display:none;"></div>
                     </div>
 
                     <!-- AI Search & Question Input Box -->
@@ -2963,12 +3005,13 @@
                     </div>
 
                     <!-- AI Error Banner -->
-                    <div id="ai-error-container" style="display:none; padding:16px 20px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:14px; margin-bottom:24px; color:#f87171; align-items:flex-start; gap:12px;">
-                        <i data-lucide="alert-triangle" style="width:22px; height:22px; flex-shrink:0; margin-top:2px;"></i>
-                        <div>
+                    <div id="ai-error-container" style="display:none; padding:16px 20px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:14px; margin-bottom:24px; color:#f87171; align-items:center; gap:12px;">
+                        <i data-lucide="alert-triangle" style="width:22px; height:22px; flex-shrink:0;"></i>
+                        <div style="flex:1;">
                             <strong style="display:block; font-size:14px; margin-bottom:2px;" id="ai-error-title">خطأ في الاستعلام</strong>
                             <span style="font-size:12px;" id="ai-error-message">تعذر إتمام الاستعلام.</span>
                         </div>
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="toggleAiSettingsPanel(true)" style="font-size:11px; padding:6px 12px; border-radius:8px; border:1px solid rgba(239,68,68,0.4); color:#fca5a5;">⚙️ ضبط المفتاح</button>
                     </div>
 
                     <!-- AI Results Section -->
@@ -3861,6 +3904,6 @@
     </div>
 
     <!-- Main Client Application Script -->
-    <script src="app.js?v=4.8.0-ai"></script>
+    <script src="app.js?v=4.8.1-ai"></script>
 </body>
 </html>

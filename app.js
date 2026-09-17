@@ -7370,10 +7370,90 @@ async function loadAiAnalyticsTab() {
             if (badge && data.model) {
                 badge.textContent = data.model;
             }
+            const modelSelect = document.getElementById('ai-cfg-model-select');
+            if (modelSelect && data.model) {
+                modelSelect.value = data.model;
+            }
+            const keyStatus = document.getElementById('ai-cfg-key-status');
+            if (keyStatus) {
+                if (data.hasKey) {
+                    keyStatus.innerHTML = `<span style="color:#10b981; font-weight:700;">✓ المفتاح مفعل وجاهز (${data.maskedKey || 'مسجل'})</span>`;
+                } else {
+                    keyStatus.innerHTML = `<span style="color:#ef4444; font-weight:700;">⚠ لا يوجد مفتاح مسجل - يرجى كتابة الـ Key بالأسفل</span>`;
+                }
+            }
         }
     } catch (e) {}
 }
 window.loadAiAnalyticsTab = loadAiAnalyticsTab;
+
+function toggleAiSettingsPanel(forceShow) {
+    const panel = document.getElementById('ai-settings-panel');
+    if (!panel) return;
+    if (typeof forceShow === 'boolean') {
+        panel.style.display = forceShow ? 'block' : 'none';
+    } else {
+        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    }
+    refreshIcons();
+}
+window.toggleAiSettingsPanel = toggleAiSettingsPanel;
+
+async function saveAiSettings() {
+    const keyInput = document.getElementById('ai-cfg-api-key');
+    const modelSelect = document.getElementById('ai-cfg-model-select');
+    const btn = document.getElementById('btn-save-ai-settings');
+    const msg = document.getElementById('ai-settings-msg');
+
+    const apiKey = keyInput ? keyInput.value.trim() : '';
+    const model = modelSelect ? modelSelect.value : 'openrouter/free';
+
+    if (btn) btn.disabled = true;
+    if (msg) {
+        msg.style.display = 'block';
+        msg.style.color = '#a855f7';
+        msg.textContent = 'جاري حفظ الإعدادات...';
+    }
+
+    try {
+        const payload = { model };
+        if (apiKey) payload.apiKey = apiKey;
+
+        const res = await fetch('/api/ai/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+            throw new Error(data.error || 'فشل حفظ الإعدادات.');
+        }
+
+        if (msg) {
+            msg.style.color = '#10b981';
+            msg.textContent = '✓ تم حفظ إعدادات المساعد الذكي بنجاح!';
+        }
+        if (typeof showGlobalToast === 'function') {
+            showGlobalToast('تم حفظ إعدادات المساعد الذكي بنجاح ✅');
+        }
+        if (keyInput && apiKey) keyInput.value = '';
+        await loadAiAnalyticsTab();
+        setTimeout(() => {
+            if (msg) msg.style.display = 'none';
+            toggleAiSettingsPanel(false);
+        }, 1500);
+    } catch (err) {
+        if (msg) {
+            msg.style.color = '#ef4444';
+            msg.textContent = err.message || 'حدث خطأ أثناء الحفظ.';
+        }
+    } finally {
+        if (btn) btn.disabled = false;
+        refreshIcons();
+    }
+}
+window.saveAiSettings = saveAiSettings;
 
 function setAiQuestion(text) {
     const input = document.getElementById('ai-question-input');

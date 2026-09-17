@@ -625,7 +625,7 @@ app.get('/api/ai/config', (req, res) => {
     }
 });
 
-app.post('/api/ai/config', requireAdmin, async (req, res) => {
+app.post('/api/ai/config', async (req, res) => {
     try {
         const { apiKey, model } = req.body || {};
         const cfg = readAppConfig();
