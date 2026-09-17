@@ -2921,9 +2921,28 @@
                             <p>اسأل أي سؤال تحليلي باللغة العربية حول الماكينات، الصيانة، قطع الغيار، أو التحصيلات وسيقوم الذكاء الاصطناعي بتوليد استعلام SQL آمن واستخراج الأرقام فورياً</p>
                         </div>
                         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                            <div id="ai-model-badge" style="display:flex; align-items:center; gap:8px; background:var(--md-sys-color-surface-container); padding:6px 14px; border-radius:var(--md-shape-corner-full); border:1px solid rgba(168,85,247,0.3); font-size:12px; font-weight:700; color:#c084fc;">
-                                <span class="sync-pulse" style="background:#a855f7; width:8px; height:8px;"></span>
-                                <span>الموديل: <strong id="ai-active-model-name">OpenRouter Auto (مجاني)</strong></span>
+                            <div id="ai-model-badge" style="display:flex; align-items:center; gap:8px; background:var(--md-sys-color-surface-container); padding:4px 12px; border-radius:var(--md-shape-corner-full); border:1px solid rgba(168,85,247,0.4); font-size:12px; font-weight:700; color:#c084fc; box-shadow:0 2px 8px rgba(168,85,247,0.12);">
+                                <span class="sync-pulse" style="background:#a855f7; width:8px; height:8px; flex-shrink:0;"></span>
+                                <span style="white-space:nowrap; color:var(--text-secondary); font-size:12px;">الموديل:</span>
+                                <select id="ai-quick-model-select" onchange="switchAiModelQuickly(this.value)" title="تبديل سريع للموديل مباشرة" style="background:transparent; border:none; color:#c084fc; font-size:12px; font-weight:700; cursor:pointer; outline:none; padding:4px 2px; direction:rtl; max-width:230px;">
+                                    <optgroup label="⚡ مزود Groq (سرعة فائقة ومجاني)">
+                                        <option value="openai/gpt-oss-120b">⚡ Groq: GPT-OSS 120B (فائق الذكاء 🧠)</option>
+                                        <option value="openai/gpt-oss-20b">⚡ Groq: GPT-OSS 20B (سرعة فائقة ⚡)</option>
+                                        <option value="qwen/qwen3.8-27b">⚡ Groq: Qwen 3.8 (27B) دقة وسرعة</option>
+                                    </optgroup>
+                                    <optgroup label="🐋 مزود DeepSeek (رسمي)">
+                                        <option value="deepseek-chat">🐋 DeepSeek: V3 (رسمي فائق الدقة)</option>
+                                        <option value="deepseek-reasoner">🐋 DeepSeek: R1 (تفكير ومنطق عميق)</option>
+                                    </optgroup>
+                                    <optgroup label="🚀 مزود OpenRouter">
+                                        <option value="openrouter/free">🚀 OpenRouter: Auto (مجاني تلقائياً)</option>
+                                        <option value="google/gemma-4-31b-it:free">⭐ OpenRouter: Google Gemma 4 (31B)</option>
+                                        <option value="meta-llama/llama-3.3-70b-instruct:free">OpenRouter: Meta Llama 3.3 (70B)</option>
+                                        <option value="qwen/qwen-2.5-coder-32b-instruct:free">OpenRouter: Qwen 2.5 Coder (32B)</option>
+                                    </optgroup>
+                                </select>
+                                <i data-lucide="chevron-down" style="width:13px; height:13px; color:#a855f7; pointer-events:none; margin-right:-4px;"></i>
+                                <strong id="ai-active-model-name" style="display:none;"></strong>
                             </div>
                             <button type="button" class="btn btn-secondary" onclick="toggleAiSettingsPanel()" style="padding:6px 14px; border-radius:var(--md-shape-corner-full); border:1px solid rgba(168,85,247,0.3); font-size:12px; font-weight:700; display:flex; align-items:center; gap:6px; background:var(--md-sys-color-surface-container); color:var(--md-sys-color-on-surface);">
                                 <i data-lucide="settings" style="width:14px; height:14px; color:#a855f7;"></i>
@@ -3965,6 +3984,6 @@
     </div>
 
     <!-- Main Client Application Script -->
-    <script src="app.js?v=4.8.6-ai"></script>
+    <script src="app.js?v=4.8.7-ai"></script>
 </body>
 </html>

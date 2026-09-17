@@ -7371,6 +7371,10 @@ async function loadAiAnalyticsTab() {
                 const found = data.availableModels?.find(m => m.id === data.model);
                 badge.textContent = found ? found.name : data.model;
             }
+            const quickSelect = document.getElementById('ai-quick-model-select');
+            if (quickSelect && data.model) {
+                quickSelect.value = data.model;
+            }
             const modelSelect = document.getElementById('ai-cfg-model-select');
             if (modelSelect && data.model) {
                 modelSelect.value = data.model;
@@ -7413,6 +7417,35 @@ async function loadAiAnalyticsTab() {
 }
 window.loadAiAnalyticsTab = loadAiAnalyticsTab;
 
+async function switchAiModelQuickly(newModel) {
+    if (!newModel) return;
+    const quickSelect = document.getElementById('ai-quick-model-select');
+    const cfgSelect = document.getElementById('ai-cfg-model-select');
+    if (cfgSelect) cfgSelect.value = newModel;
+
+    try {
+        const res = await fetch('/api/ai/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: newModel })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            throw new Error(data.error || 'فشل تبديل الموديل.');
+        }
+        const selectedText = quickSelect?.options[quickSelect.selectedIndex]?.text || newModel;
+        if (typeof showGlobalToast === 'function') {
+            showGlobalToast(`تم تفعيل الموديل: ${selectedText} بنجاح ⚡`);
+        }
+        await loadAiAnalyticsTab();
+    } catch (err) {
+        if (typeof showGlobalToast === 'function') {
+            showGlobalToast(`تعذر تبديل الموديل: ${err.message}`, 'error');
+        }
+    }
+}
+window.switchAiModelQuickly = switchAiModelQuickly;
+
 function toggleAiSettingsPanel(forceShow) {
     const panel = document.getElementById('ai-settings-panel');
     if (!panel) return;
@@ -7430,6 +7463,7 @@ async function saveAiSettings() {
     const deepseekInput = document.getElementById('ai-cfg-deepseek-key');
     const openrouterInput = document.getElementById('ai-cfg-openrouter-key');
     const modelSelect = document.getElementById('ai-cfg-model-select');
+    const quickSelect = document.getElementById('ai-quick-model-select');
     const knowledgeInput = document.getElementById('ai-cfg-custom-knowledge');
     const btn = document.getElementById('btn-save-ai-settings');
     const msg = document.getElementById('ai-settings-msg');
@@ -7474,6 +7508,7 @@ async function saveAiSettings() {
         if (groqInput && groqApiKey) groqInput.value = '';
         if (deepseekInput && deepseekApiKey) deepseekInput.value = '';
         if (openrouterInput && openRouterApiKey) openrouterInput.value = '';
+        if (quickSelect) quickSelect.value = model;
         await loadAiAnalyticsTab();
         setTimeout(() => {
             if (msg) msg.style.display = 'none';
