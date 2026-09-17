@@ -308,51 +308,85 @@ function validateSqlSafety(sql) {
 async function callLlmApi(prompt, question, modelOverride, apiKeyOverride) {
     const config = readConfigSafely();
     let targetModel = modelOverride || config.openRouterModel || '';
-    let isGroq = false;
+    let provider = 'openrouter';
     let apiKey = (apiKeyOverride || '').trim();
 
+    // 1. Determine provider from model name
+    if (targetModel.startsWith('deepseek')) {
+        provider = 'deepseek';
+    } else if (targetModel.startsWith('openai/gpt-oss') || targetModel.startsWith('qwen/qwen3.8')) {
+        provider = 'groq';
+    } else if (targetModel.includes('openrouter') || targetModel.includes(':free')) {
+        provider = 'openrouter';
+    }
+
+    // 2. Resolve API key if not manually overridden
     if (!apiKey) {
-        const isExplicitOpenRouter = targetModel.includes('openrouter') || targetModel.includes(':free');
-        if (config.groqApiKey && (!isExplicitOpenRouter || targetModel.includes('gpt-oss') || targetModel.includes('qwen3'))) {
-            apiKey = config.groqApiKey.trim();
-            isGroq = true;
-        } else if (config.openRouterApiKey && isExplicitOpenRouter) {
-            apiKey = config.openRouterApiKey.trim();
-            isGroq = false;
-        } else if (config.groqApiKey) {
-            apiKey = config.groqApiKey.trim();
-            isGroq = true;
-        } else if (config.openRouterApiKey) {
-            apiKey = config.openRouterApiKey.trim();
-            isGroq = false;
-        } else if (process.env.GROQ_API_KEY) {
-            apiKey = process.env.GROQ_API_KEY.trim();
-            isGroq = true;
-        } else if (process.env.OPENROUTER_API_KEY) {
-            apiKey = process.env.OPENROUTER_API_KEY.trim();
-            isGroq = false;
+        if (provider === 'deepseek') {
+            apiKey = (config.deepseekApiKey || process.env.DEEPSEEK_API_KEY || '').trim();
+        } else if (provider === 'groq') {
+            apiKey = (config.groqApiKey || process.env.GROQ_API_KEY || '').trim();
+        } else if (provider === 'openrouter') {
+            apiKey = (config.openRouterApiKey || process.env.OPENROUTER_API_KEY || '').trim();
+        }
+
+        // Fallback key search if selected provider has no key configured
+        if (!apiKey) {
+            if (config.groqApiKey) {
+                apiKey = config.groqApiKey.trim();
+                provider = 'groq';
+                if (!modelOverride) targetModel = 'openai/gpt-oss-120b';
+            } else if (config.deepseekApiKey) {
+                apiKey = config.deepseekApiKey.trim();
+                provider = 'deepseek';
+                if (!modelOverride) targetModel = 'deepseek-chat';
+            } else if (config.openRouterApiKey) {
+                apiKey = config.openRouterApiKey.trim();
+                provider = 'openrouter';
+                if (!modelOverride) targetModel = 'openrouter/free';
+            } else if (process.env.GROQ_API_KEY) {
+                apiKey = process.env.GROQ_API_KEY.trim();
+                provider = 'groq';
+            } else if (process.env.DEEPSEEK_API_KEY) {
+                apiKey = process.env.DEEPSEEK_API_KEY.trim();
+                provider = 'deepseek';
+            } else if (process.env.OPENROUTER_API_KEY) {
+                apiKey = process.env.OPENROUTER_API_KEY.trim();
+                provider = 'openrouter';
+            }
         }
     } else {
-        isGroq = apiKey.startsWith('gsk_');
+        // If apiKeyOverride was passed, detect provider by key format
+        if (apiKey.startsWith('gsk_')) {
+            provider = 'groq';
+        } else if (apiKey.startsWith('sk-or-')) {
+            provider = 'openrouter';
+        } else if (apiKey.startsWith('sk-')) {
+            provider = 'deepseek';
+        }
     }
 
     if (!apiKey) {
-        throw new Error('مفتاح الـ API غير مضبوط. يرجى إدخال Groq أو OpenRouter API Key من إعدادات الـ AI أولاً.');
+        throw new Error('مفتاح الـ API غير مضبوط. يرجى إدخال مفتاح المزود (Groq أو DeepSeek أو OpenRouter) من إعدادات الـ AI أولاً.');
     }
 
-    if (apiKey.startsWith('gsk_')) isGroq = true;
-
-    const endpoint = isGroq
-        ? 'https://api.groq.com/openai/v1/chat/completions'
-        : 'https://openrouter.ai/api/v1/chat/completions';
-
+    // 3. Set endpoint and normalize model per provider
+    let endpoint = 'https://openrouter.ai/api/v1/chat/completions';
     let model = targetModel;
-    if (isGroq) {
-        if (!model || model.includes('openrouter') || model.includes(':free') || model.includes('versatile')) {
+
+    if (provider === 'groq') {
+        endpoint = 'https://api.groq.com/openai/v1/chat/completions';
+        if (!model || model.includes('openrouter') || model.includes(':free') || model.startsWith('deepseek')) {
             model = 'openai/gpt-oss-120b';
         }
+    } else if (provider === 'deepseek') {
+        endpoint = 'https://api.deepseek.com/chat/completions';
+        if (!model || !model.startsWith('deepseek')) {
+            model = 'deepseek-chat';
+        }
     } else {
-        if (!model) {
+        endpoint = 'https://openrouter.ai/api/v1/chat/completions';
+        if (!model || model.startsWith('openai/') || model.startsWith('deepseek')) {
             model = 'openrouter/free';
         }
     }
@@ -364,7 +398,7 @@ async function callLlmApi(prompt, question, modelOverride, apiKeyOverride) {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
     };
-    if (!isGroq) {
+    if (provider === 'openrouter') {
         headers['HTTP-Referer'] = 'http://localhost:8970';
         headers['X-Title'] = 'SmartCS AI Copilot';
     }
@@ -374,13 +408,17 @@ async function callLlmApi(prompt, question, modelOverride, apiKeyOverride) {
         messages: [
             { role: 'system', content: prompt },
             { role: 'user', content: question }
-        ],
-        temperature: 0.1
+        ]
     };
 
-    // Groq natively supports response_format json_object
-    if (isGroq) {
-        requestBody.response_format = { type: 'json_object' };
+    // DeepSeek-Reasoner (R1) does not support temperature or response_format
+    if (model === 'deepseek-reasoner') {
+        // Leave temperature to default, no response_format
+    } else {
+        requestBody.temperature = 0.1;
+        if (provider === 'groq' || model === 'deepseek-chat') {
+            requestBody.response_format = { type: 'json_object' };
+        }
     }
 
     try {
@@ -395,16 +433,24 @@ async function callLlmApi(prompt, question, modelOverride, apiKeyOverride) {
 
         if (!response.ok) {
             const errText = await response.text();
-            // Resilient Rate-Limit Fallback Chain for Groq Free Tier
-            if (response.status === 429 && isGroq && model === 'openai/gpt-oss-120b') {
+
+            // Resilient Rate-Limit Fallback Chain for Groq
+            if (response.status === 429 && provider === 'groq' && model === 'openai/gpt-oss-120b') {
                 console.warn('[AI COPILOT] Groq 120B rate limit reached. Auto-falling back to ultra-fast 20B model ⚡');
                 return await callLlmApi(prompt, question, 'openai/gpt-oss-20b', apiKeyOverride);
             }
-            if (response.status === 429 && isGroq && model === 'openai/gpt-oss-20b') {
+            if (response.status === 429 && provider === 'groq' && model === 'openai/gpt-oss-20b') {
                 console.warn('[AI COPILOT] Groq 20B rate limit reached. Auto-falling back to Qwen 3.8 model ⚡');
                 return await callLlmApi(prompt, question, 'qwen/qwen3.8-27b', apiKeyOverride);
             }
-            const providerName = isGroq ? 'Groq' : 'OpenRouter';
+
+            // Friendly DeepSeek Insufficient Balance handling
+            if (provider === 'deepseek' && (response.status === 402 || errText.includes('Insufficient Balance'))) {
+                throw new Error('خطأ من خادم DeepSeek (402): الرصيد غير كافٍ في حساب DeepSeek (Insufficient Balance). يرجى شحن الرصيد من platform.deepseek.com أو التبديل إلى موديلات Groq المجانية فائقة السرعة ⚡');
+            }
+
+            const providerLabels = { groq: 'Groq', deepseek: 'DeepSeek', openrouter: 'OpenRouter' };
+            const providerName = providerLabels[provider] || provider;
             throw new Error(`خطأ من خادم ${providerName} (${response.status}): ${errText}`);
         }
 
@@ -414,7 +460,7 @@ async function callLlmApi(prompt, question, modelOverride, apiKeyOverride) {
         return {
             content: rawContent,
             modelUsed: json.model || model,
-            provider: isGroq ? 'Groq' : 'OpenRouter',
+            provider: provider,
             usage: json.usage || {}
         };
     } catch (err) {

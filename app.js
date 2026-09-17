@@ -7368,27 +7368,44 @@ async function loadAiAnalyticsTab() {
             const data = await res.json();
             const badge = document.getElementById('ai-active-model-name');
             if (badge && data.model) {
-                badge.textContent = data.model;
+                const found = data.availableModels?.find(m => m.id === data.model);
+                badge.textContent = found ? found.name : data.model;
             }
             const modelSelect = document.getElementById('ai-cfg-model-select');
             if (modelSelect && data.model) {
-                if (data.availableModels && Array.isArray(data.availableModels) && data.availableModels.length > 0) {
-                    modelSelect.innerHTML = data.availableModels.map(m => 
-                        `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name)}</option>`
-                    ).join('');
-                }
                 modelSelect.value = data.model;
             }
             const knowledgeInput = document.getElementById('ai-cfg-custom-knowledge');
             if (knowledgeInput && data.customKnowledge !== undefined) {
                 knowledgeInput.value = data.customKnowledge;
             }
+
+            // Dedicated Provider Status Badges
+            const groqStatus = document.getElementById('ai-cfg-groq-status');
+            if (groqStatus && data.providers?.groq) {
+                groqStatus.innerHTML = data.providers.groq.hasKey
+                    ? `<span style="color:#10b981; font-weight:700;">✓ مسجل (${escapeHtml(data.providers.groq.maskedKey || 'جاهز')})</span>`
+                    : `<span style="color:#ef4444; font-weight:700;">⚠ غير مسجل</span>`;
+            }
+            const deepseekStatus = document.getElementById('ai-cfg-deepseek-status');
+            if (deepseekStatus && data.providers?.deepseek) {
+                deepseekStatus.innerHTML = data.providers.deepseek.hasKey
+                    ? `<span style="color:#10b981; font-weight:700;">✓ مسجل (${escapeHtml(data.providers.deepseek.maskedKey || 'جاهز')})</span>`
+                    : `<span style="color:#ef4444; font-weight:700;">⚠ غير مسجل</span>`;
+            }
+            const openrouterStatus = document.getElementById('ai-cfg-openrouter-status');
+            if (openrouterStatus && data.providers?.openrouter) {
+                openrouterStatus.innerHTML = data.providers.openrouter.hasKey
+                    ? `<span style="color:#10b981; font-weight:700;">✓ مسجل (${escapeHtml(data.providers.openrouter.maskedKey || 'جاهز')})</span>`
+                    : `<span style="color:#ef4444; font-weight:700;">⚠ غير مسجل</span>`;
+            }
+
             const keyStatus = document.getElementById('ai-cfg-key-status');
             if (keyStatus) {
                 if (data.hasKey) {
-                    keyStatus.innerHTML = `<span style="color:#10b981; font-weight:700;">✓ المفتاح مفعل وجاهز (${data.maskedKey || 'مسجل'})</span>`;
+                    keyStatus.innerHTML = `<span style="color:#10b981; font-weight:700;">✓ المفتاح مفعل وجاهز</span>`;
                 } else {
-                    keyStatus.innerHTML = `<span style="color:#ef4444; font-weight:700;">⚠ لا يوجد مفتاح مسجل - يرجى كتابة الـ Key بالأسفل</span>`;
+                    keyStatus.innerHTML = `<span style="color:#ef4444; font-weight:700;">⚠ لا يوجد مفتاح مسجل</span>`;
                 }
             }
         }
@@ -7409,14 +7426,18 @@ function toggleAiSettingsPanel(forceShow) {
 window.toggleAiSettingsPanel = toggleAiSettingsPanel;
 
 async function saveAiSettings() {
-    const keyInput = document.getElementById('ai-cfg-api-key');
+    const groqInput = document.getElementById('ai-cfg-groq-key');
+    const deepseekInput = document.getElementById('ai-cfg-deepseek-key');
+    const openrouterInput = document.getElementById('ai-cfg-openrouter-key');
     const modelSelect = document.getElementById('ai-cfg-model-select');
     const knowledgeInput = document.getElementById('ai-cfg-custom-knowledge');
     const btn = document.getElementById('btn-save-ai-settings');
     const msg = document.getElementById('ai-settings-msg');
 
-    const apiKey = keyInput ? keyInput.value.trim() : '';
-    const model = modelSelect ? modelSelect.value : 'openrouter/free';
+    const groqApiKey = groqInput ? groqInput.value.trim() : '';
+    const deepseekApiKey = deepseekInput ? deepseekInput.value.trim() : '';
+    const openRouterApiKey = openrouterInput ? openrouterInput.value.trim() : '';
+    const model = modelSelect ? modelSelect.value : 'openai/gpt-oss-120b';
     const customKnowledge = knowledgeInput ? knowledgeInput.value.trim() : '';
 
     if (btn) btn.disabled = true;
@@ -7428,7 +7449,9 @@ async function saveAiSettings() {
 
     try {
         const payload = { model, customKnowledge };
-        if (apiKey) payload.apiKey = apiKey;
+        if (groqApiKey) payload.groqApiKey = groqApiKey;
+        if (deepseekApiKey) payload.deepseekApiKey = deepseekApiKey;
+        if (openRouterApiKey) payload.openRouterApiKey = openRouterApiKey;
 
         const res = await fetch('/api/ai/config', {
             method: 'POST',
@@ -7443,12 +7466,14 @@ async function saveAiSettings() {
 
         if (msg) {
             msg.style.color = '#10b981';
-            msg.textContent = '✓ تم حفظ إعدادات المساعد الذكي بنجاح!';
+            msg.textContent = '✓ تم حفظ مفاتيح وإعدادات الذكاء الاصطناعي بنجاح!';
         }
         if (typeof showGlobalToast === 'function') {
-            showGlobalToast('تم حفظ إعدادات المساعد الذكي بنجاح ✅');
+            showGlobalToast('تم حفظ إعدادات ومفاتيح الذكاء الاصطناعي بنجاح ✅');
         }
-        if (keyInput && apiKey) keyInput.value = '';
+        if (groqInput && groqApiKey) groqInput.value = '';
+        if (deepseekInput && deepseekApiKey) deepseekInput.value = '';
+        if (openrouterInput && openRouterApiKey) openrouterInput.value = '';
         await loadAiAnalyticsTab();
         setTimeout(() => {
             if (msg) msg.style.display = 'none';

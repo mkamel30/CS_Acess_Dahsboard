@@ -2937,31 +2937,74 @@
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid var(--md-sys-color-outline-variant); padding-bottom:10px;">
                             <h3 style="margin:0; font-size:15px; font-weight:800; display:flex; align-items:center; gap:8px; color:var(--md-sys-color-primary);">
                                 <i data-lucide="key" style="width:18px; height:18px;"></i>
-                                إعدادات OpenRouter API وموديل الذكاء الاصطناعي
+                                إعدادات مزودي الذكاء الاصطناعي وموديلات التحليل (Groq / DeepSeek / OpenRouter)
                             </h3>
                             <button type="button" class="btn btn-sm btn-secondary" onclick="toggleAiSettingsPanel(false)" style="padding:4px 10px; font-size:12px;">إغلاق ✕</button>
                         </div>
+                        <p style="margin:0 0 14px 0; font-size:12px; color:var(--text-secondary); line-height:1.5;">
+                            يمكنك إدخال مفتاح API مخصص لكل مزود بشكل مستقل تماماً لمنع أي تضارب بين المفاتيح، وسيتم توجيه الاستعلامات تلقائياً للمزود المختار:
+                        </p>
+
+                        <!-- Dedicated Keys Grid -->
+                        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:14px; margin-bottom:16px;">
+                            <!-- Groq Key -->
+                            <div style="padding:12px; border-radius:12px; background:var(--md-sys-color-surface-container-low); border:1px solid rgba(245,158,11,0.25);">
+                                <label style="display:flex; justify-content:space-between; align-items:center; font-size:12px; font-weight:700; margin-bottom:6px; color:#f59e0b;">
+                                    <span>⚡ مفتاح مزود Groq:</span>
+                                    <span id="ai-cfg-groq-status" style="font-size:10px; font-weight:600; color:var(--text-secondary);">يتم الفحص...</span>
+                                </label>
+                                <input type="password" id="ai-cfg-groq-key" placeholder="gsk_..." style="width:100%; padding:8px 12px; border-radius:8px; border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface); color:var(--md-sys-color-on-surface); font-size:12px; font-family:monospace;">
+                                <span style="font-size:10.5px; color:var(--text-secondary); margin-top:4px; display:block;">مجاني وفائق السرعة (GPT-OSS 120B/20B, Qwen 3.8)</span>
+                            </div>
+
+                            <!-- DeepSeek Key -->
+                            <div style="padding:12px; border-radius:12px; background:var(--md-sys-color-surface-container-low); border:1px solid rgba(59,130,246,0.25);">
+                                <label style="display:flex; justify-content:space-between; align-items:center; font-size:12px; font-weight:700; margin-bottom:6px; color:#3b82f6;">
+                                    <span>🐋 مفتاح مزود DeepSeek:</span>
+                                    <span id="ai-cfg-deepseek-status" style="font-size:10px; font-weight:600; color:var(--text-secondary);">يتم الفحص...</span>
+                                </label>
+                                <input type="password" id="ai-cfg-deepseek-key" placeholder="sk-..." style="width:100%; padding:8px 12px; border-radius:8px; border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface); color:var(--md-sys-color-on-surface); font-size:12px; font-family:monospace;">
+                                <span style="font-size:10.5px; color:var(--text-secondary); margin-top:4px; display:block;">الموقع الرسمي (DeepSeek-V3 وموديل R1 الاستنتاجي)</span>
+                            </div>
+
+                            <!-- OpenRouter Key -->
+                            <div style="padding:12px; border-radius:12px; background:var(--md-sys-color-surface-container-low); border:1px solid rgba(168,85,247,0.25);">
+                                <label style="display:flex; justify-content:space-between; align-items:center; font-size:12px; font-weight:700; margin-bottom:6px; color:#a855f7;">
+                                    <span>🚀 مفتاح مزود OpenRouter:</span>
+                                    <span id="ai-cfg-openrouter-status" style="font-size:10px; font-weight:600; color:var(--text-secondary);">يتم الفحص...</span>
+                                </label>
+                                <input type="password" id="ai-cfg-openrouter-key" placeholder="sk-or-v1-..." style="width:100%; padding:8px 12px; border-radius:8px; border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface); color:var(--md-sys-color-on-surface); font-size:12px; font-family:monospace;">
+                                <span style="font-size:10.5px; color:var(--text-secondary); margin-top:4px; display:block;">موديلات مجانية متعددة (Google Gemma, Llama 3.3)</span>
+                            </div>
+                        </div>
+
                         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:16px; align-items:flex-end;">
                             <div>
                                 <label style="display:block; font-size:12px; font-weight:700; margin-bottom:6px; color:var(--md-sys-color-on-surface);">
-                                    مفتاح الـ API (Groq أو OpenRouter Key):
-                                </label>
-                                <input type="password" id="ai-cfg-api-key" placeholder="gsk_... أو sk-or-v1-..." style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container-low); color:var(--md-sys-color-on-surface); font-size:13px; font-family:monospace;">
-                                <span style="font-size:11px; color:var(--text-secondary); margin-top:4px; display:block;" id="ai-cfg-key-status">الحالة: يتم الفحص...</span>
-                            </div>
-                            <div>
-                                <label style="display:block; font-size:12px; font-weight:700; margin-bottom:6px; color:var(--md-sys-color-on-surface);">
-                                    موديل الذكاء الاصطناعي (AI Model):
+                                    موديل الذكاء الاصطناعي النشط (Active Model):
                                 </label>
                                 <select id="ai-cfg-model-select" style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container-low); color:var(--md-sys-color-on-surface); font-size:13px;">
-                                     <option value="openai/gpt-oss-120b">⚡ Groq: GPT-OSS 120B (فائق الذكاء والدقة 🧠)</option>
-                                     <option value="openai/gpt-oss-20b">⚡ Groq: GPT-OSS 20B (سرعة فائقة أقل من ثانية ⚡)</option>
-                                     <option value="qwen/qwen3.8-27b">⚡ Groq: Qwen 3.8 (27B) - دقة وسرعة عالية</option>
-                                     <option value="openrouter/free">🚀 OpenRouter: Auto (أفضل موديل مجاني تلقائياً)</option>
-                                     <option value="google/gemma-4-31b-it:free">⭐ OpenRouter: Google Gemma 4 (31B)</option>
-                                     <option value="meta-llama/llama-3.3-70b-instruct:free">OpenRouter: Meta Llama 3.3 (70B)</option>
-                                     <option value="qwen/qwen-2.5-coder-32b-instruct:free">OpenRouter: Qwen 2.5 Coder (32B)</option>
-                                 </select>
+                                    <optgroup label="⚡ مزود Groq (سرعة فائقة ومجاني)">
+                                        <option value="openai/gpt-oss-120b">⚡ Groq: GPT-OSS 120B (فائق الذكاء والدقة 🧠)</option>
+                                        <option value="openai/gpt-oss-20b">⚡ Groq: GPT-OSS 20B (سرعة فائقة أقل من ثانية ⚡)</option>
+                                        <option value="qwen/qwen3.8-27b">⚡ Groq: Qwen 3.8 (27B) - دقة وسرعة عالية</option>
+                                    </optgroup>
+                                    <optgroup label="🐋 مزود DeepSeek (رسمي)">
+                                        <option value="deepseek-chat">🐋 DeepSeek: V3 (DeepSeek-Chat رسمي فائق الدقة)</option>
+                                        <option value="deepseek-reasoner">🐋 DeepSeek: R1 (Reasoning تفكير عميق منطقي)</option>
+                                    </optgroup>
+                                    <optgroup label="🚀 مزود OpenRouter">
+                                        <option value="openrouter/free">🚀 OpenRouter: Auto (أفضل موديل مجاني تلقائياً)</option>
+                                        <option value="google/gemma-4-31b-it:free">⭐ OpenRouter: Google Gemma 4 (31B)</option>
+                                        <option value="meta-llama/llama-3.3-70b-instruct:free">OpenRouter: Meta Llama 3.3 (70B)</option>
+                                        <option value="qwen/qwen-2.5-coder-32b-instruct:free">OpenRouter: Qwen 2.5 Coder (32B)</option>
+                                    </optgroup>
+                                </select>
+                            </div>
+                            <div style="display:none;">
+                                <!-- Hidden legacy input for backwards compatibility -->
+                                <input type="password" id="ai-cfg-api-key">
+                                <span id="ai-cfg-key-status"></span>
                             </div>
                             <div style="grid-column: 1 / -1; margin-top: 4px;">
                                 <label style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:700; margin-bottom:6px; color:var(--md-sys-color-on-surface);">
@@ -2976,14 +3019,16 @@
                                     💡 يمكنك تدريب المساعد بنفسك هنا مباشرة في أي وقت لتلقينه أي مفاهيم أو مصطلحات جديدة دون تعديل الكود.
                                 </span>
                             </div>
-                            <div style="grid-column: 1 / -1; display:flex; justify-content:flex-end;">
-                                <button type="button" class="btn btn-primary" onclick="saveAiSettings()" id="btn-save-ai-settings" style="min-width:220px; padding:12px 24px; font-size:13px; font-weight:700; border-radius:10px; background:linear-gradient(135deg, #9333ea, #6366f1); border:none; display:flex; align-items:center; justify-content:center; gap:8px;">
-                                    <i data-lucide="check" style="width:16px; height:16px;"></i>
-                                    <span>حفظ التعديلات وقواعد التدريب</span>
-                                </button>
+                            <div style="grid-column: 1 / -1; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                                <div id="ai-settings-msg" style="display:none; font-size:12px; font-weight:700;"></div>
+                                <div style="margin-right:auto;">
+                                    <button type="button" class="btn btn-primary" onclick="saveAiSettings()" id="btn-save-ai-settings" style="min-width:220px; padding:12px 24px; font-size:13px; font-weight:700; border-radius:10px; background:linear-gradient(135deg, #9333ea, #6366f1); border:none; display:flex; align-items:center; justify-content:center; gap:8px;">
+                                        <i data-lucide="check" style="width:16px; height:16px;"></i>
+                                        <span>حفظ المفاتيح والإعدادات</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                        <div id="ai-settings-msg" style="margin-top:10px; font-size:12px; display:none;"></div>
                     </div>
 
                     <!-- AI Search & Question Input Box -->
@@ -3920,6 +3965,6 @@
     </div>
 
     <!-- Main Client Application Script -->
-    <script src="app.js?v=4.8.5-ai"></script>
+    <script src="app.js?v=4.8.6-ai"></script>
 </body>
 </html>

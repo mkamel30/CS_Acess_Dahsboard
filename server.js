@@ -608,25 +608,37 @@ app.post('/api/ai/query', async (req, res) => {
 app.get('/api/ai/config', (req, res) => {
     try {
         const cfg = readAppConfig();
-        const activeKey = cfg.groqApiKey || cfg.openRouterApiKey || process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEY || '';
+        const groqKey = cfg.groqApiKey || process.env.GROQ_API_KEY || '';
+        const deepseekKey = cfg.deepseekApiKey || process.env.DEEPSEEK_API_KEY || '';
+        const openrouterKey = cfg.openRouterApiKey || process.env.OPENROUTER_API_KEY || '';
+
+        const maskKey = (k) => k ? `${k.slice(0, 8)}...${k.slice(-4)}` : '';
+
         let activeModel = cfg.openRouterModel;
         if (!activeModel || activeModel === 'llama-3.3-70b-versatile') {
-            activeModel = activeKey.startsWith('gsk_') ? 'openai/gpt-oss-120b' : 'openrouter/free';
+            activeModel = groqKey ? 'openai/gpt-oss-120b' : 'openrouter/free';
         }
+
         return res.json({
             success: true,
-            hasKey: !!activeKey,
-            maskedKey: activeKey ? `${activeKey.slice(0, 10)}...${activeKey.slice(-4)}` : '',
+            hasKey: !!(groqKey || deepseekKey || openrouterKey),
             model: activeModel,
             customKnowledge: cfg.customKnowledge || '',
+            providers: {
+                groq: { hasKey: !!groqKey, maskedKey: maskKey(groqKey) },
+                deepseek: { hasKey: !!deepseekKey, maskedKey: maskKey(deepseekKey) },
+                openrouter: { hasKey: !!openrouterKey, maskedKey: maskKey(openrouterKey) }
+            },
             availableModels: [
-                { id: 'openai/gpt-oss-120b', name: '⚡ Groq: GPT-OSS 120B (فائق الذكاء والدقة 🧠)' },
-                { id: 'openai/gpt-oss-20b', name: '⚡ Groq: GPT-OSS 20B (سرعة فائقة أقل من ثانية ⚡)' },
-                { id: 'qwen/qwen3.8-27b', name: '⚡ Groq: Qwen 3.8 (27B) - دقة وسرعة عالية' },
-                { id: 'openrouter/free', name: '🚀 OpenRouter: Auto (أفضل موديل مجاني تلقائياً)' },
-                { id: 'google/gemma-4-31b-it:free', name: '⭐ OpenRouter: Google Gemma 4 (31B)' },
-                { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'OpenRouter: Meta Llama 3.3 (70B)' },
-                { id: 'qwen/qwen-2.5-coder-32b-instruct:free', name: 'OpenRouter: Qwen 2.5 Coder (32B)' }
+                { id: 'openai/gpt-oss-120b', name: '⚡ Groq: GPT-OSS 120B (فائق الذكاء والدقة 🧠)', provider: 'groq' },
+                { id: 'openai/gpt-oss-20b', name: '⚡ Groq: GPT-OSS 20B (سرعة فائقة أقل من ثانية ⚡)', provider: 'groq' },
+                { id: 'qwen/qwen3.8-27b', name: '⚡ Groq: Qwen 3.8 (27B) - دقة وسرعة عالية', provider: 'groq' },
+                { id: 'deepseek-chat', name: '🐋 DeepSeek: V3 (DeepSeek-Chat رسمي فائق الدقة)', provider: 'deepseek' },
+                { id: 'deepseek-reasoner', name: '🐋 DeepSeek: R1 (Reasoning تفكير عميق منطقي)', provider: 'deepseek' },
+                { id: 'openrouter/free', name: '🚀 OpenRouter: Auto (أفضل موديل مجاني تلقائياً)', provider: 'openrouter' },
+                { id: 'google/gemma-4-31b-it:free', name: '⭐ OpenRouter: Google Gemma 4 (31B)', provider: 'openrouter' },
+                { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'OpenRouter: Meta Llama 3.3 (70B)', provider: 'openrouter' },
+                { id: 'qwen/qwen-2.5-coder-32b-instruct:free', name: 'OpenRouter: Qwen 2.5 Coder (32B)', provider: 'openrouter' }
             ]
         });
     } catch (err) {
@@ -636,22 +648,30 @@ app.get('/api/ai/config', (req, res) => {
 
 app.post('/api/ai/config', async (req, res) => {
     try {
-        const { apiKey, model, customKnowledge } = req.body || {};
+        const { apiKey, model, customKnowledge, groqApiKey, deepseekApiKey, openRouterApiKey } = req.body || {};
         const cfg = readAppConfig();
+
+        if (groqApiKey !== undefined && groqApiKey.trim()) cfg.groqApiKey = groqApiKey.trim();
+        if (deepseekApiKey !== undefined && deepseekApiKey.trim()) cfg.deepseekApiKey = deepseekApiKey.trim();
+        if (openRouterApiKey !== undefined && openRouterApiKey.trim()) cfg.openRouterApiKey = openRouterApiKey.trim();
+
+        // Backward compatibility for single generic input
         if (apiKey !== undefined && apiKey.trim()) {
             const trimmedKey = apiKey.trim();
             if (trimmedKey.startsWith('gsk_')) {
                 cfg.groqApiKey = trimmedKey;
-                if (!model) cfg.openRouterModel = 'openai/gpt-oss-120b';
-            } else {
+            } else if (trimmedKey.startsWith('sk-or-')) {
                 cfg.openRouterApiKey = trimmedKey;
+            } else if (trimmedKey.startsWith('sk-')) {
+                cfg.deepseekApiKey = trimmedKey;
             }
         }
+
         if (model !== undefined && model.trim()) cfg.openRouterModel = model.trim();
         if (customKnowledge !== undefined) cfg.customKnowledge = customKnowledge.trim();
         cfg.updatedAt = new Date().toISOString();
         fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2));
-        return res.json({ success: true, message: 'تم حفظ إعدادات المساعد الذكي بنجاح ✅' });
+        return res.json({ success: true, message: 'تم حفظ مفاتيح وإعدادات الذكاء الاصطناعي بنجاح ✅' });
     } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
     }
