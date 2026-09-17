@@ -62,8 +62,8 @@ Your task is to translate user questions written in Arabic (Egyptian dialect or 
 
 1. **assets_raw** (All installed POS machines, bakeries & merchants):
    - "ID" (TEXT): Record ID
-   - "POS" (TEXT): Primary POS Code / Bakery ID (كود المخبز أو الماكينة)
-   - "POSID" (TEXT): Machine Hardware Serial Number (سيريال الماكينة)
+   - "POS" (TEXT): Machine Hardware Serial Number (سيريال الماكينة الفعلي مثل 2330123394، 3H248698 - وهو الذي يربط مع "Unit Serial" في الصيانة ومع Serial في المخزن)
+   - "POSID" (TEXT): Bakery Code / Merchant ID (كود المخبز مثل 010001)
    - "Model" (TEXT): Device Model (e.g. 'Pax S900', 'Verifone VX520', 'Newland', 'Nexgo')
    - "Manufacturer" (TEXT): Manufacturer name
    - "Condition" (TEXT): Machine status ('WORKING', 'FAULTY', 'شغال', 'معطل', 'NEW')
@@ -133,12 +133,61 @@ Your task is to translate user questions written in Arabic (Egyptian dialect or 
    - "faulty" (TEXT): Is faulty?
    - "sim_type" (TEXT): Type
 
-9. **tblfaults_raw** (Standard faults dictionary):
-   - "faultid" (TEXT), "FaultName" (TEXT): Fault name
+9. **installments_raw** / **tblinstallments** (عقود وأقساط الماكينات):
+   - "pos" (TEXT): كود الماكينة/المخبز (يرتبط مع assets_raw.POS)
+   - "installments" (TEXT/INT): عدد الأقساط الإجمالي
+   - "unitprice" (TEXT/REAL): سعر الوحدة
+   - "monthlyinstallmentprice" (TEXT/REAL): قيمة القسط الشهري
+   - "finalunitprice" (TEXT/REAL): السعر النهائي الإجمالي للماكينة
 
-10. **tblstaff_raw** (Staff & Technicians directory):
+10. **temp_transfer_raw** (حركات استبدال الماكينات المؤقتة):
+    - "POSCode" (TEXT): كود الماكينة
+    - "OldPOS" (TEXT): سيريال الماكينة المعطلة المستلمة للصيانة
+    - "NewPOS" (TEXT): سيريال الماكينة البديلة المسلمة للعميل
+    - "Transfer_Date" (TEXT): تاريخ الاستبدال
+    - "bkCode" (TEXT): كود المخبز
+
+11. **failure_points_raw** (لائحة أسعار قطع الغيار ورسوم الصيانة):
+    - "type" (TEXT): اسم قطعة الغيار
+    - "model" (TEXT): موديل الجهاز المتوافق
+    - "fees" (TEXT/REAL): رسوم الصيانة والمصنعية
+    - "price" (TEXT/REAL): سعر بيع القطعة
+
+12. **tblfaults_raw** (قاموس الأعطال):
+    - "faultid" (TEXT), "FaultName" (TEXT): Fault name
+
+13. **tblfixes_raw** (دليل الحلول والإصلاحات الفنية):
+    - "FixID" (TEXT), "FaultID" (TEXT), "FixName" (TEXT)
+
+14. **tblstaff_raw** (Staff & Technicians directory):
     - "name" (TEXT): Staff / Tech name
     - "jtitle" (TEXT): Job title
+
+15. **merchants**, **devices**, **merchant_assets**, **tickets** (الكيانات المعيارية للنظام):
+    - "merchants" (merchant_code, name, type, address, government, contact_phone)
+    - "devices" (serial, manufacturer, model, status, faulty_details)
+    - "merchant_assets" (merchant_code, device_id, sim_card_id, assigned_date)
+    - "tickets" (id, merchant_code, device_id, status, issue_details, technician_name, issue_date, close_date, hq_debt)
+
+---
+
+### CROSS-TABLE RELATIONSHIPS & JOIN RULES (خريطة العلاقات والربط بين الجداول):
+- **الأصول مع الصيانة**:
+  \`assets_raw.POS = maintenance_raw."Unit Serial"\` (حيث POS في جدول assets_raw هو سيريال الماكينة الفعلي)
+- **الصيانة مع قطع غيار مركز الصيانة (HQ)**:
+  \`maintenance_raw.FormNo = store_sp_maintenance_raw.formNo\` (رقم نموذج الصيانة يربط الجهاز بالقطع المصروفة له)
+- **الأصول مع الأقساط**:
+  \`assets_raw.POS = installments_raw.pos\` أو \`assets_raw.POSID = installments_raw.pos\`
+- **الأقساط مع المدفوعات**:
+  \`installments_raw.pos = payments_raw.pos_number\` (مع تصفية: \`payments_raw.payment_reason LIKE '%قسط%'\`)
+- **الأصول مع الشريحة**:
+  \`assets_raw.Cell_Serial = store_sim_raw.sim_serial\`
+- **الماكينات المستبدلة مؤقتاً**:
+  \`temp_transfer_raw.OldPOS = assets_raw.POS\` أو \`temp_transfer_raw.OldPOS = store_pos_raw.Serial\`
+- **أسعار قطع الغيار**:
+  \`store_sp_raw.type = failure_points_raw.type\` و \`store_sp_maintenance_raw.type = failure_points_raw.type\`
+- **الفنيين مع الصيانة**:
+  \`maintenance_raw."Checked Out To" = tblstaff_raw.name\` أو \`maintenance_raw.Procedure = tblstaff_raw.name\`
 
 ---
 
