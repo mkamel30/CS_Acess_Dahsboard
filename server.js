@@ -609,11 +609,15 @@ app.get('/api/ai/config', (req, res) => {
     try {
         const cfg = readAppConfig();
         const activeKey = cfg.groqApiKey || cfg.openRouterApiKey || process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEY || '';
+        let activeModel = cfg.openRouterModel;
+        if (!activeModel || activeModel === 'llama-3.3-70b-versatile') {
+            activeModel = activeKey.startsWith('gsk_') ? 'openai/gpt-oss-120b' : 'openrouter/free';
+        }
         return res.json({
             success: true,
             hasKey: !!activeKey,
             maskedKey: activeKey ? `${activeKey.slice(0, 10)}...${activeKey.slice(-4)}` : '',
-            model: cfg.openRouterModel || (activeKey.startsWith('gsk_') ? 'openai/gpt-oss-120b' : 'openrouter/free'),
+            model: activeModel,
             availableModels: [
                 { id: 'openai/gpt-oss-120b', name: '⚡ Groq: GPT-OSS 120B (فائق الذكاء والدقة 🧠)' },
                 { id: 'openai/gpt-oss-20b', name: '⚡ Groq: GPT-OSS 20B (سرعة فائقة أقل من ثانية ⚡)' },

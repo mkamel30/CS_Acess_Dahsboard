@@ -107,6 +107,7 @@
   {"Serial": "3C786410", "type": "PAX", "faulty": "True", "faulty_detils": "فاصله باور لسقوط الماكينه بالماء", "notes": null, "Model": "S90", "reviewed": "False", "pos_status": null, "status_note": null},
   {"Serial": "3H106514", "type": "PAX", "faulty": "True", "faulty_detils": "انجليزى متكرر مع العلم من تغير البطاريه الداخليه", "notes": null, "Model": "S90", "reviewed": "False", "pos_status": null, "status_note": null},
   {"Serial": "3C788882", "type": "PAX", "faulty": "False", "faulty_detils": "E + بتهنج", "notes": null, "Model": "S90", "reviewed": "False", "pos_status": null, "status_note": null},
+  {"Serial": "3H245114", "type": "PAX", "faulty": "True", "faulty_detils": "بورده رئيسيه", "notes": null, "Model": "S90", "reviewed": "False", "pos_status": null, "status_note": null},
   {"Serial": "3H249077", "type": "PAX", "faulty": "True", "faulty_detils": "سقوط الماكينه فى سائل برجاء الفحص", "notes": null, "Model": "S90", "reviewed": "False", "pos_status": null, "status_note": null},
   {"Serial": "3C784845", "type": "PAX", "faulty": "True", "faulty_detils": "Sam Board - CPU - \r\n تروس -  قارئ بطاقات -", "notes": "010536", "Model": "S90", "reviewed": "False", "pos_status": null, "status_note": null},
   {"Serial": "3H248789", "type": "PAX", "faulty": "True", "faulty_detils": "بورده رئيسيه", "notes": "011214", "Model": "S90", "reviewed": "False", "pos_status": null, "status_note": null},

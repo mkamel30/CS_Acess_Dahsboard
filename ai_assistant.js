@@ -17,12 +17,40 @@ function readConfigSafely() {
     return {};
 }
 
-// -------------------------------------------------------------
-// 1. Detailed Schema & Business Knowledge for LLM
-// -------------------------------------------------------------
+function getFormattedSystemDates() {
+    const d = new Date();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const day = String(d.getDate()).padStart(2, '0');
+    const mon = months[d.getMonth()];
+    const yr2 = String(d.getFullYear()).slice(-2);
+    const yr4 = String(d.getFullYear());
+    return {
+        accessDate: `${day}-${mon}-${yr2}`,          // e.g. '17-Sep-26'
+        accessMonth: `-${mon}-${yr2}`,               // e.g. '-Sep-26'
+        accessDateFull: `${day}-${mon}-${yr4}`,      // e.g. '17-Sep-2026'
+        isoDate: d.toISOString().split('T')[0],      // e.g. '2026-09-17'
+        year: yr4
+    };
+}
+
 function buildSystemPrompt() {
+    const dates = getFormattedSystemDates();
     return `You are an elite SQLite Data Analyst and Senior BI Engineer for the SmartCS Enterprise System (Egypt Smart Cards & POS Bakery Management System).
 Your task is to translate user questions written in Arabic (Egyptian dialect or Modern Standard Arabic) into highly optimized, accurate, read-only SQLite SQL queries.
+
+### CRITICAL CALENDAR & DATE HANDLING RULES (VERY IMPORTANT):
+- TODAY'S DATE:
+  * Access DB text format: '${dates.accessDate}' (e.g. '17-Sep-26')
+  * Current Month text format: '${dates.accessMonth}' (e.g. '-Sep-26')
+  * Current Year: '${dates.year}'
+  * ISO format: '${dates.isoDate}'
+- In ALL database tables (store_sp_maintenance_raw, maintenance_raw, payments_raw, etc.), dates are stored as TEXT strings formatted in Access format: 'DD-Mon-YY' or 'DD-Mon-YY HH:MM:SS AM/PM' (e.g. '${dates.accessDate} 11:22:19 AM').
+- NEVER use SQLite \`DATE(col) = DATE('now')\` or \`STRFTIME\` on these columns because SQLite's \`DATE()\` function ONLY parses ISO YYYY-MM-DD and will return NULL on Access dates, resulting in 0 matches!
+- For questions about "اليوم" (today) or "خلال اليوم": ALWAYS filter using \`LIKE '%${dates.accessDate}%'\`.
+  Example for today's spare parts: \`SELECT COALESCE(SUM(CAST("count_out" AS INTEGER)),0) AS total_parts_out_today FROM store_sp_maintenance_raw WHERE "out_date" LIKE '%${dates.accessDate}%'\`
+  Example for today's maintenance: \`SELECT COUNT(*) FROM maintenance_raw WHERE "Checked In Date" LIKE '%${dates.accessDate}%'\`
+- For questions about "هذا الشهر" (this month): ALWAYS filter using \`LIKE '%${dates.accessMonth}%'\`.
+- For questions about a specific day or date: ALWAYS use \`LIKE '%DD-Mon-YY%'\` instead of exact equality \`=\` because date columns often contain timestamps (e.g. '${dates.accessDate} 12:55:31 PM').
 
 ### DATABASE SCHEMA & COLUMN MAPPINGS (SQLite):
 
