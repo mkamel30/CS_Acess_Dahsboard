@@ -596,7 +596,8 @@ app.post('/api/ai/query', async (req, res) => {
         if (!question || !question.trim()) {
             return res.status(400).json({ success: false, error: 'يرجى كتابة السؤال المطلوب.' });
         }
-        const result = await aiAssistant.processQuestion(question, { model }, db);
+        const queryFn = (sql, params) => allQuery(sql, params);
+        const result = await aiAssistant.processQuestion(question, { model }, queryFn);
         return res.json(result);
     } catch (err) {
         logSystemError('AI_ASSISTANT', '/api/ai/query', err, req);

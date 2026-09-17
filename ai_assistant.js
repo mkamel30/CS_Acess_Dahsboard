@@ -301,37 +301,43 @@ function extractJsonFromLlmOutput(rawText) {
 }
 
 // -------------------------------------------------------------
-// 5. Query Execution on SQLite
+// 5. Query Execution (Supports both SQLite db object and Dual-DB allQuery function)
 // -------------------------------------------------------------
-function executeSqlPromise(db, sql) {
-    return new Promise((resolve, reject) => {
+function executeSqlPromise(dbOrQueryFn, sql) {
+    return new Promise(async (resolve, reject) => {
         const startTime = Date.now();
-        db.all(sql, [], (err, rows) => {
-            const durationMs = Date.now() - startTime;
-            if (err) {
-                return reject({
-                    message: err.message,
-                    durationMs
-                });
+        try {
+            if (typeof dbOrQueryFn === 'function') {
+                const rows = await dbOrQueryFn(sql);
+                const durationMs = Date.now() - startTime;
+                return resolve({ rows: rows || [], durationMs });
             }
-            resolve({
-                rows: rows || [],
-                durationMs
-            });
-        });
+            if (dbOrQueryFn && typeof dbOrQueryFn.all === 'function') {
+                dbOrQueryFn.all(sql, [], (err, rows) => {
+                    const durationMs = Date.now() - startTime;
+                    if (err) return reject({ message: err.message, durationMs });
+                    return resolve({ rows: rows || [], durationMs });
+                });
+                return;
+            }
+            throw new Error('قاعدة البيانات غير متصلة.');
+        } catch (err) {
+            const durationMs = Date.now() - startTime;
+            return reject({ message: err.message, durationMs });
+        }
     });
 }
 
 // -------------------------------------------------------------
 // 6. Main High-Level Controller: Process User Question
 // -------------------------------------------------------------
-async function processQuestion(question, options = {}, db) {
+async function processQuestion(question, options = {}, dbOrQueryFn) {
     if (!question || !question.trim()) {
         return { success: false, error: 'يرجى كتابة السؤال المطلوب.' };
     }
 
-    if (!db) {
-        return { success: false, error: 'قاعدة البيانات المحلية غير متصلة.' };
+    if (!dbOrQueryFn) {
+        return { success: false, error: 'قاعدة البيانات غير متصلة.' };
     }
 
     const startTime = Date.now();
@@ -369,14 +375,14 @@ async function processQuestion(question, options = {}, db) {
 
         const finalSql = safetyCheck.sanitizedSql;
 
-        // Step 4: Execute on SQLite
+        // Step 4: Execute on Database
         let execResult;
         try {
-            execResult = await executeSqlPromise(db, finalSql);
+            execResult = await executeSqlPromise(dbOrQueryFn, finalSql);
         } catch (execErr) {
             return {
                 success: false,
-                error: `خطأ في تنفيذ استعلام SQLite: ${execErr.message}`,
+                error: `خطأ في تنفيذ استعلام قاعدة البيانات: ${execErr.message}`,
                 sql: finalSql,
                 durationMs: execErr.durationMs
             };
