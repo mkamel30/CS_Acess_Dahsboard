@@ -227,30 +227,74 @@ async function callOpenRouter(prompt, question, modelOverride, apiKeyOverride) {
 }
 
 // -------------------------------------------------------------
-// 4. Robust JSON Parser for LLM Output
+// 4. Ultra-Resilient Parser for LLM Output (Handles <think>, raw SQL, malformed JSON)
 // -------------------------------------------------------------
 function extractJsonFromLlmOutput(rawText) {
-    if (!rawText) return null;
-    let clean = rawText.trim();
+    if (!rawText || typeof rawText !== 'string') return null;
 
-    // Strip markdown fences ```json ... ``` or ``` ... ```
-    if (clean.startsWith('```')) {
-        clean = clean.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+    // Step 4.1: Strip reasoning/thinking blocks (DeepSeek R1, QwQ, etc.)
+    let text = rawText
+        .replace(/<think>[\s\S]*?<\/think>/gi, '')
+        .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '')
+        .trim();
+
+    // Helper to safely parse JSON or fix trailing commas
+    function tryParseJson(str) {
+        if (!str) return null;
+        try {
+            return JSON.parse(str);
+        } catch (e) {
+            try {
+                const fixed = str.replace(/,\s*([}\]])/g, '$1');
+                return JSON.parse(fixed);
+            } catch (e2) {
+                return null;
+            }
+        }
     }
 
-    // Try direct parse
-    try {
-        return JSON.parse(clean);
-    } catch (e) {}
+    // Step 4.2: Try to find markdown json block ```json ... ```
+    const jsonBlock = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    const jsonCandidate = jsonBlock ? jsonBlock[1].trim() : text;
+    let parsed = tryParseJson(jsonCandidate);
+    if (parsed && parsed.sql) return parsed;
 
-    // Fallback: extract substring between first { and last }
-    const firstBrace = clean.indexOf('{');
-    const lastBrace = clean.lastIndexOf('}');
+    // Step 4.3: Try extracting between first { and last }
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
     if (firstBrace !== -1 && lastBrace > firstBrace) {
-        const candidate = clean.substring(firstBrace, lastBrace + 1);
-        try {
-            return JSON.parse(candidate);
-        } catch (e) {}
+        const braceSub = text.substring(firstBrace, lastBrace + 1);
+        parsed = tryParseJson(braceSub);
+        if (parsed && parsed.sql) return parsed;
+
+        // Step 4.4: Regex extraction if unescaped quotes broke JSON.parse
+        const sqlMatch = braceSub.match(/"sql"\s*:\s*"([\s\S]*?)(?:"\s*,\s*"[a-zA-Z_]+"\s*:|"\s*})/i);
+        if (sqlMatch && sqlMatch[1]) {
+            const titleMatch = braceSub.match(/"suggested_title"\s*:\s*"([^"]*)"/i);
+            const expMatch = braceSub.match(/"explanation"\s*:\s*"([^"]*)"/i);
+            return {
+                sql: sqlMatch[1].replace(/\\"/g, '"').trim(),
+                suggested_title: titleMatch ? titleMatch[1] : 'تقرير تحليلي',
+                explanation: expMatch ? expMatch[1] : 'تم استخراج البيانات وفق المعايير المطلوبة.'
+            };
+        }
+    }
+
+    // Step 4.5: Direct SQL Fallback (if LLM returned pure markdown ```sql ... ``` or plain SELECT query)
+    const sqlBlock = text.match(/```(?:sql)?\s*([\s\S]*?)\s*```/i);
+    const sqlCandidate = sqlBlock ? sqlBlock[1].trim() : text;
+    const selectMatch = sqlCandidate.match(/(?:^|\n|\s)(SELECT|WITH)\s+[\s\S]+/i);
+    if (selectMatch) {
+        let extractedSql = selectMatch[0].trim();
+        const semiIdx = extractedSql.indexOf(';');
+        if (semiIdx !== -1) {
+            extractedSql = extractedSql.substring(0, semiIdx);
+        }
+        return {
+            sql: extractedSql,
+            suggested_title: 'تقرير استعلام تحليلي',
+            explanation: 'تم استخراج وتوليد استعلام SQL بنجاح.'
+        };
     }
 
     return null;
@@ -305,6 +349,7 @@ async function processQuestion(question, options = {}, db) {
         // Step 2: Parse JSON
         const parsed = extractJsonFromLlmOutput(llmResult.content);
         if (!parsed || !parsed.sql) {
+            console.warn('[AI ASSISTANT] Failed to parse LLM output. Raw response was:\n', llmResult.content);
             return {
                 success: false,
                 error: 'تعذر على الذكاء الاصطناعي استخراج استعلام SQL صالح من السؤال.',
