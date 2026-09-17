@@ -75,6 +75,10 @@ function translateSqliteToPostgres(sql, params) {
     // Auto-convert SQLite case-insensitive LIKE to PostgreSQL ILIKE
     pgSql = pgSql.replace(/\bLIKE\b/ig, 'ILIKE');
 
+    // Remove SQLite-specific collation clauses not supported by PostgreSQL UTF8
+    pgSql = pgSql.replace(/\bCOLLATE\s+NOCASE\b/ig, '');
+    pgSql = pgSql.replace(/\bCOLLATE\s+BINARY\b/ig, '');
+
     // Auto-convert SQLite rowid references for PostgreSQL compatibility (map to real id column)
     pgSql = pgSql.replace(/\b(\w+\.)?rowid\s+as\s+id\b/ig, '$1id as id');
     pgSql = pgSql.replace(/\bORDER\s+BY\s+(\w+\.)?rowid(\s+(ASC|DESC))?/ig, 'ORDER BY $1id $2');
