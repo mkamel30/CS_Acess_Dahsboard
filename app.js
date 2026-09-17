@@ -383,6 +383,7 @@ function switchTab(tabName) {
         else if (tabName === 'time-machine') initTimeMachineTab();
         else if (tabName === 'sync-monitor') loadSyncMonitor();
         else if (tabName === 'data-explorer') loadDataExplorer();
+        else if (tabName === 'ai-analytics') loadAiAnalyticsTab();
         else if (tabName === 'settings') loadSettings();
     }
 }
@@ -418,6 +419,7 @@ function initNavigation() {
             else if (tabName === 'time-machine') initTimeMachineTab();
             else if (tabName === 'sync-monitor') loadSyncMonitor();
             else if (tabName === 'data-explorer') loadDataExplorer();
+            else if (tabName === 'ai-analytics') loadAiAnalyticsTab();
             else if (tabName === 'settings') loadSettings();
         });
     });
@@ -7349,4 +7351,212 @@ if (typeof document !== 'undefined') {
 }
 
 
-console.log('App Controller Version 4.2 - Installments Fixed');
+// ==========================================
+// 17. SMART AI ANALYTICS & TEXT-TO-SQL COPILOT
+// ==========================================
+let currentAiResultData = null;
+
+async function loadAiAnalyticsTab() {
+    refreshIcons();
+    const input = document.getElementById('ai-question-input');
+    if (input) setTimeout(() => input.focus(), 150);
+    
+    // Fetch AI config
+    try {
+        const res = await fetch('/api/ai/config');
+        if (res.ok) {
+            const data = await res.json();
+            const badge = document.getElementById('ai-active-model-name');
+            if (badge && data.model) {
+                badge.textContent = data.model;
+            }
+        }
+    } catch (e) {}
+}
+window.loadAiAnalyticsTab = loadAiAnalyticsTab;
+
+function setAiQuestion(text) {
+    const input = document.getElementById('ai-question-input');
+    if (input) {
+        input.value = text;
+        submitAiQuestion();
+    }
+}
+window.setAiQuestion = setAiQuestion;
+
+async function submitAiQuestion() {
+    const input = document.getElementById('ai-question-input');
+    const question = input ? input.value.trim() : '';
+    if (!question) {
+        if (typeof showGlobalToast === 'function') showGlobalToast('يرجى كتابة السؤال أولاً');
+        return;
+    }
+
+    const btnSubmit = document.getElementById('btn-ai-submit');
+    const iconSubmit = document.getElementById('ai-submit-icon');
+    const welcomeState = document.getElementById('ai-welcome-state');
+    const loadingContainer = document.getElementById('ai-loading-container');
+    const errorContainer = document.getElementById('ai-error-container');
+    const resultSection = document.getElementById('ai-result-section');
+
+    // UI state: loading
+    if (welcomeState) welcomeState.style.display = 'none';
+    if (errorContainer) errorContainer.style.display = 'none';
+    if (resultSection) resultSection.style.display = 'none';
+    if (loadingContainer) loadingContainer.style.display = 'block';
+    if (btnSubmit) btnSubmit.disabled = true;
+    if (iconSubmit) iconSubmit.classList.add('spin-animation');
+
+    try {
+        const response = await fetch('/api/ai/query', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question })
+        });
+
+        const resData = await response.json();
+
+        if (!response.ok || !resData.success) {
+            throw new Error(resData.error || 'تعذر الحصول على إجابة من الذكاء الاصطناعي.');
+        }
+
+        renderAiQueryResult(resData);
+    } catch (err) {
+        if (errorContainer) {
+            errorContainer.style.display = 'flex';
+            const msgEl = document.getElementById('ai-error-message');
+            if (msgEl) msgEl.textContent = err.message || 'حدث خطأ في معالجة الاستعلام.';
+        }
+    } finally {
+        if (loadingContainer) loadingContainer.style.display = 'none';
+        if (btnSubmit) btnSubmit.disabled = false;
+        if (iconSubmit) iconSubmit.classList.remove('spin-animation');
+        refreshIcons();
+    }
+}
+window.submitAiQuestion = submitAiQuestion;
+
+function renderAiQueryResult(result) {
+    currentAiResultData = result;
+
+    const resultSection = document.getElementById('ai-result-section');
+    const titleEl = document.getElementById('ai-result-title');
+    const explanationEl = document.getElementById('ai-result-explanation');
+    const badgeRows = document.getElementById('ai-badge-rows');
+    const badgeTime = document.getElementById('ai-badge-time');
+    const sqlCode = document.getElementById('ai-sql-code');
+    const thead = document.getElementById('ai-result-table-head');
+    const tbody = document.getElementById('ai-result-table-body');
+
+    if (titleEl) titleEl.textContent = result.suggestedTitle || 'نتيجة الاستعلام التحليلي';
+    if (explanationEl) explanationEl.textContent = result.explanation || '';
+    if (badgeRows) badgeRows.textContent = `${result.data ? result.data.length : 0} سجل`;
+    if (badgeTime) {
+        const totalMs = result.stats?.totalTimeMs || result.stats?.executionTimeMs || 0;
+        badgeTime.textContent = `${(totalMs / 1000).toFixed(2)} ثانية (${result.stats?.executionTimeMs || 0}ms SQL)`;
+    }
+    if (sqlCode) sqlCode.textContent = result.sql || '';
+
+    // Reset SQL toggle view to closed
+    const sqlWrapper = document.getElementById('ai-sql-wrapper');
+    const toggleLabel = document.getElementById('ai-toggle-sql-label');
+    const btnCopySql = document.getElementById('btn-copy-ai-sql');
+    if (sqlWrapper) sqlWrapper.style.display = 'none';
+    if (toggleLabel) toggleLabel.textContent = 'عرض استعلام الـ SQL المنفذ ▾';
+    if (btnCopySql) btnCopySql.style.display = 'none';
+
+    // Render Data Table
+    const cols = result.columns || [];
+    const rows = result.data || [];
+
+    if (thead) {
+        if (cols.length === 0) {
+            thead.innerHTML = '<tr><th>البيان</th></tr>';
+        } else {
+            thead.innerHTML = '<tr><th style="width:45px;">#</th>' + cols.map(c => `<th>${escapeHtml(c)}</th>`).join('') + '</tr>';
+        }
+    }
+
+    if (tbody) {
+        if (rows.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="${cols.length + 1}" style="text-align:center; padding:35px; color:var(--text-muted); font-size:13px;"><i data-lucide="info" style="width:24px;height:24px;opacity:0.5;margin-bottom:6px;"></i><div>لم يتم العثور على سجلات مطابقة لهذا البحث.</div></td></tr>`;
+        } else {
+            tbody.innerHTML = rows.map((r, idx) => {
+                const tds = cols.map(col => {
+                    const val = r[col];
+                    if (val === null || val === undefined || val === '') {
+                        return '<td style="color:var(--text-muted);">-</td>';
+                    }
+                    if (typeof val === 'number') {
+                        return `<td style="font-family:var(--font-en); font-weight:700; color:#38bdf8;">${val.toLocaleString()}</td>`;
+                    }
+                    return `<td>${escapeHtml(String(val))}</td>`;
+                }).join('');
+                return `<tr><td style="color:var(--text-muted); font-family:var(--font-en); font-size:11px;">${idx + 1}</td>${tds}</tr>`;
+            }).join('');
+        }
+    }
+
+    if (resultSection) {
+        resultSection.style.display = 'block';
+        resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    refreshIcons();
+}
+
+function toggleAiSqlDisplay() {
+    const wrapper = document.getElementById('ai-sql-wrapper');
+    const label = document.getElementById('ai-toggle-sql-label');
+    const copyBtn = document.getElementById('btn-copy-ai-sql');
+    if (!wrapper) return;
+
+    if (wrapper.style.display === 'none' || !wrapper.style.display) {
+        wrapper.style.display = 'block';
+        if (label) label.textContent = 'إخفاء استعلام الـ SQL ▴';
+        if (copyBtn) copyBtn.style.display = 'inline-flex';
+    } else {
+        wrapper.style.display = 'none';
+        if (label) label.textContent = 'عرض استعلام الـ SQL المنفذ ▾';
+        if (copyBtn) copyBtn.style.display = 'none';
+    }
+}
+window.toggleAiSqlDisplay = toggleAiSqlDisplay;
+
+function copyAiSqlQuery() {
+    const code = document.getElementById('ai-sql-code');
+    if (code && code.textContent) {
+        if (typeof copyTextToClipboard === 'function') {
+            copyTextToClipboard(code.textContent, 'تم نسخ استعلام الـ SQL إلى الحافظة ✅');
+        } else {
+            navigator.clipboard?.writeText(code.textContent);
+            if (typeof showGlobalToast === 'function') showGlobalToast('تم نسخ كود الـ SQL ✅');
+        }
+    }
+}
+window.copyAiSqlQuery = copyAiSqlQuery;
+
+function exportAiTableToExcel() {
+    if (!currentAiResultData || !currentAiResultData.data || currentAiResultData.data.length === 0) {
+        if (typeof showGlobalToast === 'function') showGlobalToast('لا توجد بيانات لتصديرها');
+        return;
+    }
+
+    if (typeof XLSX === 'undefined') {
+        alert('مكتبة Excel غير محملة');
+        return;
+    }
+
+    const ws = XLSX.utils.json_to_sheet(currentAiResultData.data);
+    const wb = XLSX.utils.book_new();
+    const sheetName = (currentAiResultData.suggestedTitle || 'تقرير_ذكي').slice(0, 31).replace(/[\\/*?:[\]]/g, '_');
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+    const fileName = `SmartCS_AI_Report_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+
+    if (typeof showGlobalToast === 'function') showGlobalToast('تم تصدير تقرير Excel بنجاح 📥');
+}
+window.exportAiTableToExcel = exportAiTableToExcel;
+
+console.log('App Controller Version 4.3 - AI Copilot Activated');

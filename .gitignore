@@ -10,3 +10,17 @@ Thumbs.db
 
 
 config.json
+*.sqlite
+scratch/
+patch*.js
+fix_*.js
+clean_patch*.js
+test_*.js
+import_*.js
+safe_*.js
+trigger_*.js
+update_*.js
+upgrade_*.js
+new_env.txt
+new_nginx.conf
+full_dump.json

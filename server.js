@@ -8,6 +8,7 @@ const { Pool } = require('pg');
 const fs = require('fs');
 const rateLimit = require('express-rate-limit');
 const syncEngine = require('./sync_engine');
+const aiAssistant = require('./ai_assistant');
 
 function getLocalIpAddress() {
     const interfaces = os.networkInterfaces();
@@ -583,6 +584,58 @@ app.get('/api/explorer/:table', async (req, res) => {
     } catch (err) {
         console.error("Explorer table error:", err);
         res.status(500).json({ error: err.message });
+    }
+});
+
+// ==========================================
+// AI ASSISTANT - TEXT-TO-SQL API ENGINE
+// ==========================================
+app.post('/api/ai/query', async (req, res) => {
+    try {
+        const { question, model } = req.body || {};
+        if (!question || !question.trim()) {
+            return res.status(400).json({ success: false, error: 'يرجى كتابة السؤال المطلوب.' });
+        }
+        const result = await aiAssistant.processQuestion(question, { model }, db);
+        return res.json(result);
+    } catch (err) {
+        logSystemError('AI_ASSISTANT', '/api/ai/query', err, req);
+        return res.status(500).json({ success: false, error: err.message || 'حدث خطأ في معالجة الاستعلام الذكي.' });
+    }
+});
+
+app.get('/api/ai/config', (req, res) => {
+    try {
+        const cfg = readAppConfig();
+        const activeKey = cfg.openRouterApiKey || process.env.OPENROUTER_API_KEY || '';
+        return res.json({
+            success: true,
+            hasKey: !!activeKey,
+            maskedKey: activeKey ? `${activeKey.slice(0, 10)}...${activeKey.slice(-4)}` : '',
+            model: cfg.openRouterModel || 'openrouter/free',
+            availableModels: [
+                { id: 'openrouter/free', name: 'OpenRouter Auto (أفضل موديل مجاني تلقائياً) 🚀' },
+                { id: 'google/gemma-4-31b-it:free', name: 'Google Gemma 4 (31B) - دقيق ومجاني ⭐' },
+                { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Meta Llama 3.3 (70B) - مجاني' },
+                { id: 'qwen/qwen-2.5-coder-32b-instruct:free', name: 'Qwen 2.5 Coder (32B) - متخصص كود وSQL' }
+            ]
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+app.post('/api/ai/config', requireAdmin, async (req, res) => {
+    try {
+        const { apiKey, model } = req.body || {};
+        const cfg = readAppConfig();
+        if (apiKey !== undefined && apiKey.trim()) cfg.openRouterApiKey = apiKey.trim();
+        if (model !== undefined && model.trim()) cfg.openRouterModel = model.trim();
+        cfg.updatedAt = new Date().toISOString();
+        fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2));
+        return res.json({ success: true, message: 'تم حفظ إعدادات المساعد الذكي بنجاح ✅' });
+    } catch (err) {
+        return res.status(500).json({ success: false, error: err.message });
     }
 });
 
