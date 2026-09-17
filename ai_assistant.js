@@ -24,11 +24,13 @@ function getFormattedSystemDates() {
     const mon = months[d.getMonth()];
     const yr2 = String(d.getFullYear()).slice(-2);
     const yr4 = String(d.getFullYear());
+    const isoMon = String(d.getMonth() + 1).padStart(2, '0');
     return {
         accessDate: `${day}-${mon}-${yr2}`,          // e.g. '17-Sep-26'
         accessMonth: `-${mon}-${yr2}`,               // e.g. '-Sep-26'
         accessDateFull: `${day}-${mon}-${yr4}`,      // e.g. '17-Sep-2026'
-        isoDate: d.toISOString().split('T')[0],      // e.g. '2026-09-17'
+        isoDate: `${yr4}-${isoMon}-${day}`,          // e.g. '2026-09-17'
+        isoMonth: `${yr4}-${isoMon}`,                // e.g. '2026-09'
         year: yr4
     };
 }
@@ -41,16 +43,20 @@ Your task is to translate user questions written in Arabic (Egyptian dialect or 
 ### CRITICAL CALENDAR & DATE HANDLING RULES (VERY IMPORTANT):
 - TODAY'S DATE:
   * Access DB text format: '${dates.accessDate}' (e.g. '17-Sep-26')
-  * Current Month text format: '${dates.accessMonth}' (e.g. '-Sep-26')
+  * ISO text format: '${dates.isoDate}' (e.g. '2026-09-17')
+  * Current Month: '${dates.accessMonth}' or '${dates.isoMonth}'
   * Current Year: '${dates.year}'
-  * ISO format: '${dates.isoDate}'
-- In ALL database tables (store_sp_maintenance_raw, maintenance_raw, payments_raw, etc.), dates are stored as TEXT strings formatted in Access format: 'DD-Mon-YY' or 'DD-Mon-YY HH:MM:SS AM/PM' (e.g. '${dates.accessDate} 11:22:19 AM').
-- NEVER use SQLite \`DATE(col) = DATE('now')\` or \`STRFTIME\` on these columns because SQLite's \`DATE()\` function ONLY parses ISO YYYY-MM-DD and will return NULL on Access dates, resulting in 0 matches!
-- For questions about "اليوم" (today) or "خلال اليوم": ALWAYS filter using \`LIKE '%${dates.accessDate}%'\`.
-  Example for today's spare parts: \`SELECT COALESCE(SUM(CAST("count_out" AS INTEGER)),0) AS total_parts_out_today FROM store_sp_maintenance_raw WHERE "out_date" LIKE '%${dates.accessDate}%'\`
-  Example for today's maintenance: \`SELECT COUNT(*) FROM maintenance_raw WHERE "Checked In Date" LIKE '%${dates.accessDate}%'\`
-- For questions about "هذا الشهر" (this month): ALWAYS filter using \`LIKE '%${dates.accessMonth}%'\`.
-- For questions about a specific day or date: ALWAYS use \`LIKE '%DD-Mon-YY%'\` instead of exact equality \`=\` because date columns often contain timestamps (e.g. '${dates.accessDate} 12:55:31 PM').
+- In the database, dates are stored as TEXT strings and can exist in EITHER Access format ('${dates.accessDate}') OR ISO format ('${dates.isoDate}'), often with timestamps attached (e.g. '${dates.accessDate} 11:22:19 AM' or '${dates.isoDate} 11:22:19 م').
+- For questions about "اليوم" or "النهاردة" or "خلال اليوم" (today): ALWAYS check BOTH formats using OR with LIKE:
+  \`("col" LIKE '%${dates.accessDate}%' OR "col" LIKE '%${dates.isoDate}%')\`
+  Example for today's spare parts:
+  \`SELECT COALESCE(SUM(CAST("count_out" AS INTEGER)),0) AS total_parts_out_today FROM store_sp_maintenance_raw WHERE ("out_date" LIKE '%${dates.accessDate}%' OR "out_date" LIKE '%${dates.isoDate}%')\`
+  Example for today's maintenance:
+  \`SELECT COUNT(*) FROM maintenance_raw WHERE ("Checked In Date" LIKE '%${dates.accessDate}%' OR "Checked In Date" LIKE '%${dates.isoDate}%')\`
+- For questions about "هذا الشهر" / "الشهر ده" (this month): ALWAYS check BOTH month formats using OR:
+  \`("col" LIKE '%${dates.accessMonth}%' OR "col" LIKE '%${dates.isoMonth}%')\`
+- NEVER use SQLite \`DATE(col) = DATE('now')\` directly because it will return NULL on Access dates!
+- ALWAYS use \`LIKE '%...%'\` instead of exact equality \`=\` because timestamp strings are often appended to dates.
 
 ### DATABASE SCHEMA & COLUMN MAPPINGS (SQLite):
 
