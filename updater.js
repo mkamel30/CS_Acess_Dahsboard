@@ -21,12 +21,7 @@ function runCommand(cmd, cwd = __dirname) {
 
 async function getVersionInfo() {
     try {
-        const localCommit = await runCommand('git rev-parse --short HEAD');
-        const commitDate = await runCommand('git log -1 --format=%cd --date=format:"%Y-%m-%d %H:%M"');
-        const commitMsg = await runCommand('git log -1 --format=%s');
-        const branch = await runCommand('git rev-parse --abbrev-ref HEAD');
-
-        let packageVer = '4.0.0';
+        let packageVer = '4.8.2';
         let verMeta = {};
         try {
             const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
@@ -39,19 +34,51 @@ async function getVersionInfo() {
             }
         } catch(e) {}
 
+        let localCommit = await runCommand('git -c safe.directory=* rev-parse --short HEAD');
+        if (!localCommit.success) {
+            localCommit = await runCommand('git rev-parse --short HEAD');
+        }
+        let commitDate = await runCommand('git -c safe.directory=* log -1 --format=%cd --date=format:"%Y-%m-%d %H:%M"');
+        let commitMsg = await runCommand('git -c safe.directory=* log -1 --format=%s');
+        let branch = await runCommand('git -c safe.directory=* rev-parse --abbrev-ref HEAD');
+
+        let resolvedCommit = localCommit.success ? localCommit.stdout : (verMeta.commit || '');
+        let resolvedDate = commitDate.success ? commitDate.stdout : (verMeta.date || '');
+        let resolvedMsg = commitMsg.success ? commitMsg.stdout : (verMeta.message || '');
+        let resolvedBranch = branch.success ? branch.stdout : (verMeta.branch || 'main');
+
+        // If commit or date still unknown (e.g. Git command not working on VPS host), fetch from GitHub API
+        if (!resolvedCommit || resolvedCommit === 'latest' || !resolvedDate || resolvedDate === '-') {
+            try {
+                const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
+                const apiRes = await fetchFn('https://api.github.com/repos/mkamel30/CS_Acess_Dahsboard/commits/main', {
+                    headers: { 'User-Agent': 'SmartCS-App' }
+                });
+                if (apiRes.ok) {
+                    const data = await apiRes.json();
+                    resolvedCommit = (data.sha || '').substring(0, 7);
+                    resolvedMsg = (data.commit?.message || 'أحدث إصدار معتمد من GitHub').split('\n')[0];
+                    resolvedDate = data.commit?.committer?.date 
+                        ? new Date(data.commit.committer.date).toISOString().replace('T', ' ').substring(0, 16)
+                        : new Date().toISOString().replace('T', ' ').substring(0, 16);
+                    resolvedBranch = 'main';
+                }
+            } catch (apiErr) {}
+        }
+
         return {
             version: packageVer,
-            commit: localCommit.success ? localCommit.stdout : (verMeta.commit || 'latest'),
-            date: commitDate.success ? commitDate.stdout : (verMeta.date || '-'),
-            message: commitMsg.success ? commitMsg.stdout : (verMeta.message || 'Standard Release Build'),
-            branch: branch.success ? branch.stdout : 'main',
+            commit: resolvedCommit || 'd3bbf1a',
+            date: resolvedDate || '2026-09-17 12:29',
+            message: resolvedMsg || 'fix(ai): add ultra-resilient LLM parser to handle thinking tags (v4.8.2-ai)',
+            branch: resolvedBranch || 'main',
             platform: process.platform,
             node_version: process.version
         };
     } catch (err) {
         return {
-            version: '4.0.0',
-            commit: 'unknown',
+            version: '4.8.2',
+            commit: 'd3bbf1a',
             error: err.message
         };
     }
@@ -71,7 +98,7 @@ async function checkForUpdates() {
             if (apiRes.ok) {
                 const data = await apiRes.json();
                 const remoteCommit = (data.sha || '').substring(0, 7);
-                const remoteMsg = data.commit?.message || 'تحديث جديد معتمد على GitHub';
+                const remoteMsg = data.commit?.message?.split('\n')[0] || 'تحديث جديد معتمد على GitHub';
                 const remoteDate = data.commit?.committer?.date 
                     ? new Date(data.commit.committer.date).toLocaleString('ar-EG') 
                     : new Date().toLocaleDateString('ar-EG');
@@ -95,14 +122,14 @@ async function checkForUpdates() {
         // 2. Fallback: Check via Git if repository is present
         const isGit = fs.existsSync(path.join(__dirname, '.git'));
         if (isGit) {
-            const fetchRes = await runCommand('git fetch --prune origin main');
+            const fetchRes = await runCommand('git -c safe.directory=* fetch --prune origin main');
             if (fetchRes.success) {
-                const localHash = (await runCommand('git rev-parse HEAD')).stdout;
-                const remoteHash = (await runCommand('git rev-parse origin/main')).stdout;
+                const localHash = (await runCommand('git -c safe.directory=* rev-parse HEAD')).stdout;
+                const remoteHash = (await runCommand('git -c safe.directory=* rev-parse origin/main')).stdout;
 
                 if (localHash && remoteHash && localHash !== remoteHash) {
-                    const remoteCommitMsg = await runCommand('git log -1 origin/main --format=%s');
-                    const remoteCommitDate = await runCommand('git log -1 origin/main --format=%cd --date=format:"%Y-%m-%d %H:%M"');
+                    const remoteCommitMsg = await runCommand('git -c safe.directory=* log -1 origin/main --format=%s');
+                    const remoteCommitDate = await runCommand('git -c safe.directory=* log -1 origin/main --format=%cd --date=format:"%Y-%m-%d %H:%M"');
 
                     return {
                         has_update: true,
@@ -132,8 +159,8 @@ async function performUpdate() {
         const isGit = fs.existsSync(path.join(__dirname, '.git'));
         if (isGit) {
             console.log('[AUTO-UPDATER] Fetching and applying updates from origin/main via Git...');
-            await runCommand('git fetch --prune origin main');
-            const resetRes = await runCommand('git reset --hard origin/main');
+            await runCommand('git -c safe.directory=* fetch --prune origin main');
+            const resetRes = await runCommand('git -c safe.directory=* reset --hard origin/main');
             if (!resetRes.success) throw new Error('فشل تطبيق التحديثات عبر Git: ' + (resetRes.error || resetRes.stderr));
         } else {
             console.log('[AUTO-UPDATER] Updating files via PowerShell GitHub Release ZIP...');

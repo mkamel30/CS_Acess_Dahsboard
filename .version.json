@@ -1,0 +1,7 @@
+{
+  "version": "4.8.2",
+  "commit": "d3bbf1a",
+  "date": "2026-09-17 12:29",
+  "message": "fix(ai): add ultra-resilient LLM parser to handle thinking tags and raw SQL outputs (v4.8.2-ai)",
+  "branch": "main"
+}
