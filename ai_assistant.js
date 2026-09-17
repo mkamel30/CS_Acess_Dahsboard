@@ -328,6 +328,9 @@ async function callLlmApi(prompt, question, modelOverride, apiKeyOverride) {
             apiKey = (config.groqApiKey || process.env.GROQ_API_KEY || '').trim();
         } else if (provider === 'openrouter') {
             apiKey = (config.openRouterApiKey || process.env.OPENROUTER_API_KEY || '').trim();
+            if (apiKey && !apiKey.startsWith('sk-or-')) {
+                apiKey = '';
+            }
         }
 
         // Fallback key search if selected provider has no key configured
@@ -447,6 +450,11 @@ async function callLlmApi(prompt, question, modelOverride, apiKeyOverride) {
             // Friendly DeepSeek Insufficient Balance handling
             if (provider === 'deepseek' && (response.status === 402 || errText.includes('Insufficient Balance'))) {
                 throw new Error('خطأ من خادم DeepSeek (402): الرصيد غير كافٍ في حساب DeepSeek (Insufficient Balance). يرجى شحن الرصيد من platform.deepseek.com أو التبديل إلى موديلات Groq المجانية فائقة السرعة ⚡');
+            }
+
+            // Friendly OpenRouter 401 Authentication error handling
+            if (provider === 'openrouter' && (response.status === 401 || errText.includes('Missing Authentication header'))) {
+                throw new Error('خطأ مصادقة OpenRouter (401): مفتاح OpenRouter غير صالح أو تم إدخال مفتاح ديب سيك بدلاً منه. يرجى إدخال مفتاح يبدأ بـ sk-or-v1-... في نافذة إعدادات المفتاح والموديل ⚙️ أو التبديل إلى موديلات Groq المجانية ⚡');
             }
 
             const providerLabels = { groq: 'Groq', deepseek: 'DeepSeek', openrouter: 'OpenRouter' };

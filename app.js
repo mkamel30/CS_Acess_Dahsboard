@@ -7559,10 +7559,17 @@ async function submitAiQuestion() {
     if (iconSubmit) iconSubmit.classList.add('spin-animation');
 
     try {
+        const quickSelect = document.getElementById('ai-quick-model-select');
+        const cfgSelect = document.getElementById('ai-cfg-model-select');
+        const activeModel = (quickSelect ? quickSelect.value : '') || (cfgSelect ? cfgSelect.value : '');
+
+        const payload = { question };
+        if (activeModel) payload.model = activeModel;
+
         const response = await fetch('/api/ai/query', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ question })
+            body: JSON.stringify(payload)
         });
 
         const resData = await response.json();

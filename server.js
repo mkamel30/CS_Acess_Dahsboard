@@ -610,7 +610,10 @@ app.get('/api/ai/config', (req, res) => {
         const cfg = readAppConfig();
         const groqKey = cfg.groqApiKey || process.env.GROQ_API_KEY || '';
         const deepseekKey = cfg.deepseekApiKey || process.env.DEEPSEEK_API_KEY || '';
-        const openrouterKey = cfg.openRouterApiKey || process.env.OPENROUTER_API_KEY || '';
+        let openrouterKey = cfg.openRouterApiKey || process.env.OPENROUTER_API_KEY || '';
+        if (openrouterKey && !openrouterKey.startsWith('sk-or-')) {
+            openrouterKey = '';
+        }
 
         const maskKey = (k) => k ? `${k.slice(0, 8)}...${k.slice(-4)}` : '';
 
@@ -653,7 +656,17 @@ app.post('/api/ai/config', async (req, res) => {
 
         if (groqApiKey !== undefined && groqApiKey.trim()) cfg.groqApiKey = groqApiKey.trim();
         if (deepseekApiKey !== undefined && deepseekApiKey.trim()) cfg.deepseekApiKey = deepseekApiKey.trim();
-        if (openRouterApiKey !== undefined && openRouterApiKey.trim()) cfg.openRouterApiKey = openRouterApiKey.trim();
+        if (openRouterApiKey !== undefined && openRouterApiKey.trim()) {
+            const trimmed = openRouterApiKey.trim();
+            if (trimmed.startsWith('sk-or-')) {
+                cfg.openRouterApiKey = trimmed;
+            } else if (trimmed.startsWith('sk-')) {
+                // If user pasted DeepSeek key in openRouter box, correctly assign to deepseekApiKey
+                cfg.deepseekApiKey = trimmed;
+            } else if (trimmed.startsWith('gsk_')) {
+                cfg.groqApiKey = trimmed;
+            }
+        }
 
         // Backward compatibility for single generic input
         if (apiKey !== undefined && apiKey.trim()) {
