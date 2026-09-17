@@ -7372,6 +7372,11 @@ async function loadAiAnalyticsTab() {
             }
             const modelSelect = document.getElementById('ai-cfg-model-select');
             if (modelSelect && data.model) {
+                if (data.availableModels && Array.isArray(data.availableModels) && data.availableModels.length > 0) {
+                    modelSelect.innerHTML = data.availableModels.map(m => 
+                        `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name)}</option>`
+                    ).join('');
+                }
                 modelSelect.value = data.model;
             }
             const keyStatus = document.getElementById('ai-cfg-key-status');

@@ -613,10 +613,11 @@ app.get('/api/ai/config', (req, res) => {
             success: true,
             hasKey: !!activeKey,
             maskedKey: activeKey ? `${activeKey.slice(0, 10)}...${activeKey.slice(-4)}` : '',
-            model: cfg.openRouterModel || (activeKey.startsWith('gsk_') ? 'llama-3.3-70b-versatile' : 'openrouter/free'),
+            model: cfg.openRouterModel || (activeKey.startsWith('gsk_') ? 'openai/gpt-oss-120b' : 'openrouter/free'),
             availableModels: [
-                { id: 'llama-3.3-70b-versatile', name: '⚡ Groq: Llama 3.3 (70B) - سرعة فائقة ودقيق جداً' },
-                { id: 'llama-3.1-8b-instant', name: '⚡ Groq: Llama 3.1 (8B) - استجابة فورية' },
+                { id: 'openai/gpt-oss-120b', name: '⚡ Groq: GPT-OSS 120B (فائق الذكاء والدقة 🧠)' },
+                { id: 'openai/gpt-oss-20b', name: '⚡ Groq: GPT-OSS 20B (سرعة فائقة أقل من ثانية ⚡)' },
+                { id: 'qwen/qwen3.8-27b', name: '⚡ Groq: Qwen 3.8 (27B) - دقة وسرعة عالية' },
                 { id: 'openrouter/free', name: '🚀 OpenRouter: Auto (أفضل موديل مجاني تلقائياً)' },
                 { id: 'google/gemma-4-31b-it:free', name: '⭐ OpenRouter: Google Gemma 4 (31B)' },
                 { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'OpenRouter: Meta Llama 3.3 (70B)' },
@@ -636,7 +637,7 @@ app.post('/api/ai/config', async (req, res) => {
             const trimmedKey = apiKey.trim();
             if (trimmedKey.startsWith('gsk_')) {
                 cfg.groqApiKey = trimmedKey;
-                if (!model) cfg.openRouterModel = 'llama-3.3-70b-versatile';
+                if (!model) cfg.openRouterModel = 'openai/gpt-oss-120b';
             } else {
                 cfg.openRouterApiKey = trimmedKey;
             }

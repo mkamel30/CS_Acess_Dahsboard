@@ -167,25 +167,56 @@ function validateSqlSafety(sql) {
 }
 
 // -------------------------------------------------------------
-// 3. Multi-Provider LLM Client (Supports Groq & OpenRouter)
-// -------------------------------------------------------------
 async function callLlmApi(prompt, question, modelOverride, apiKeyOverride) {
     const config = readConfigSafely();
-    const apiKey = (apiKeyOverride || config.openRouterApiKey || config.groqApiKey || process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEY || '').trim();
+    let targetModel = modelOverride || config.openRouterModel || '';
+    let isGroq = false;
+    let apiKey = (apiKeyOverride || '').trim();
 
     if (!apiKey) {
-        throw new Error('مفتاح الـ API غير مضبوط. يرجى إدخال OpenRouter أو Groq API Key من إعدادات الـ AI أولاً.');
+        const isExplicitOpenRouter = targetModel.includes('openrouter') || targetModel.includes(':free');
+        if (config.groqApiKey && (!isExplicitOpenRouter || targetModel.includes('gpt-oss') || targetModel.includes('qwen3'))) {
+            apiKey = config.groqApiKey.trim();
+            isGroq = true;
+        } else if (config.openRouterApiKey && isExplicitOpenRouter) {
+            apiKey = config.openRouterApiKey.trim();
+            isGroq = false;
+        } else if (config.groqApiKey) {
+            apiKey = config.groqApiKey.trim();
+            isGroq = true;
+        } else if (config.openRouterApiKey) {
+            apiKey = config.openRouterApiKey.trim();
+            isGroq = false;
+        } else if (process.env.GROQ_API_KEY) {
+            apiKey = process.env.GROQ_API_KEY.trim();
+            isGroq = true;
+        } else if (process.env.OPENROUTER_API_KEY) {
+            apiKey = process.env.OPENROUTER_API_KEY.trim();
+            isGroq = false;
+        }
+    } else {
+        isGroq = apiKey.startsWith('gsk_');
     }
 
-    // Auto-detect provider based on key format or model name
-    const isGroq = apiKey.startsWith('gsk_') || (modelOverride && (modelOverride.startsWith('llama-') || modelOverride.includes('groq') || modelOverride.includes('mixtral')));
+    if (!apiKey) {
+        throw new Error('مفتاح الـ API غير مضبوط. يرجى إدخال Groq أو OpenRouter API Key من إعدادات الـ AI أولاً.');
+    }
+
+    if (apiKey.startsWith('gsk_')) isGroq = true;
+
     const endpoint = isGroq
         ? 'https://api.groq.com/openai/v1/chat/completions'
         : 'https://openrouter.ai/api/v1/chat/completions';
 
-    let model = modelOverride || (isGroq ? 'llama-3.3-70b-versatile' : (config.openRouterModel || 'openrouter/free'));
-    if (isGroq && (!model || model.includes('openrouter') || model.includes(':free'))) {
-        model = 'llama-3.3-70b-versatile';
+    let model = targetModel;
+    if (isGroq) {
+        if (!model || model.includes('openrouter') || model.includes(':free') || model.includes('versatile')) {
+            model = 'openai/gpt-oss-120b';
+        }
+    } else {
+        if (!model) {
+            model = 'openrouter/free';
+        }
     }
 
     const controller = new AbortController();

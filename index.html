@@ -2954,13 +2954,14 @@
                                     موديل الذكاء الاصطناعي (AI Model):
                                 </label>
                                 <select id="ai-cfg-model-select" style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container-low); color:var(--md-sys-color-on-surface); font-size:13px;">
-                                    <option value="llama-3.3-70b-versatile">⚡ Groq: Llama 3.3 (70B) - سرعة فائقة ودقيق جداً</option>
-                                    <option value="llama-3.1-8b-instant">⚡ Groq: Llama 3.1 (8B) - استجابة فورية</option>
-                                    <option value="openrouter/free">🚀 OpenRouter: Auto (أفضل موديل مجاني تلقائياً)</option>
-                                    <option value="google/gemma-4-31b-it:free">⭐ OpenRouter: Google Gemma 4 (31B)</option>
-                                    <option value="meta-llama/llama-3.3-70b-instruct:free">OpenRouter: Meta Llama 3.3 (70B)</option>
-                                    <option value="qwen/qwen-2.5-coder-32b-instruct:free">OpenRouter: Qwen 2.5 Coder (32B)</option>
-                                </select>
+                                     <option value="openai/gpt-oss-120b">⚡ Groq: GPT-OSS 120B (فائق الذكاء والدقة 🧠)</option>
+                                     <option value="openai/gpt-oss-20b">⚡ Groq: GPT-OSS 20B (سرعة فائقة أقل من ثانية ⚡)</option>
+                                     <option value="qwen/qwen3.8-27b">⚡ Groq: Qwen 3.8 (27B) - دقة وسرعة عالية</option>
+                                     <option value="openrouter/free">🚀 OpenRouter: Auto (أفضل موديل مجاني تلقائياً)</option>
+                                     <option value="google/gemma-4-31b-it:free">⭐ OpenRouter: Google Gemma 4 (31B)</option>
+                                     <option value="meta-llama/llama-3.3-70b-instruct:free">OpenRouter: Meta Llama 3.3 (70B)</option>
+                                     <option value="qwen/qwen-2.5-coder-32b-instruct:free">OpenRouter: Qwen 2.5 Coder (32B)</option>
+                                 </select>
                             </div>
                             <div>
                                 <button type="button" class="btn btn-primary" onclick="saveAiSettings()" id="btn-save-ai-settings" style="width:100%; padding:11px 18px; font-size:13px; font-weight:700; border-radius:10px; background:linear-gradient(135deg, #9333ea, #6366f1); border:none; display:flex; align-items:center; justify-content:center; gap:8px;">
@@ -3906,6 +3907,6 @@
     </div>
 
     <!-- Main Client Application Script -->
-    <script src="app.js?v=4.8.3-ai"></script>
+    <script src="app.js?v=4.8.4-ai"></script>
 </body>
 </html>
