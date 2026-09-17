@@ -2944,9 +2944,9 @@
                         <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:16px; align-items:flex-end;">
                             <div>
                                 <label style="display:block; font-size:12px; font-weight:700; margin-bottom:6px; color:var(--md-sys-color-on-surface);">
-                                    مفتاح الـ API (OpenRouter API Key):
+                                    مفتاح الـ API (Groq أو OpenRouter Key):
                                 </label>
-                                <input type="password" id="ai-cfg-api-key" placeholder="sk-or-v1-..." style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container-low); color:var(--md-sys-color-on-surface); font-size:13px; font-family:monospace;">
+                                <input type="password" id="ai-cfg-api-key" placeholder="gsk_... أو sk-or-v1-..." style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container-low); color:var(--md-sys-color-on-surface); font-size:13px; font-family:monospace;">
                                 <span style="font-size:11px; color:var(--text-secondary); margin-top:4px; display:block;" id="ai-cfg-key-status">الحالة: يتم الفحص...</span>
                             </div>
                             <div>
@@ -2954,10 +2954,12 @@
                                     موديل الذكاء الاصطناعي (AI Model):
                                 </label>
                                 <select id="ai-cfg-model-select" style="width:100%; padding:10px 14px; border-radius:10px; border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container-low); color:var(--md-sys-color-on-surface); font-size:13px;">
-                                    <option value="openrouter/free">OpenRouter Auto (أفضل موديل مجاني تلقائياً) 🚀</option>
-                                    <option value="google/gemma-4-31b-it:free">Google Gemma 4 (31B) - دقيق ومجاني ⭐</option>
-                                    <option value="meta-llama/llama-3.3-70b-instruct:free">Meta Llama 3.3 (70B) - مجاني</option>
-                                    <option value="qwen/qwen-2.5-coder-32b-instruct:free">Qwen 2.5 Coder (32B) - كود وSQL</option>
+                                    <option value="llama-3.3-70b-versatile">⚡ Groq: Llama 3.3 (70B) - سرعة فائقة ودقيق جداً</option>
+                                    <option value="llama-3.1-8b-instant">⚡ Groq: Llama 3.1 (8B) - استجابة فورية</option>
+                                    <option value="openrouter/free">🚀 OpenRouter: Auto (أفضل موديل مجاني تلقائياً)</option>
+                                    <option value="google/gemma-4-31b-it:free">⭐ OpenRouter: Google Gemma 4 (31B)</option>
+                                    <option value="meta-llama/llama-3.3-70b-instruct:free">OpenRouter: Meta Llama 3.3 (70B)</option>
+                                    <option value="qwen/qwen-2.5-coder-32b-instruct:free">OpenRouter: Qwen 2.5 Coder (32B)</option>
                                 </select>
                             </div>
                             <div>

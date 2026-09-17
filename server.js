@@ -608,17 +608,19 @@ app.post('/api/ai/query', async (req, res) => {
 app.get('/api/ai/config', (req, res) => {
     try {
         const cfg = readAppConfig();
-        const activeKey = cfg.openRouterApiKey || process.env.OPENROUTER_API_KEY || '';
+        const activeKey = cfg.groqApiKey || cfg.openRouterApiKey || process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEY || '';
         return res.json({
             success: true,
             hasKey: !!activeKey,
             maskedKey: activeKey ? `${activeKey.slice(0, 10)}...${activeKey.slice(-4)}` : '',
-            model: cfg.openRouterModel || 'openrouter/free',
+            model: cfg.openRouterModel || (activeKey.startsWith('gsk_') ? 'llama-3.3-70b-versatile' : 'openrouter/free'),
             availableModels: [
-                { id: 'openrouter/free', name: 'OpenRouter Auto (أفضل موديل مجاني تلقائياً) 🚀' },
-                { id: 'google/gemma-4-31b-it:free', name: 'Google Gemma 4 (31B) - دقيق ومجاني ⭐' },
-                { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'Meta Llama 3.3 (70B) - مجاني' },
-                { id: 'qwen/qwen-2.5-coder-32b-instruct:free', name: 'Qwen 2.5 Coder (32B) - متخصص كود وSQL' }
+                { id: 'llama-3.3-70b-versatile', name: '⚡ Groq: Llama 3.3 (70B) - سرعة فائقة ودقيق جداً' },
+                { id: 'llama-3.1-8b-instant', name: '⚡ Groq: Llama 3.1 (8B) - استجابة فورية' },
+                { id: 'openrouter/free', name: '🚀 OpenRouter: Auto (أفضل موديل مجاني تلقائياً)' },
+                { id: 'google/gemma-4-31b-it:free', name: '⭐ OpenRouter: Google Gemma 4 (31B)' },
+                { id: 'meta-llama/llama-3.3-70b-instruct:free', name: 'OpenRouter: Meta Llama 3.3 (70B)' },
+                { id: 'qwen/qwen-2.5-coder-32b-instruct:free', name: 'OpenRouter: Qwen 2.5 Coder (32B)' }
             ]
         });
     } catch (err) {
@@ -630,7 +632,15 @@ app.post('/api/ai/config', async (req, res) => {
     try {
         const { apiKey, model } = req.body || {};
         const cfg = readAppConfig();
-        if (apiKey !== undefined && apiKey.trim()) cfg.openRouterApiKey = apiKey.trim();
+        if (apiKey !== undefined && apiKey.trim()) {
+            const trimmedKey = apiKey.trim();
+            if (trimmedKey.startsWith('gsk_')) {
+                cfg.groqApiKey = trimmedKey;
+                if (!model) cfg.openRouterModel = 'llama-3.3-70b-versatile';
+            } else {
+                cfg.openRouterApiKey = trimmedKey;
+            }
+        }
         if (model !== undefined && model.trim()) cfg.openRouterModel = model.trim();
         cfg.updatedAt = new Date().toISOString();
         fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2));

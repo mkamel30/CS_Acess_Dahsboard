@@ -167,46 +167,67 @@ function validateSqlSafety(sql) {
 }
 
 // -------------------------------------------------------------
-// 3. OpenRouter API Client
+// 3. Multi-Provider LLM Client (Supports Groq & OpenRouter)
 // -------------------------------------------------------------
-async function callOpenRouter(prompt, question, modelOverride, apiKeyOverride) {
+async function callLlmApi(prompt, question, modelOverride, apiKeyOverride) {
     const config = readConfigSafely();
-    const apiKey = apiKeyOverride || config.openRouterApiKey || process.env.OPENROUTER_API_KEY;
-    const model = modelOverride || config.openRouterModel || 'openrouter/free';
+    const apiKey = (apiKeyOverride || config.openRouterApiKey || config.groqApiKey || process.env.GROQ_API_KEY || process.env.OPENROUTER_API_KEY || '').trim();
 
     if (!apiKey) {
-        throw new Error('مفتاح OpenRouter API غير مضبوط في الإعدادات. يرجى إدخال الـ API Key أولاً.');
+        throw new Error('مفتاح الـ API غير مضبوط. يرجى إدخال OpenRouter أو Groq API Key من إعدادات الـ AI أولاً.');
+    }
+
+    // Auto-detect provider based on key format or model name
+    const isGroq = apiKey.startsWith('gsk_') || (modelOverride && (modelOverride.startsWith('llama-') || modelOverride.includes('groq') || modelOverride.includes('mixtral')));
+    const endpoint = isGroq
+        ? 'https://api.groq.com/openai/v1/chat/completions'
+        : 'https://openrouter.ai/api/v1/chat/completions';
+
+    let model = modelOverride || (isGroq ? 'llama-3.3-70b-versatile' : (config.openRouterModel || 'openrouter/free'));
+    if (isGroq && (!model || model.includes('openrouter') || model.includes(':free'))) {
+        model = 'llama-3.3-70b-versatile';
     }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 35000); // 35s timeout
 
+    const headers = {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+    };
+    if (!isGroq) {
+        headers['HTTP-Referer'] = 'http://localhost:8970';
+        headers['X-Title'] = 'SmartCS AI Copilot';
+    }
+
+    const requestBody = {
+        model: model,
+        messages: [
+            { role: 'system', content: prompt },
+            { role: 'user', content: question }
+        ],
+        temperature: 0.1
+    };
+
+    // Groq natively supports response_format json_object
+    if (isGroq) {
+        requestBody.response_format = { type: 'json_object' };
+    }
+
     try {
-        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        const response = await fetch(endpoint, {
             method: 'POST',
             signal: controller.signal,
-            headers: {
-                'Authorization': `Bearer ${apiKey}`,
-                'Content-Type': 'application/json',
-                'HTTP-Referer': 'http://localhost:8970',
-                'X-Title': 'SmartCS AI Copilot'
-            },
-            body: JSON.stringify({
-                model: model,
-                messages: [
-                    { role: 'system', content: prompt },
-                    { role: 'user', content: question }
-                ],
-                temperature: 0.1,
-                max_tokens: 1500
-            })
+            headers: headers,
+            body: JSON.stringify(requestBody)
         });
 
         clearTimeout(timeout);
 
         if (!response.ok) {
             const errText = await response.text();
-            throw new Error(`خطأ من خادم OpenRouter (${response.status}): ${errText}`);
+            const providerName = isGroq ? 'Groq' : 'OpenRouter';
+            throw new Error(`خطأ من خادم ${providerName} (${response.status}): ${errText}`);
         }
 
         const json = await response.json();
@@ -215,6 +236,7 @@ async function callOpenRouter(prompt, question, modelOverride, apiKeyOverride) {
         return {
             content: rawContent,
             modelUsed: json.model || model,
+            provider: isGroq ? 'Groq' : 'OpenRouter',
             usage: json.usage || {}
         };
     } catch (err) {
@@ -345,7 +367,7 @@ async function processQuestion(question, options = {}, dbOrQueryFn) {
     try {
         // Step 1: Call LLM
         const systemPrompt = buildSystemPrompt();
-        const llmResult = await callOpenRouter(
+        const llmResult = await callLlmApi(
             systemPrompt,
             question.trim(),
             options.model,
