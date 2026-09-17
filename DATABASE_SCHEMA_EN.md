@@ -148,3 +148,42 @@ flowchart LR
    JOIN payments_raw p ON i.pos = p.pos_number
    WHERE p.payment_reason LIKE '%قسط%';
    ```
+
+
+---
+
+## 🛠️ Branch Maintenance Architecture & Query Rules
+
+Hardware maintenance conducted inside the **Local Branch** follows two distinct scenarios:
+1. **Labor / Repair Only (No Spare Parts Replaced)**:
+   - Recorded exclusively in `transactions_raw` where:
+     * `POSN`: Serial number of the POS terminal serviced.
+     * `GrocerName`: Merchant / Bakery account code.
+     * `ActionDate`: Repair execution timestamp.
+     * `ActionType`: Operation category (`اصلاح عطل`, `صيانة أولية`, etc.).
+     * `NoteG`: Defective component category (`قارئ البطاقات`, `الطابعة`, `الباور`).
+     * `NoteD`: Granular repair procedure (`اصلاح القارئ`, `تنظيف تروس`, `لحام سوكت`).
+     * `Procedure`: Branch technician responsible for the repair.
+     * `Place`: Maintenance facility (`فرع الشركة`).
+
+2. **Maintenance with Spare Parts Replacement**:
+   - Consumed parts are logged in `store_sp_raw` where:
+     * The `notes` column holds the machine serial (`store_sp_raw.notes = transactions_raw.POSN`).
+     * The `type` column specifies the replacement part (Card Reader, Gears, Battery, etc.).
+     * The `out_date` column records the dispatch timestamp matching the repair date.
+
+3. **Unified Branch Maintenance SQL Query**:
+   ```sql
+   SELECT t.POSN AS machine_serial,
+          t.GrocerName AS merchant_code,
+          t.ActionDate,
+          t.ActionType,
+          t.NoteD AS maintenance_action,
+          t.Procedure AS technician,
+          sp.type AS spare_part_replaced
+   FROM transactions_raw t
+   LEFT JOIN store_sp_raw sp 
+     ON t.POSN = sp.notes 
+    AND (sp.out_date LIKE '%' || SUBSTR(t.ActionDate, 1, 9) || '%' OR sp.out_date LIKE '%' || SUBSTR(t.ActionDate, 1, 10) || '%')
+   WHERE t.ActionDate LIKE '%17-Sep-26%' OR t.ActionDate LIKE '%2026-09-17%';
+   ```

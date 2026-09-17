@@ -148,3 +148,42 @@ flowchart LR
    JOIN payments_raw p ON i.pos = p.pos_number
    WHERE p.payment_reason LIKE '%قسط%'
    ```
+
+
+---
+
+## 🛠️ القواعد المعتمدة لصيانة الفرع (Branch Maintenance Rules)
+
+صيانة الماكينات التي تتم داخل **الفرع** تنقسم إلى حالتين أساسيتين:
+1. **صيانة فقط (اصلاح عطل / صيانة أولية بدون قطع غيار)**:
+   - مسجلة في جدول `transactions_raw` حيث:
+     * `POSN`: سيريال الماكينة التي تمت صيانتها.
+     * `GrocerName`: كود المخبز / التاجر.
+     * `ActionDate`: تاريخ ووقت الصيانة.
+     * `ActionType`: نوع الإجراء (`اصلاح عطل`, `صيانة أولية`, `مسارات القارئ - البوردة`).
+     * `NoteG`: الجزء التالف (`قارئ البطاقات`, `الطابعة`, `الباور`).
+     * `NoteD`: تفاصيل ما تم في الصيانة (`اصلاح القارئ`, `تنظيف تروس`, `لحام سوكت`).
+     * `Procedure`: فني الصيانة بالفرع.
+     * `Place`: مكان الصيانة (`فرع الشركة`).
+
+2. **صيانة مع تغيير قطع غيار في الفرع**:
+   - تسجل قطع الغيار المركبة في جدول `store_sp_raw` حيث:
+     * عمود `notes` يحتوي على سيريال الماكينة (`store_sp_raw.notes = transactions_raw.POSN`).
+     * عمود `type` يحتوي على اسم قطعة الغيار التي تم تغييرها.
+     * عمود `out_date` يحتوي على تاريخ ووقت الصرف.
+
+3. **استعلام الربط الشامل لصيانة الفرع**:
+   ```sql
+   SELECT t.POSN AS machine_serial,
+          t.GrocerName AS merchant_code,
+          t.ActionDate,
+          t.ActionType,
+          t.NoteD AS maintenance_action,
+          t.Procedure AS technician,
+          sp.type AS spare_part_replaced
+   FROM transactions_raw t
+   LEFT JOIN store_sp_raw sp 
+     ON t.POSN = sp.notes 
+    AND (sp.out_date LIKE '%' || SUBSTR(t.ActionDate, 1, 9) || '%' OR sp.out_date LIKE '%' || SUBSTR(t.ActionDate, 1, 10) || '%')
+   WHERE t.ActionDate LIKE '%17-Sep-26%' OR t.ActionDate LIKE '%2026-09-17%';
+   ```

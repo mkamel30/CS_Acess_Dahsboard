@@ -191,9 +191,47 @@ Your task is to translate user questions written in Arabic (Egyptian dialect or 
 
 ---
 
+### CRITICAL BUSINESS RULES FOR BRANCH MAINTENANCE (صيانة الفرع):
+- صيانة الماكينات في **الفرع** تنقسم إلى حالتين أساسيتين:
+  1. **صيانة فقط (اصلاح عطل / صيانة أولية بدون قطع غيار)**:
+     - تُسجل في جدول \`transactions_raw\`.
+     - \`POSN\`: سيريال الماكينة التي تمت صيانتها في الفرع.
+     - \`GrocerName\`: كود المخبز / التاجر.
+     - \`ActionDate\`: تاريخ ووقت الصيانة.
+     - \`ActionType\`: نوع الصيانة (مثل: 'اصلاح عطل', 'صيانة أولية').
+     - \`NoteG\`: الجزء المتعطل (قارئ البطاقات، الطابعة، الباور).
+     - \`NoteD\`: تفاصيل ما تم في الصيانة بالفرع (مثل: 'اصلاح القارئ', 'تغير مجموعة تروس', 'صيانة سوكت').
+     - \`Procedure\`: فني الصيانة القائم بالإصلاح بالفرع.
+     - \`Place\`: مكان الصيانة ('فرع الشركة').
+  2. **صيانة مع تغيير قطع غيار في الفرع**:
+     - قطع الغيار التي رُكبت بالفرع تُسجل في جدول \`store_sp_raw\`.
+     - في جدول \`store_sp_raw\`:
+       * عمود \`notes\` يحتوي على سيريال الماكينة (\`store_sp_raw.notes = transactions_raw.POSN\`).
+       * عمود \`type\` هو اسم قطعة الغيار التي تم تغييرها (قارئ بطاقات، تروس، بطارية، اكس...).
+       * عمود \`out_date\` هو تاريخ ووقت صرف وتركيب القطعة.
+  3. **للربط بين صيانة الفرع وقطع الغيار المركبة للماكينة**:
+     \`\`\`sql
+     SELECT t.POSN AS machine_serial,
+            t.GrocerName AS merchant_code,
+            t.ActionDate,
+            t.ActionType,
+            t.NoteD AS maintenance_action,
+            t.Procedure AS technician,
+            sp.type AS spare_part_replaced
+     FROM transactions_raw t
+     LEFT JOIN store_sp_raw sp 
+       ON t.POSN = sp.notes 
+      AND (sp.out_date LIKE '%' || SUBSTR(t.ActionDate, 1, 9) || '%' OR sp.out_date LIKE '%' || SUBSTR(t.ActionDate, 1, 10) || '%')
+     \`\`\`
+  - عند السؤال عن "الماكينات التي تمت صيانتها في الفرع": استعلم من \`transactions_raw\` (حيث Place LIKE '%فرع%' أو ActionType LIKE '%اصلاح%' أو '%صيانة%') مع عمل LEFT JOIN لـ \`store_sp_raw\` لإظهار قطع الغيار إن وجدت!
+  - عند السؤال عن "صيانة الفرع التي تم فيها تغيير قطع غيار": اشترط وجود القطعة في \`store_sp_raw\` (\`sp.type IS NOT NULL\`).
+  - عند السؤال عن "صيانة الفرع بدون قطع غيار (صيانة فقط)": اشترط \`sp.notes IS NULL\`.
+
+---
+
 ### CRITICAL BUSINESS RULES FOR SPARE PARTS (التمييز الحاسم بين الفرع ومركز الصيانة):
-- إذا سأل المستخدم عن قطع الغيار التي تم تغييرها أو صرفها في **الفرع** (Branch): استخدم حصراً جدول \`store_sp_raw\`.
-- إذا سأل المستخدم عن قطع الغيار التي تم تغييرها أو صرفها في **مركز الصيانة الرئيسي** أو **المقر** (HQ): استخدم حصراً جدول \`store_sp_maintenance_raw\`.
+- إذا سأل المستخدم عن قطع الغيار التي تم تغييرها أو صرفها في **الفرع** (Branch): استخدم حصراً جدول \`store_sp_raw\` (حيث عمود notes يحمل سيريال الماكينة وعمود type هو اسم القطعة).
+- إذا سأل المستخدم عن قطع الغيار التي تم تغييرها أو صرفها في **مركز الصيانة الرئيسي** أو **المقر** (HQ): استخدم حصراً جدول \`store_sp_maintenance_raw\` (حيث عمود formNo يربط مع FormNo في maintenance_raw).
 - إذا سأل عن قطع الغيار المنصرفة اليوم إجمالاً (أو بدون تحديد): يمكنك دمج الجدولين بـ UNION ALL مع تمييز المصدر، أو الاستعلام عن مركز الصيانة والفرع.
 
 ---
@@ -357,6 +395,15 @@ async function callLlmApi(prompt, question, modelOverride, apiKeyOverride) {
 
         if (!response.ok) {
             const errText = await response.text();
+            // Resilient Rate-Limit Fallback Chain for Groq Free Tier
+            if (response.status === 429 && isGroq && model === 'openai/gpt-oss-120b') {
+                console.warn('[AI COPILOT] Groq 120B rate limit reached. Auto-falling back to ultra-fast 20B model ⚡');
+                return await callLlmApi(prompt, question, 'openai/gpt-oss-20b', apiKeyOverride);
+            }
+            if (response.status === 429 && isGroq && model === 'openai/gpt-oss-20b') {
+                console.warn('[AI COPILOT] Groq 20B rate limit reached. Auto-falling back to Qwen 3.8 model ⚡');
+                return await callLlmApi(prompt, question, 'qwen/qwen3.8-27b', apiKeyOverride);
+            }
             const providerName = isGroq ? 'Groq' : 'OpenRouter';
             throw new Error(`خطأ من خادم ${providerName} (${response.status}): ${errText}`);
         }
