@@ -12,9 +12,60 @@ If WScript.Arguments.Count > 0 Then
     dbPath = WScript.Arguments(0)
 End If
 
-Dim connStr
-connStr = "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" & dbPath & ";Persist Security Info=False;"
+Dim connStr, isConnected, lastErrorMsg
+isConnected = False
+lastErrorMsg = ""
+
+' 1. Try Microsoft.ACE.OLEDB.12.0 with Read-Only Shared Mode
+On Error Resume Next
+connStr = "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" & dbPath & ";Mode=Read;Persist Security Info=False;"
 conn.Open connStr
+If Err.Number = 0 Then
+    isConnected = True
+Else
+    lastErrorMsg = "ACE.12.0: " & Err.Description & " (0x" & Hex(Err.Number) & ")"
+    Err.Clear
+End If
+
+' 2. Try Microsoft.ACE.OLEDB.16.0 (Office 2016 / 2019 / 2021 / Microsoft 365)
+If Not isConnected Then
+    connStr = "Provider=Microsoft.ACE.OLEDB.16.0;Data Source=" & dbPath & ";Mode=Read;Persist Security Info=False;"
+    conn.Open connStr
+    If Err.Number = 0 Then
+        isConnected = True
+    Else
+        lastErrorMsg = lastErrorMsg & " | ACE.16.0: " & Err.Description & " (0x" & Hex(Err.Number) & ")"
+        Err.Clear
+    End If
+End If
+
+' 3. Try standard ACE without Mode=Read
+If Not isConnected Then
+    connStr = "Provider=Microsoft.ACE.OLEDB.12.0;Data Source=" & dbPath & ";Persist Security Info=False;"
+    conn.Open connStr
+    If Err.Number = 0 Then
+        isConnected = True
+    Else
+        Err.Clear
+    End If
+End If
+
+' 4. Try legacy Jet provider (for .mdb)
+If Not isConnected And LCase(Right(dbPath, 4)) = ".mdb" Then
+    connStr = "Provider=Microsoft.Jet.OLEDB.4.0;Data Source=" & dbPath & ";Persist Security Info=False;"
+    conn.Open connStr
+    If Err.Number = 0 Then
+        isConnected = True
+    Else
+        Err.Clear
+    End If
+End If
+
+If Not isConnected Then
+    WScript.Echo "ACCESS_CONNECTION_FAILED: " & lastErrorMsg & " | Path: " & dbPath
+    WScript.Quit 1
+End If
+On Error GoTo 0
 
 Function EscapeJson(str)
     If IsNull(str) Or IsEmpty(str) Then
