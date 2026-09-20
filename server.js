@@ -187,10 +187,21 @@ async function logSystemError(module, endpoint, err, req = null, severity = 'ERR
         
         console.error(`[SYSTEM ERROR - ${module}] [${endpoint}]:`, errMsg);
         
-        db.run(`
-            INSERT INTO system_error_logs (severity, module, endpoint, error_message, stack_trace, request_data, client_ip)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `, [severity, module, endpoint || '-', errMsg, stack, reqData, clientIp]);
+        if (appCfg.isCloudServer && pgPool) {
+            await pgPool.query(`
+                INSERT INTO system_error_logs (severity, module, endpoint, error_message, stack_trace, request_data, client_ip)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+            `, [severity, module, endpoint || '-', errMsg, stack, reqData, clientIp]).catch(pgErr => {
+                console.error('[FAILED TO LOG SYSTEM ERROR TO PG]', pgErr.message);
+            });
+        } else {
+            db.run(`
+                INSERT INTO system_error_logs (severity, module, endpoint, error_message, stack_trace, request_data, client_ip)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `, [severity, module, endpoint || '-', errMsg, stack, reqData, clientIp], (sqliteErr) => {
+                if (sqliteErr) console.error('[FAILED TO LOG SYSTEM ERROR TO SQLITE]', sqliteErr.message);
+            });
+        }
 
         if (typeof broadcastSseEvent === 'function') {
             broadcastSseEvent('system_error_alert', {
@@ -289,13 +300,13 @@ const RAW_TABLE_PK_MAP = {
     'payments_raw': 'ID',
     'store_pos_raw': 'Serial',
     'store_sim_raw': 'sim_serial',
-    'store_sp_raw': null,
-    'store_sp_maintenance_raw': null,
+    'store_sp_raw': 'sync_key',
+    'store_sp_maintenance_raw': 'sync_key',
     'installments_raw': 'id',
     'tblfaults_raw': 'faultid',
     'tblstaff_raw': 'id',
     'tblfixes_raw': 'FixID',
-    'failure_points_raw': null
+    'failure_points_raw': 'sync_key'
 };
 
 let _pgConstraintCache = new Map();
@@ -499,20 +510,45 @@ async function initAppSchema() {
 
 
         // Initialize system_error_logs table for automated diagnostics & tracing
-        await runQuery(`
-            CREATE TABLE IF NOT EXISTS system_error_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp DATETIME DEFAULT (datetime('now', 'localtime')),
-                severity TEXT DEFAULT 'ERROR',
-                module TEXT,
-                endpoint TEXT,
-                error_message TEXT,
-                stack_trace TEXT,
-                request_data TEXT,
-                client_ip TEXT
-            );
-        `);
-        await runQuery(`CREATE INDEX IF NOT EXISTS idx_system_error_logs_ts ON system_error_logs(timestamp);`).catch(() => {});
+        if (appCfg.isCloudServer && pgPool) {
+            await pgPool.query(`
+                CREATE TABLE IF NOT EXISTS system_error_logs (
+                    id SERIAL PRIMARY KEY,
+                    timestamp TEXT DEFAULT to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'),
+                    severity TEXT DEFAULT 'ERROR',
+                    module TEXT,
+                    endpoint TEXT,
+                    error_message TEXT,
+                    stack_trace TEXT,
+                    request_data TEXT,
+                    client_ip TEXT
+                );
+            `).catch(e => console.error('[INIT PG ERROR LOGS TABLE]', e.message));
+            await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_system_error_logs_ts ON system_error_logs(timestamp);`).catch(() => {});
+            
+            // Ensure sync_key column and unique indexes exist on Postgres for spare parts
+            await pgPool.query(`ALTER TABLE store_sp_raw ADD COLUMN IF NOT EXISTS sync_key TEXT;`).catch(() => {});
+            await pgPool.query(`ALTER TABLE store_sp_maintenance_raw ADD COLUMN IF NOT EXISTS sync_key TEXT;`).catch(() => {});
+            await pgPool.query(`ALTER TABLE failure_points_raw ADD COLUMN IF NOT EXISTS sync_key TEXT;`).catch(() => {});
+            await pgPool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_store_sp_raw_sync_key ON store_sp_raw(sync_key);`).catch(() => {});
+            await pgPool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_store_sp_maint_sync_key ON store_sp_maintenance_raw(sync_key);`).catch(() => {});
+            await pgPool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_failure_points_sync_key ON failure_points_raw(sync_key);`).catch(() => {});
+        } else {
+            await runQuery(`
+                CREATE TABLE IF NOT EXISTS system_error_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp DATETIME DEFAULT (datetime('now', 'localtime')),
+                    severity TEXT DEFAULT 'ERROR',
+                    module TEXT,
+                    endpoint TEXT,
+                    error_message TEXT,
+                    stack_trace TEXT,
+                    request_data TEXT,
+                    client_ip TEXT
+                );
+            `).catch(() => {});
+            await runQuery(`CREATE INDEX IF NOT EXISTS idx_system_error_logs_ts ON system_error_logs(timestamp);`).catch(() => {});
+        }
         await runQuery(`CREATE INDEX IF NOT EXISTS idx_tickets_issue_clean ON tickets(issue_details);`).catch(() => {});
         await runQuery(`CREATE INDEX IF NOT EXISTS idx_devices_model ON devices(model);`).catch(() => {});
         await runQuery(`CREATE INDEX IF NOT EXISTS idx_devices_status ON devices(status);`).catch(() => {});

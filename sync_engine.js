@@ -8,6 +8,7 @@ const path = require('path');
 const { exec } = require('child_process');
 const sqlite3 = require('sqlite3').verbose();
 const { Pool } = require('pg');
+const crypto = require('crypto');
 
 let pgPool = null;
 function initPgPool() {
@@ -530,13 +531,20 @@ async function initSyncDatabase(db) {
     await dbRun(db, `CREATE TABLE IF NOT EXISTS payments_raw ("ID" TEXT PRIMARY KEY, pos_number TEXT, payer TEXT, payment_date TEXT, payment_amount TEXT, ref_num TEXT, payment_reason TEXT, payment_place TEXT);`);
     await dbRun(db, `CREATE TABLE IF NOT EXISTS store_pos_raw ("Serial" TEXT PRIMARY KEY, type TEXT, "Model" TEXT, faulty TEXT, pos_status TEXT, faulty_detils TEXT);`);
     await dbRun(db, `CREATE TABLE IF NOT EXISTS store_sim_raw (sim_serial TEXT PRIMARY KEY, network TEXT, sim_type TEXT, faulty TEXT, notes TEXT);`);
-    await dbRun(db, `CREATE TABLE IF NOT EXISTS store_sp_raw (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, count_in TEXT, count_out TEXT);`);
-    await dbRun(db, `CREATE TABLE IF NOT EXISTS store_sp_maintenance_raw (id INTEGER PRIMARY KEY AUTOINCREMENT, formNo TEXT, type TEXT, out_date TEXT, notes TEXT, faulty_detils TEXT);`);
+    await dbRun(db, `CREATE TABLE IF NOT EXISTS store_sp_raw (sync_key TEXT PRIMARY KEY, "Serial" TEXT, type TEXT, faulty TEXT, faulty_detils TEXT, notes TEXT, "Model" TEXT, reviewed TEXT, count_in TEXT, count_out TEXT, out_date TEXT, in_date TEXT);`);
+    await dbRun(db, `CREATE TABLE IF NOT EXISTS store_sp_maintenance_raw (sync_key TEXT PRIMARY KEY, "Serial" TEXT, type TEXT, faulty TEXT, faulty_detils TEXT, formNo TEXT, "Model" TEXT, count_out TEXT, out_date TEXT, notes TEXT);`);
     await dbRun(db, `CREATE TABLE IF NOT EXISTS tblfaults_raw (faultid TEXT PRIMARY KEY, FaultName TEXT);`);
     await dbRun(db, `CREATE TABLE IF NOT EXISTS tblstaff_raw (id TEXT PRIMARY KEY, name TEXT, jtitle TEXT);`);
     await dbRun(db, `CREATE TABLE IF NOT EXISTS tblfixes_raw ("FixID" TEXT PRIMARY KEY, "FixName" TEXT);`);
-    await dbRun(db, `CREATE TABLE IF NOT EXISTS failure_points_raw (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, model TEXT, fees TEXT, price TEXT);`);
+    await dbRun(db, `CREATE TABLE IF NOT EXISTS failure_points_raw (sync_key TEXT PRIMARY KEY, type TEXT, model TEXT, fees TEXT, price TEXT);`);
     await dbRun(db, `CREATE TABLE IF NOT EXISTS failure_points_price_history (id INTEGER PRIMARY KEY AUTOINCREMENT, part_name TEXT NOT NULL, model TEXT, old_price REAL NOT NULL, new_price REAL NOT NULL, change_date TEXT, effective_from TEXT, change_source TEXT);`);
+
+    try { await dbRun(db, `ALTER TABLE store_sp_raw ADD COLUMN IF NOT EXISTS sync_key TEXT;`); } catch(e){}
+    try { await dbRun(db, `ALTER TABLE store_sp_maintenance_raw ADD COLUMN IF NOT EXISTS sync_key TEXT;`); } catch(e){}
+    try { await dbRun(db, `ALTER TABLE failure_points_raw ADD COLUMN IF NOT EXISTS sync_key TEXT;`); } catch(e){}
+    try { await dbRun(db, `CREATE UNIQUE INDEX IF NOT EXISTS idx_store_sp_raw_sync_key ON store_sp_raw(sync_key);`); } catch(e){}
+    try { await dbRun(db, `CREATE UNIQUE INDEX IF NOT EXISTS idx_store_sp_maint_sync_key ON store_sp_maintenance_raw(sync_key);`); } catch(e){}
+    try { await dbRun(db, `CREATE UNIQUE INDEX IF NOT EXISTS idx_failure_points_sync_key ON failure_points_raw(sync_key);`); } catch(e){}
 
     const cfg = readConfigSafely();
     if (cfg.isCloudServer) {
@@ -589,18 +597,48 @@ function readJsonSafely(filePath) {
 }
 
 /**
+ * Enrich spare parts and failure points records with deterministic unique sync_key
+ */
+function enrichRecordsWithSyncKey(tableName, records) {
+    if (!records || !Array.isArray(records)) return records;
+    if (tableName !== 'store_sp_raw' && tableName !== 'store_sp_maintenance_raw' && tableName !== 'failure_points_raw') {
+        return records;
+    }
+    const occurrenceMap = new Map();
+    for (const row of records) {
+        let sig = '';
+        if (tableName === 'store_sp_raw') {
+            sig = [row.Serial, row.type, row.in_date, row.out_date, row.notes, row.count_in, row.count_out, row.faulty_detils].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
+        } else if (tableName === 'store_sp_maintenance_raw') {
+            sig = [row.Serial, row.formNo, row.type, row.out_date, row.notes, row.faulty_detils].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
+        } else if (tableName === 'failure_points_raw') {
+            sig = [row.type, row.model].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
+        }
+        const occ = (occurrenceMap.get(sig) || 0) + 1;
+        occurrenceMap.set(sig, occ);
+        const fullSig = occ > 1 ? `${sig}#${occ}` : sig;
+        row.sync_key = crypto.createHash('md5').update(fullSig).digest('hex');
+    }
+    return records;
+}
+
+/**
  * Generate unique record identifier supporting single PK and composite signatures
  */
 function getRowIdentifier(tableName, primaryKey, row) {
     if (!row) return '';
+    if (row.sync_key) return row.sync_key;
     if (tableName === 'store_sp_raw') {
-        return [row.Serial, row.type, row.in_date, row.out_date, row.notes, row.count_in, row.count_out, row.faulty_detils].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
+        const sig = [row.Serial, row.type, row.in_date, row.out_date, row.notes, row.count_in, row.count_out, row.faulty_detils].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
+        return crypto.createHash('md5').update(sig).digest('hex');
     }
     if (tableName === 'store_sp_maintenance_raw') {
-        return [row.Serial, row.formNo, row.type, row.out_date, row.notes, row.faulty_detils].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
+        const sig = [row.Serial, row.formNo, row.type, row.out_date, row.notes, row.faulty_detils].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
+        return crypto.createHash('md5').update(sig).digest('hex');
     }
     if (tableName === 'failure_points_raw') {
-        return [row.type, row.model].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
+        const sig = [row.type, row.model].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
+        return crypto.createHash('md5').update(sig).digest('hex');
     }
     const val = row[primaryKey];
     if (val !== undefined && val !== null && String(val).trim() !== '') {
@@ -1270,13 +1308,13 @@ async function performFullSync(db) {
             { file: 'payments.json', table: 'payments_raw', pk: 'ID', arabicName: 'المدفوعات والتحصيلات (Payments)' },
             { file: 'Store_POS.json', table: 'store_pos_raw', pk: 'Serial', arabicName: 'مخزن ماكينات الـ POS (Store_POS)' },
             { file: 'Store_Sim.json', table: 'store_sim_raw', pk: 'sim_serial', arabicName: 'مخزن شرائح الاتصال (Store_Sim)' },
-            { file: 'Store_SP.json', table: 'store_sp_raw', pk: 'COMPOSITE', arabicName: 'مخزن وحركات قطع غيار الفرع (Store_SP)' },
-            { file: 'Store_SP_maintenance.json', table: 'store_sp_maintenance_raw', pk: 'COMPOSITE', arabicName: 'قطع غيار مركز الصيانة الرئيسي (Store_SP_maintenance)' },
+            { file: 'Store_SP.json', table: 'store_sp_raw', pk: 'sync_key', arabicName: 'مخزن وحركات قطع غيار الفرع (Store_SP)' },
+            { file: 'Store_SP_maintenance.json', table: 'store_sp_maintenance_raw', pk: 'sync_key', arabicName: 'قطع غيار مركز الصيانة الرئيسي (Store_SP_maintenance)' },
             { file: 'tblInstallments.json', table: 'installments_raw', pk: 'ID', arabicName: 'عقود وأقساط الماكينات (tblInstallments)' },
             { file: 'tblFaults.json', table: 'tblfaults_raw', pk: 'faultid', arabicName: 'قائمة الأعطال (tblFaults)' },
             { file: 'AuthorizedUsers.json', table: 'tblstaff_raw', pk: 'id', arabicName: 'طاقم العمل والفنيين (AuthorizedUsers)' },
             { file: 'tblFixes.json', table: 'tblfixes_raw', pk: 'FixID', arabicName: 'أنواع الإصلاحات (tblFixes)' },
-            { file: 'failure_points.json', table: 'failure_points_raw', pk: 'COMPOSITE', arabicName: 'نقاط الأعطال (failure_points)' }
+            { file: 'failure_points.json', table: 'failure_points_raw', pk: 'sync_key', arabicName: 'نقاط الأعطال (failure_points)' }
         ];
 
         setProgress(30, 'مقارنة وفحص التغييرات', 'بدء فحص وتتبع التغييرات ومقارنة الفروقات...', '', 3);
@@ -1289,8 +1327,9 @@ async function performFullSync(db) {
             setProgress(currentPct, 'مقارنة وفحص التغييرات', `فحص جدول ${cfg.arabicName} وتوليد سجلات التدقيق...`, cfg.table, 3);
 
             const filePath = path.join(DATA_SYNC_DIR, cfg.file);
-            const records = readJsonSafely(filePath);
+            let records = readJsonSafely(filePath);
             if (records && Array.isArray(records)) {
+                records = enrichRecordsWithSyncKey(cfg.table, records);
                 try {
                     const diffResult = await syncTableWithDiff(db, cfg.table, cfg.pk, records);
                     const changesInTable = diffResult.inserted + diffResult.updated + diffResult.deleted;
