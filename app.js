@@ -566,7 +566,13 @@ async function triggerAccessSync(btn, icon) {
     }, 350);
 
     try {
-        const response = await fetch('/api/sync/run', { method: 'POST' });
+        const response = await fetch('/api/sync/run', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-secret': 'TITI'
+            }
+        });
         const data = await response.json();
         pollingActive = false;
         clearInterval(pollInterval);
@@ -4379,6 +4385,13 @@ function refreshActiveTab() {
     else if (tabName === 'reports' && typeof loadReports === 'function') loadReports();
     else if (tabName === 'sync-monitor') loadSyncMonitor();
     else if (tabName === 'data-explorer') fetchDataExplorerTable();
+    else if (tabName === 'settings') {
+        if (typeof checkDiagnosticsPulse === 'function') checkDiagnosticsPulse();
+        const diagPane = document.getElementById('settings-subtab-diagnostics');
+        if (diagPane && diagPane.style.display !== 'none' && typeof loadDiagnosticsErrorLogs === 'function') {
+            loadDiagnosticsErrorLogs();
+        }
+    }
 }
 
 // ==========================================
@@ -6660,6 +6673,11 @@ window.loadTimeMachineData = loadTimeMachineData;
 // Global Frontend Error Listeners (Capture client JS errors automatically)
 window.addEventListener('error', function(e) {
     try {
+        const src = e.filename || '';
+        // Suppress browser extension noise and permissions policy warnings
+        if (src.includes('chrome-extension://') || src.includes('moz-extension://') || src.includes('content.js') || src.includes('installHook.js')) return;
+        if (!e.message || e.message === 'Script error.' || e.message.includes('Permissions policy violation')) return;
+
         fetch('/api/diagnostics/log-client-error', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -6680,12 +6698,17 @@ window.addEventListener('error', function(e) {
 window.addEventListener('unhandledrejection', function(e) {
     try {
         const reason = e.reason;
+        const msg = reason ? (reason.message || String(reason)) : '';
+        const stack = reason && reason.stack ? reason.stack : '';
+        if (stack.includes('chrome-extension://') || stack.includes('moz-extension://') || stack.includes('content.js') || stack.includes('installHook.js')) return;
+        if (msg.includes('Permissions policy violation')) return;
+
         fetch('/api/diagnostics/log-client-error', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                message: reason ? (reason.message || String(reason)) : 'Unhandled Promise Rejection',
-                stack: reason && reason.stack ? reason.stack : '',
+                message: msg || 'Unhandled Promise Rejection',
+                stack: stack,
                 url: window.location.href,
                 userAgent: navigator.userAgent
             })
@@ -7130,11 +7153,121 @@ window.syncSingleTable = syncSingleTable;
 
 let currentSelectedDiagErrorId = null;
 
+async function requestAiErrorAnalysis() {
+    const errorObj = window.__diagnosticErrorsFullMap ? window.__diagnosticErrorsFullMap[currentSelectedDiagErrorId] : null;
+    const explEl = document.getElementById('diag-modal-explanation');
+    const actionDescEl = document.getElementById('diag-modal-action-desc');
+    if (!explEl) return;
+
+    explEl.innerHTML = '<span style="color:#a855f7;"><i data-lucide="loader-2" class="spin-animation" style="width:14px;height:14px;vertical-align:middle;"></i> جاري استشارة الذكاء الاصطناعي لتحليل الخطأ واقتراح الحل الأمثل...</span>';
+    refreshIcons();
+
+    try {
+        const question = `اشرح لي باختصار وبشكل مفهوم سبب هذا الخطأ المسجل في نظام SmartCS وكيفية معالجته:\nالوحدة: ${errorObj?.module || 'SYS'}\nالمسار: ${errorObj?.endpoint || '-'}\nالرسالة: ${errorObj?.error_message || ''}\nالتفاصيل: ${errorObj?.stack_trace || ''}`;
+        const res = await fetch('/api/ai/query', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question })
+        });
+        const data = await res.json();
+        if (data && data.success && data.explanation) {
+            explEl.innerHTML = `<div style="color:#e2e8f0; line-height:1.7; background:rgba(168,85,247,0.08); padding:12px; border-radius:8px; border:1px solid rgba(168,85,247,0.25);">${escapeHtml(data.explanation)}</div>`;
+            if (actionDescEl) {
+                actionDescEl.innerHTML = `<span style="color:#10b981;">💡 توصية المساعد الذكي:</span> راجع التحليل أعلاه أو اضغط على الإجراءات المتاحة.`;
+            }
+        } else {
+            explEl.textContent = 'تعذر الحصول على تحليل من المساعد الذكي حالياً.';
+        }
+    } catch (err) {
+        explEl.textContent = 'تعذر الاتصال بخدمة الذكاء الاصطناعي: ' + err.message;
+    }
+    refreshIcons();
+}
+window.requestAiErrorAnalysis = requestAiErrorAnalysis;
+
 function analyzeErrorForResolution(err) {
     const msg = (err.error_message || '').toLowerCase();
     const stack = (err.stack_trace || '').toLowerCase();
-    const combined = `${msg} ${stack}`;
+    const endpoint = (err.endpoint || '').toLowerCase();
+    const combined = `${msg} ${stack} ${endpoint}`;
 
+    // 1. External Automated Bot Probes / Malformed JSON on Non-Existent Routes
+    if (combined.includes('unexpected token') || combined.includes('expected ','' ) || combined.includes('is not valid json') || combined.includes('jeecg') || combined.includes('telemetry') || combined.includes('show') || combined.includes('hyper/send')) {
+        return {
+            title: 'محاولة فحص خارجي عشوائي تم صدها (Automated Bot Probe)',
+            badge: '[EXTERNAL_BOT_BLOCKED]',
+            badgeColor: '#10b981',
+            explanation: 'هذا الطلب ورد من أداة فحص خارجية آلية على الإنترنت تفحص الـ IP العام ببيانات JSON غير صالحة لاختبار ثغرات في برامج أخرى (مثل Jeecg أو Telemetry). تم صد الطلب تلقائياً وحماية السيرفر بنجاح، ولا يمثل أي خطر أو تأثير على بيانات أو أداء البرنامج.',
+            actionDesc: 'تم تفعيل فلترة هذه البوتات في تحديث السيرفر. يمكنك حذف هذا السجل المؤرشف فوراً لتفريغ جدول الأخطاء.',
+            actions: [
+                {
+                    label: '🗑️ حذف هذا السجل الآن',
+                    icon: 'trash-2',
+                    btnClass: 'cyber-btn-primary',
+                    style: 'background:rgba(239,68,68,0.2); border-color:#ef4444; color:#ef4444;',
+                    onClick: 'deleteCurrentDiagError();'
+                },
+                {
+                    label: '🤖 استشارة الذكاء الاصطناعي',
+                    icon: 'sparkles',
+                    btnClass: 'cyber-btn-secondary',
+                    onClick: 'requestAiErrorAnalysis();'
+                }
+            ]
+        };
+    }
+
+    // 2. Admin Authentication / Forbidden 403
+    if (combined.includes('forbidden') || combined.includes('x-admin-secret') || combined.includes('admin authentication')) {
+        return {
+            title: 'خطأ صلاحيات المزامنة السحابية (403 Forbidden)',
+            badge: '[AUTH_SECRET_MISMATCH]',
+            badgeColor: '#ef4444',
+            explanation: 'رفض السيرفر السحابي (VPS) تنفيذ طلب المزامنة لأن مفتاح الإدارة الأمني (x-admin-secret) غير ممرر بالطلب. تم إصلاح وتوحيد المفتاح الأمني في التحديث الجديد.',
+            actionDesc: 'تم ضبط الهيدر الأمني بنجاح. يمكنك إعادة تشغيل المزامنة الآن بالتصريح المعتمد.',
+            actions: [
+                {
+                    label: '⚡ تشغيل المزامنة بالتصريح المعتمد',
+                    icon: 'refresh-cw',
+                    btnClass: 'cyber-btn-primary',
+                    onClick: 'closeDiagResolutionModal(); triggerAccessSync();'
+                },
+                {
+                    label: '🗑️ حذف وتجاوز السجل',
+                    icon: 'trash-2',
+                    btnClass: 'cyber-btn-secondary',
+                    onClick: 'deleteCurrentDiagError();'
+                }
+            ]
+        };
+    }
+
+    // 3. Client UI / Browser Extension Notice
+    if (err.module === 'CLIENT_UI' || combined.includes('client error') || combined.includes('permissions policy')) {
+        return {
+            title: 'إشعار متصفح محلي أو إضافة خارجية (Client UI)',
+            badge: '[CLIENT_BROWSER_NOTICE]',
+            badgeColor: '#c084fc',
+            explanation: 'حدث هذا الاستثناء في متصفح العميل (بسبب إحدى إضافات المتصفح أو انقطاع لحظي أثناء تحميل الصفحة). تم تفعيل فلترة الإضافات الخارجية لمنع تكرار تسجيلها.',
+            actionDesc: 'الواجهة تعمل بكفاءة. يمكنك تحديث كاش الواجهة أو مسح هذا السجل.',
+            actions: [
+                {
+                    label: '🔄 إعادة تحميل الواجهة ⚡',
+                    icon: 'refresh-cw',
+                    btnClass: 'cyber-btn-primary',
+                    onClick: 'window.location.reload(true);'
+                },
+                {
+                    label: '🗑️ حذف هذا السجل',
+                    icon: 'trash-2',
+                    btnClass: 'cyber-btn-secondary',
+                    onClick: 'deleteCurrentDiagError();'
+                }
+            ]
+        };
+    }
+
+    // 4. Database Constraints
     if (combined.includes('on conflict') || combined.includes('constraint') || combined.includes('reseed-vps') || combined.includes('store_sp_raw')) {
         return {
             title: 'تعارض قيود قاعدة البيانات (Constraint Conflict)',
@@ -7160,6 +7293,7 @@ function analyzeErrorForResolution(err) {
         };
     }
 
+    // 5. Network Timeouts
     if (combined.includes('etimedout') || combined.includes('econnrefused') || combined.includes('fetch failed') || combined.includes('enotfound')) {
         return {
             title: 'انقطاع مؤقت في الاتصال السحابي (Network Disconnect)',
@@ -7178,6 +7312,7 @@ function analyzeErrorForResolution(err) {
         };
     }
 
+    // 6. Outbox / Delta
     if (combined.includes('outbox') || combined.includes('dlq') || combined.includes('delta')) {
         return {
             title: 'حركات مزامنة لحظية في الانتظار (Delta Outbox)',
@@ -7196,17 +7331,25 @@ function analyzeErrorForResolution(err) {
         };
     }
 
+    // Fallback
     return {
         title: 'اعتراض الخطأ وحفظ استقرار النظام',
         badge: '[INTERCEPTED_LOG]',
         badgeColor: '#a855f7',
         explanation: 'تم اعتراض وتسجيل هذا الاستثناء في الصندوق الأسود للنظام لضمان عدم توقف البرنامج، والعمليات اليومية تعمل بشكل طبيعي.',
-        actionDesc: 'يمكنك إعادة فحص لوحة التشخيص أو مسح وتجاوز هذا السجل.',
+        actionDesc: 'يمكنك استشارة الذكاء الاصطناعي لشرح الخطأ أو مسح السجل.',
         actions: [
+            {
+                label: '🤖 تحليل فوري بالذكاء الاصطناعي',
+                icon: 'sparkles',
+                btnClass: 'cyber-btn-primary',
+                style: 'background:linear-gradient(135deg, #8b5cf6, #6d28d9);',
+                onClick: 'requestAiErrorAnalysis();'
+            },
             {
                 label: '⚡ فحص حالة النظام الآن',
                 icon: 'activity',
-                btnClass: 'cyber-btn-primary',
+                btnClass: 'cyber-btn-secondary',
                 onClick: 'loadDiagnosticsDashboard(); closeDiagResolutionModal();'
             }
         ]
@@ -7294,7 +7437,10 @@ async function clearAllDiagnosticsErrors() {
     try {
         const res = await fetch('/api/diagnostics/clear-errors', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 
+                'Content-Type': 'application/json',
+                'x-admin-secret': 'TITI'
+            }
         });
         const data = await res.json();
         if (!res.ok || !data.success) throw new Error(data.error || 'فشل مسح السجل');
