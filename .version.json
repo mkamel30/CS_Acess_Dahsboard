@@ -1,7 +1,7 @@
 {
   "version": "4.8.9-ai",
-  "commit": "f0e4942",
-  "date": "2026-10-22 10:53",
-  "message": "feat(sims): link SIM warehouse table and timeline tracking to trade, temp_transfer, and payments",
+  "commit": "2854a75",
+  "date": "2026-10-22 11:27",
+  "message": "fix(updater): fix branch server auto-update auth guard, version sync, and batch updater script (v4.8.9-ai)",
   "branch": "main"
 }
