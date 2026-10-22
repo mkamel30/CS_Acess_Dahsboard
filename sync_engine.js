@@ -1329,6 +1329,7 @@ async function performFullSync(db) {
             const filePath = path.join(DATA_SYNC_DIR, cfg.file);
             let records = readJsonSafely(filePath);
             if (records && Array.isArray(records)) {
+                records = records.filter(r => getRowIdentifier(cfg.table, cfg.pk, r));
                 records = enrichRecordsWithSyncKey(cfg.table, records);
                 try {
                     const diffResult = await syncTableWithDiff(db, cfg.table, cfg.pk, records);

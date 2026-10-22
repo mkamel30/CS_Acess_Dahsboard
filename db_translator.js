@@ -79,6 +79,10 @@ function translateSqliteToPostgres(sql, params) {
     pgSql = pgSql.replace(/\bCOLLATE\s+NOCASE\b/ig, '');
     pgSql = pgSql.replace(/\bCOLLATE\s+BINARY\b/ig, '');
 
+    // Auto-convert SQLite sqlite_master catalog queries to PostgreSQL information_schema
+    pgSql = pgSql.replace(/\bFROM\s+sqlite_master\b/ig, "FROM (SELECT table_name AS name, 'table' AS type, '' AS sql FROM information_schema.tables WHERE table_schema = 'public') AS pg_sqlite_master");
+    pgSql = pgSql.replace(/\bsqlite_master\b/ig, "(SELECT table_name AS name, 'table' AS type, '' AS sql FROM information_schema.tables WHERE table_schema = 'public')");
+
     // Auto-convert SQLite rowid references for PostgreSQL compatibility (map to real id column)
     pgSql = pgSql.replace(/\b(\w+\.)?rowid\s+as\s+id\b/ig, '$1id as id');
     pgSql = pgSql.replace(/\bORDER\s+BY\s+(\w+\.)?rowid(\s+(ASC|DESC))?/ig, 'ORDER BY $1id $2');

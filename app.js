@@ -7217,6 +7217,32 @@ function analyzeErrorForResolution(err) {
         };
     }
 
+    // 0. SQLite Catalog Query on Postgres (sqlite_master)
+    if (combined.includes('sqlite_master')) {
+        return {
+            title: 'استعلام عن بنية الجداول (sqlite_master Schema Dialect)',
+            badge: '[DIALECT_MAPPED]',
+            badgeColor: '#10b981',
+            explanation: 'تم رصد استعلام موجه لكتالوج SQLite (sqlite_master) على خادم PostgreSQL السحابي. تم تصحيح المترجم السحابي تلقائياً لترجمة استعلامات sqlite_master بسلاسة عبر information_schema.',
+            actionDesc: 'تم تفعيل التوافق السحابي بنجاح. يمكنك حذف وتجاوز هذا السجل المؤرشف بضغطة زر.',
+            actions: [
+                {
+                    label: '🗑️ حذف وتجاوز هذا السجل',
+                    icon: 'trash-2',
+                    btnClass: 'cyber-btn-primary',
+                    style: 'background:linear-gradient(135deg, #10b981, #059669);',
+                    onClick: 'deleteCurrentDiagError();'
+                },
+                {
+                    label: '⚡ فحص حالة النظام الآن',
+                    icon: 'activity',
+                    btnClass: 'cyber-btn-secondary',
+                    onClick: 'loadDiagnosticsDashboard(); closeDiagResolutionModal();'
+                }
+            ]
+        };
+    }
+
     // 2. Admin Authentication / Forbidden 403
     if (combined.includes('forbidden') || combined.includes('x-admin-secret') || combined.includes('admin authentication')) {
         return {
@@ -7357,55 +7383,88 @@ function analyzeErrorForResolution(err) {
 }
 
 function showDiagnosticStack(id) {
-    const err = window.__diagnosticErrorsFullMap ? window.__diagnosticErrorsFullMap[id] : null;
-    const modal = document.getElementById('diag-error-resolution-modal');
-    if (!modal) return;
+    try {
+        const err = window.__diagnosticErrorsFullMap ? window.__diagnosticErrorsFullMap[id] : null;
+        const modal = document.getElementById('diag-error-resolution-modal');
+        if (!modal) return;
 
-    currentSelectedDiagErrorId = id;
-    const errorObj = err || {
-        id,
-        error_message: 'Unknown Error',
-        stack_trace: window.__diagnosticErrorStackMap ? window.__diagnosticErrorStackMap[id] : '',
-        timestamp: new Date().toISOString()
-    };
+        currentSelectedDiagErrorId = id;
+        const errorObj = err || {
+            id,
+            error_message: 'Unknown Error',
+            stack_trace: window.__diagnosticErrorStackMap ? window.__diagnosticErrorStackMap[id] : '',
+            timestamp: new Date().toISOString()
+        };
 
-    const analysis = analyzeErrorForResolution(errorObj);
+        const analysis = analyzeErrorForResolution(errorObj);
 
-    document.getElementById('diag-modal-title').textContent = analysis.title;
-    const badgeEl = document.getElementById('diag-modal-badge');
-    if (badgeEl) {
-        badgeEl.textContent = analysis.badge;
-        badgeEl.style.color = analysis.badgeColor;
-        badgeEl.style.borderColor = analysis.badgeColor;
+        const titleEl = document.getElementById('diag-modal-title');
+        if (titleEl) titleEl.textContent = analysis.title;
+        const badgeEl = document.getElementById('diag-modal-badge');
+        if (badgeEl) {
+            badgeEl.textContent = analysis.badge;
+            badgeEl.style.color = analysis.badgeColor;
+            badgeEl.style.borderColor = analysis.badgeColor;
+        }
+
+        const timeEl = document.getElementById('diag-modal-time');
+        if (timeEl) {
+            timeEl.innerHTML = typeof formatCairoDateTime === 'function' ? formatCairoDateTime(errorObj.timestamp || new Date().toISOString()) : (errorObj.timestamp || '');
+        }
+        const rawMsgEl = document.getElementById('diag-modal-raw-msg');
+        if (rawMsgEl) rawMsgEl.textContent = errorObj.error_message || 'Unspecified Error';
+        const expEl = document.getElementById('diag-modal-explanation');
+        if (expEl) expEl.textContent = analysis.explanation;
+        const actDescEl = document.getElementById('diag-modal-action-desc');
+        if (actDescEl) actDescEl.textContent = analysis.actionDesc;
+        const metaEl = document.getElementById('diag-modal-meta');
+        if (metaEl) metaEl.textContent = `[MODULE: ${errorObj.module || 'SYS'}] [ENDPOINT: ${errorObj.endpoint || '-'}]`;
+        const stackEl = document.getElementById('diag-modal-stack');
+        if (stackEl) stackEl.textContent = errorObj.stack_trace || '[NO_STACK_TRACE_AVAILABLE]';
+
+        const actionContainer = document.getElementById('diag-modal-action-buttons');
+        if (actionContainer) {
+            actionContainer.innerHTML = (analysis.actions || []).map(act => `
+                <button type="button" class="${act.btnClass || 'cyber-btn-primary'}" style="font-size:11px; padding:6px 14px; ${act.style || ''}" onclick="${act.onClick}">
+                    <i data-lucide="${act.icon || 'zap'}" style="width:12px;height:12px;"></i> ${act.label}
+                </button>
+            `).join('');
+        }
+
+        modal.classList.add('active');
+        modal.style.display = 'flex';
+        modal.style.opacity = '1';
+        modal.style.visibility = 'visible';
+        document.body.style.overflow = 'hidden';
+        refreshIcons();
+    } catch (e) {
+        console.error('[DIAG MODAL ERROR]', e);
     }
-
-    document.getElementById('diag-modal-time').textContent = formatCairoDateTime(errorObj.timestamp || new Date().toISOString());
-    document.getElementById('diag-modal-raw-msg').textContent = errorObj.error_message || 'Unspecified Error';
-    document.getElementById('diag-modal-explanation').textContent = analysis.explanation;
-    document.getElementById('diag-modal-action-desc').textContent = analysis.actionDesc;
-    document.getElementById('diag-modal-meta').textContent = `[MODULE: ${errorObj.module || 'SYS'}] [ENDPOINT: ${errorObj.endpoint || '-'}]`;
-    document.getElementById('diag-modal-stack').textContent = errorObj.stack_trace || '[NO_STACK_TRACE_AVAILABLE]';
-
-    const actionContainer = document.getElementById('diag-modal-action-buttons');
-    if (actionContainer) {
-        actionContainer.innerHTML = (analysis.actions || []).map(act => `
-            <button type="button" class="${act.btnClass || 'cyber-btn-primary'}" style="font-size:11px; padding:6px 14px; ${act.style || ''}" onclick="${act.onClick}">
-                <i data-lucide="${act.icon || 'zap'}" style="width:12px;height:12px;"></i> ${act.label}
-            </button>
-        `).join('');
-    }
-
-    modal.style.display = 'flex';
-    refreshIcons();
 }
 window.showDiagnosticStack = showDiagnosticStack;
 
 function closeDiagResolutionModal() {
     const modal = document.getElementById('diag-error-resolution-modal');
-    if (modal) modal.style.display = 'none';
+    if (modal) {
+        modal.classList.remove('active');
+        modal.style.display = 'none';
+        modal.style.opacity = '0';
+        modal.style.visibility = 'hidden';
+    }
+    document.body.style.overflow = '';
     currentSelectedDiagErrorId = null;
 }
 window.closeDiagResolutionModal = closeDiagResolutionModal;
+
+// Close diag modal on Escape key press
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        const modal = document.getElementById('diag-error-resolution-modal');
+        if (modal && modal.classList.contains('active')) {
+            closeDiagResolutionModal();
+        }
+    }
+});
 
 async function deleteCurrentDiagError() {
     if (!currentSelectedDiagErrorId) return;

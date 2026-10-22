@@ -3898,7 +3898,7 @@
     <!-- ======================================================== -->
     <!-- SMART ERROR DIAGNOSIS & 1-CLICK RESOLUTION MODAL          -->
     <!-- ======================================================== -->
-    <div class="modal-backdrop" id="diag-error-resolution-modal" style="display:none; position:fixed; inset:0; background:rgba(10, 15, 29, 0.88); backdrop-filter:blur(14px); z-index:10001; align-items:center; justify-content:center;">
+    <div class="modal-backdrop" id="diag-error-resolution-modal" onclick="if(event.target === this) closeDiagResolutionModal();" style="display:none; position:fixed; inset:0; background:rgba(10, 15, 29, 0.88); backdrop-filter:blur(14px); z-index:10001; align-items:center; justify-content:center;">
         <div style="background:linear-gradient(145deg, #0d1527, #070a14); border:1px solid rgba(0, 240, 255, 0.35); border-radius:20px; box-shadow:0 25px 60px rgba(0,0,0,0.8), 0 0 35px rgba(0, 240, 255, 0.2); width:92%; max-width:680px; overflow:hidden; animation:modalScaleUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
             <!-- Modal Header -->
             <div style="padding:18px 24px; background:rgba(15, 23, 42, 0.85); border-bottom:1px solid rgba(0, 240, 255, 0.15); display:flex; justify-content:space-between; align-items:center;">

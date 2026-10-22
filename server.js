@@ -4897,7 +4897,7 @@ app.post('/api/diagnostics/sync-table', requireAdmin, async (req, res) => {
     try {
         const config = readAppConfig();
         if (config.isCloudServer) {
-            return res.status(400).json({ success: false, error: 'Cannot push from cloud server' });
+            return res.status(400).json({ success: false, error: 'مزامنة الجدول متاحة من جهاز الفرع المحلي (المرسل) فقط حيث توجد قاعدة بيانات الآكسيس.' });
         }
         const { table } = req.body || {};
         if (!table) return res.status(400).json({ success: false, error: 'Table name required' });
@@ -4907,7 +4907,10 @@ app.post('/api/diagnostics/sync-table', requireAdmin, async (req, res) => {
             return res.status(400).json({ success: false, error: `Invalid table name: ${table}` });
         }
 
-        const rows = await allQuery(`SELECT * FROM "${table}"`) || [];
+        let filterClause = '';
+        if (table === 'store_sim_raw') filterClause = "WHERE sim_serial IS NOT NULL AND TRIM(sim_serial) != ''";
+        else if (table === 'store_pos_raw') filterClause = 'WHERE "Serial" IS NOT NULL AND TRIM("Serial") != \'\'';
+        const rows = await allQuery(`SELECT * FROM "${table}" ${filterClause}`) || [];
         const cloudUrl = (config.cloudEndpoint || 'https://smartcs.m-kamel.workers.dev/api/sync/delta').replace(/\/api\/sync\/delta.*$/, '/api/sync/full-seed');
         const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
 
@@ -5105,8 +5108,15 @@ app.post('/api/sync/full-seed', express.json({ limit: '100mb' }), async (req, re
 
     try {
         if (tablesData && typeof tablesData === 'object') {
-            for (const [tbl, rows] of Object.entries(tablesData)) {
-                if (!Array.isArray(rows) || rows.length === 0) continue;
+            for (const [tbl, rawRows] of Object.entries(tablesData)) {
+                if (!Array.isArray(rawRows) || rawRows.length === 0) continue;
+                let rows = rawRows;
+                if (tbl === 'store_sim_raw') {
+                    rows = rawRows.filter(r => r && r.sim_serial && String(r.sim_serial).trim() !== '');
+                } else if (tbl === 'store_pos_raw') {
+                    rows = rawRows.filter(r => r && (r.Serial || r.serial) && String(r.Serial || r.serial).trim() !== '');
+                }
+                if (rows.length === 0) continue;
 
                 const sample = rows[0];
                 const cols = Object.keys(sample);
@@ -5312,7 +5322,12 @@ app.post('/api/diagnostics/reseed-vps', requireAdmin, async (req, res) => {
 
         for (let tIdx = 0; tIdx < CORE_RECONCILIATION_TABLES.length; tIdx++) {
             const item = CORE_RECONCILIATION_TABLES[tIdx];
-            const rows = tableRowsMap.get(item.table) || [];
+            let rows = tableRowsMap.get(item.table) || [];
+            if (item.table === 'store_sim_raw') {
+                rows = rows.filter(r => r && r.sim_serial && String(r.sim_serial).trim() !== '');
+            } else if (item.table === 'store_pos_raw') {
+                rows = rows.filter(r => r && (r.Serial || r.serial) && String(r.Serial || r.serial).trim() !== '');
+            }
 
             if (rows.length === 0) {
                 cloudReseedState.completedTables.push(item.name_ar);
