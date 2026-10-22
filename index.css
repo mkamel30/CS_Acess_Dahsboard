@@ -1799,56 +1799,216 @@ body.light-theme .sync-progress-track {
 
 @media (max-width: 768px) {
     .app-container {
-        grid-template-columns: minmax(0, 1fr);
-        height: auto;
-        min-height: 100vh;
-        overflow-y: auto;
+        display: flex !important;
+        flex-direction: column !important;
+        height: auto !important;
+        min-height: 100vh !important;
+        overflow-x: hidden !important;
+        overflow-y: visible !important;
     }
     body {
-        overflow: auto;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+    }
+    .main-content {
+        height: auto !important;
+        min-height: 100vh !important;
+        overflow: visible !important;
+        width: 100% !important;
     }
     .sidebar {
-        height: auto;
-        flex-direction: row;
-        padding: 8px 12px;
-        overflow-x: auto;
-        position: sticky;
-        top: 0;
-        z-index: 30;
-        border-left: none;
-        border-bottom: 1px solid var(--md-sys-color-outline-variant);
+        height: auto !important;
+        width: 100% !important;
+        flex-direction: row !important;
+        padding: 6px 8px !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 1000 !important;
+        border-left: none !important;
+        border-bottom: 1px solid var(--md-sys-color-outline-variant) !important;
+        background: var(--md-sys-color-surface) !important;
+        scrollbar-width: none !important;
+        -ms-overflow-style: none !important;
+    }
+    .sidebar::-webkit-scrollbar,
+    .sidebar .nav-menu::-webkit-scrollbar {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
     }
     .sidebar .nav-menu {
-        flex-direction: row;
-        overflow-x: auto;
-        gap: 6px;
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        gap: 4px !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 4px !important;
+        scrollbar-width: none !important;
+    }
+    .sidebar .nav-item {
+        flex-shrink: 0 !important;
+        padding: 8px 10px !important;
+        border-radius: 10px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+    .sidebar .nav-item span {
+        display: none !important;
+    }
+    .sidebar .nav-item i {
+        margin: 0 !important;
+        width: 22px !important;
+        height: 22px !important;
     }
     .sidebar .logo-area, .sidebar-footer {
-        display: none;
+        display: none !important;
     }
     .app-header {
-        padding: 10px 14px;
-        flex-wrap: wrap;
-        gap: 8px;
+        padding: 8px 10px !important;
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+        position: relative !important;
+        top: auto !important;
+        background: var(--md-sys-color-surface) !important;
+        border-bottom: 1px solid var(--md-sys-color-outline-variant) !important;
+        z-index: 90 !important;
+    }
+    .header-meta {
+        width: 100% !important;
+        order: 1 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 6px !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        scrollbar-width: none !important;
+        padding: 2px 0 !important;
+    }
+    .header-meta::-webkit-scrollbar {
+        display: none !important;
+    }
+    .header-meta .btn,
+    .header-meta .meta-pill {
+        flex-shrink: 0 !important;
+        padding: 5px 10px !important;
+        font-size: 11px !important;
+        height: 32px !important;
+    }
+    #header-db-status {
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
     }
     .header-search {
-        max-width: 100%;
-        width: 100%;
-        order: 2;
+        max-width: 100% !important;
+        width: 100% !important;
+        order: 2 !important;
+        padding: 6px 12px !important;
+        min-width: 0 !important;
+        gap: 8px !important;
     }
+    .header-search input {
+        font-size: 12px !important;
+        min-width: 0 !important;
+    }
+    #btn-open-universal-search {
+        padding: 4px 10px !important;
+        font-size: 11px !important;
+        white-space: nowrap !important;
+        flex-shrink: 0 !important;
+    }
+    .content-body {
+        padding: 12px 10px !important;
+    }
+    .page-title-area {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 10px !important;
+        margin-bottom: 16px !important;
+    }
+    .page-title-area h1 {
+        font-size: 18px !important;
+    }
+    .dashboard-quick-actions {
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        scrollbar-width: none !important;
+        padding-bottom: 4px !important;
+    }
+    .dashboard-quick-actions::-webkit-scrollbar {
+        display: none !important;
+    }
+    .stats-grid,
+    .kpi-grid,
+    .cyber-kpi-grid,
     .warehouse-kpi-grid {
-        grid-template-columns: 1fr 1fr !important;
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 10px !important;
+        margin-bottom: 16px !important;
+    }
+    .stat-card,
+    .kpi-card,
+    .cyber-kpi-card {
+        padding: 12px 14px !important;
+        border-radius: 12px !important;
+    }
+    .stat-card h3,
+    .kpi-card h3,
+    .cyber-kpi-val {
+        font-size: 20px !important;
+    }
+    .panel-header {
+        flex-direction: column !important;
+        align-items: stretch !important;
         gap: 10px !important;
     }
+    .panel-header h3 {
+        font-size: 14px !important;
+    }
+    .panel-header > div:last-child {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+        width: 100% !important;
+    }
+    .panel-header select,
+    .panel-header input {
+        flex: 1 1 130px !important;
+        width: auto !important;
+        min-width: 0 !important;
+        box-sizing: border-box !important;
+    }
+    .filter-bar {
+        padding: 8px 12px !important;
+    }
+    .filter-bar input {
+        font-size: 12px !important;
+    }
     .warehouse-tab-switcher {
-        width: 100%;
-        overflow-x: auto;
-        white-space: nowrap;
-        padding-bottom: 6px;
+        width: 100% !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        white-space: nowrap !important;
+        padding-bottom: 6px !important;
+        scrollbar-width: none !important;
+    }
+    .warehouse-tab-switcher::-webkit-scrollbar {
+        display: none !important;
     }
     .wh-switch-btn {
-        padding: 6px 12px;
-        font-size: 12px;
+        padding: 6px 12px !important;
+        font-size: 12px !important;
+        flex-shrink: 0 !important;
     }
     .modal-card {
         width: 96% !important;
@@ -1882,14 +2042,23 @@ body.light-theme .sync-progress-track {
 }
 
 @media (max-width: 480px) {
-    .warehouse-kpi-grid {
+    #btn-open-universal-search span {
+        display: none !important;
+    }
+    #btn-open-universal-search {
+        padding: 6px 10px !important;
+    }
+    .warehouse-kpi-grid,
+    .stats-grid,
+    .kpi-grid,
+    .cyber-kpi-grid {
         grid-template-columns: 1fr !important;
     }
     .content-body {
-        padding: 12px 10px !important;
+        padding: 10px 8px !important;
     }
     .page-title-area h1 {
-        font-size: 18px !important;
+        font-size: 17px !important;
     }
     .wh-metrics-pills {
         grid-template-columns: 1fr !important;
@@ -1897,6 +2066,10 @@ body.light-theme .sync-progress-track {
     .modal-card {
         width: 98% !important;
         max-height: 96vh !important;
+    }
+    .header-meta .btn span,
+    .header-meta .meta-pill span {
+        font-size: 10px !important;
     }
 }
 
@@ -2770,48 +2943,23 @@ body.light-theme .toggle-slider {
 }
 
 
-/* --- 1. Mobile Responsiveness (Bottom Navigation) --- */
+/* --- 1. Mobile & Touch Screen Optimizations --- */
 @media (max-width: 768px) {
     .app-container {
-        grid-template-columns: 1fr !important;
-        grid-template-rows: 1fr auto !important;
-    }
-    .sidebar {
-        flex-direction: row !important;
-        justify-content: space-around !important;
-        align-items: center !important;
-        padding: 8px !important;
-        height: auto !important;
-        border-left: none !important;
-        border-top: 1px solid var(--md-sys-color-outline-variant) !important;
-        z-index: 1000 !important;
-        overflow-x: auto !important;
-    }
-    .logo-area, .sidebar-footer {
-        display: none !important;
-    }
-    .nav-menu {
-        flex-direction: row !important;
-        justify-content: space-around !important;
-        width: 100% !important;
-        overflow-y: hidden !important;
-        overflow-x: auto !important;
-        gap: 2px !important;
-    }
-    .nav-item {
+        display: flex !important;
         flex-direction: column !important;
-        padding: 8px 12px !important;
-        gap: 4px !important;
-        border-radius: 12px !important;
-        font-size: 10px !important;
+        height: auto !important;
+        min-height: 100vh !important;
+        overflow: visible !important;
     }
-    .nav-item i {
-        margin: 0 !important;
-        width: 24px !important;
-        height: 24px !important;
+    body {
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
     }
-    .nav-item span {
-        display: none !important;
+    .main-content {
+        height: auto !important;
+        min-height: 100vh !important;
+        overflow: visible !important;
     }
 }
 
@@ -2834,54 +2982,74 @@ body.light-theme .toggle-slider {
     border-radius: 4px;
 }
 
-/* --- 3. Sticky Columns (Automatic CSS) --- */
-.table-responsive {
-    overflow-x: auto;
-    position: relative;
-    max-width: 100%;
+/* --- 3. Universal Touch & Smooth Swipe Tables (No Column Freezing) --- */
+.table-responsive,
+.table-container {
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch !important;
+    position: relative !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    touch-action: pan-x pan-y !important;
+    overscroll-behavior-x: contain !important;
+    scrollbar-width: thin !important;
+    scrollbar-color: rgba(56, 189, 248, 0.3) transparent !important;
+    border-radius: 12px !important;
+    margin-bottom: 16px !important;
 }
 
+.table-responsive::-webkit-scrollbar,
+.table-container::-webkit-scrollbar {
+    height: 6px !important;
+}
+
+.table-responsive::-webkit-scrollbar-track,
+.table-container::-webkit-scrollbar-track {
+    background: transparent !important;
+}
+
+.table-responsive::-webkit-scrollbar-thumb,
+.table-container::-webkit-scrollbar-thumb {
+    background: rgba(56, 189, 248, 0.3) !important;
+    border-radius: 4px !important;
+}
+
+/* Remove sticky freeze from first and last columns completely */
 .data-table th:first-child,
-.data-table td:first-child {
-    position: sticky !important;
-    right: 0;
-    z-index: 2;
-    background-color: var(--md-sys-color-surface) !important;
-    box-shadow: -2px 0 5px rgba(0,0,0,0.08);
-}
-
+.data-table td:first-child,
 .data-table th:last-child,
-.data-table td:last-child {
+.data-table td:last-child,
+.cyber-table th:first-child,
+.cyber-table td:first-child,
+.cyber-table th:last-child,
+.cyber-table td:last-child {
+    position: static !important;
+    box-shadow: none !important;
+    right: auto !important;
+    left: auto !important;
+}
+
+/* Keep table thead sticky vertically during downward scroll */
+.data-table thead th,
+.cyber-table thead th {
     position: sticky !important;
-    left: 0;
-    z-index: 2;
-    background-color: var(--md-sys-color-surface) !important;
-    box-shadow: 2px 0 5px rgba(0,0,0,0.08);
-}
-
-.data-table thead th:first-child {
-    z-index: 20 !important;
     top: 0 !important;
-    right: 0 !important;
-    background-color: var(--md-sys-color-surface-container) !important;
+    z-index: 10 !important;
+    white-space: nowrap !important;
 }
 
-.data-table thead th:last-child {
-    z-index: 20 !important;
-    top: 0 !important;
-    left: 0 !important;
-    background-color: var(--md-sys-color-surface-container) !important;
+.data-table td,
+.cyber-table td {
+    white-space: nowrap;
 }
 
-body.light-theme .data-table th:first-child,
-body.light-theme .data-table td:first-child,
-body.light-theme .data-table th:last-child,
-body.light-theme .data-table td:last-child {
-    background-color: #ffffff !important;
-}
-body.light-theme .data-table thead th:first-child,
-body.light-theme .data-table thead th:last-child {
-    background-color: #f1f5f9 !important;
+.data-table td.cell-wrap,
+.data-table td.notes-cell {
+    white-space: normal !important;
+    min-width: 180px !important;
+    max-width: 320px !important;
+    word-break: break-word !important;
 }
 
 /* ========================================================================== */
