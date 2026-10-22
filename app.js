@@ -5580,23 +5580,30 @@ async function applyGitHubUpdate() {
     refreshIcons();
 
     try {
-        const res = await fetch('/api/system/auto-update', { method: 'POST' });
+        const adminSecret = localStorage.getItem('smartcs_admin_secret') || 'TITI';
+        const res = await fetch('/api/system/auto-update', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-secret': adminSecret
+            }
+        });
         const data = await res.json();
 
-        if (data.success) {
+        if (res.ok && data.success) {
             if (resultMsg) {
-                resultMsg.innerHTML = '<span style="color:#10b981; font-weight:bold;"><i data-lucide="check-circle"></i> تم التحديث بنجاح! جاري إعادة تحميل الصفحة...</span>';
+                resultMsg.innerHTML = '<span style="color:#10b981; font-weight:bold;"><i data-lucide="check-circle"></i> تم التحديث بنجاح! جاري إعادة إقلاع السيرفر وتحميل الصفحة...</span>';
             }
             setTimeout(() => {
                 window.location.reload();
-            }, 2500);
+            }, 3500);
         } else {
             if (applyBtn) {
                 applyBtn.disabled = false;
                 applyBtn.innerHTML = '<i data-lucide="download-cloud"></i> <span>إعادة المحاولة 🚀</span>';
             }
             if (resultMsg) {
-                resultMsg.innerHTML = `<span style="color:#ef4444;"><i data-lucide="alert-circle"></i> فشل التحديث: ${data.error}</span>`;
+                resultMsg.innerHTML = `<span style="color:#ef4444;"><i data-lucide="alert-circle"></i> فشل التحديث: ${data.error || 'فشل في تطبيق التحديث'}</span>`;
             }
         }
     } catch (err) {
@@ -5605,7 +5612,7 @@ async function applyGitHubUpdate() {
         }
         setTimeout(() => {
             window.location.reload();
-        }, 3000);
+        }, 3500);
     }
     refreshIcons();
 }

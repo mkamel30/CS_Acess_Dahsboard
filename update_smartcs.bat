@@ -11,7 +11,7 @@ echo.
 :: 1. إيقاف السيرفر الخاص بنا فقط بأمان تام
 echo [*] Stopping SmartCS Dashboard specifically...
 taskkill /F /FI "WINDOWTITLE eq SmartCS Dashboard*" /T >nul 2>nul
-powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { .Name -eq 'node.exe' -and .CommandLine -like '*server.js*' } | Stop-Process -Force -ErrorAction SilentlyContinue"
+powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'node.exe' -and $_.CommandLine -like '*server.js*' } | Stop-Process -Force -ErrorAction SilentlyContinue"
 echo.
 
 cd /d "%~dp0"
@@ -21,12 +21,12 @@ if "%TARGET_DIR:~-1%"=="\" set "TARGET_DIR=%TARGET_DIR:~0,-1%"
 echo [*] Target Directory: "%TARGET_DIR%"
 echo [*] Downloading latest release package from GitHub...
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command " = Join-Path C:\Users\mkame\AppData\Local\Temp 'smartcs_upd'; if (Test-Path ) { Remove-Item  -Recurse -Force -ErrorAction SilentlyContinue };  = Join-Path C:\Users\mkame\AppData\Local\Temp 'smartcs_upd.zip'; if (Test-Path ) { Remove-Item  -Force -ErrorAction SilentlyContinue }; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://github.com/mkamel30/CS_Acess_Dahsboard/archive/refs/heads/main.zip' -OutFile ; Expand-Archive -Path  -DestinationPath  -Force"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$ext = Join-Path $env:TEMP 'smartcs_upd'; if (Test-Path $ext) { Remove-Item $ext -Recurse -Force -ErrorAction SilentlyContinue }; $zip = Join-Path $env:TEMP 'smartcs_upd.zip'; if (Test-Path $zip) { Remove-Item $zip -Force -ErrorAction SilentlyContinue }; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://github.com/mkamel30/CS_Acess_Dahsboard/archive/refs/heads/main.zip' -OutFile $zip; Expand-Archive -Path $zip -DestinationPath $ext -Force"
 
 echo [*] Overwriting existing files with latest version...
 robocopy "%TEMP%\smartcs_upd\CS_Acess_Dahsboard-main" "%TARGET_DIR%" /E /IS /IT /NP /NJH /NJS /NFL /NDO >nul 2>nul
 if %errorlevel% gtr 7 (
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Copy-Item -Path (Join-Path C:\Users\mkame\AppData\Local\Temp 'smartcs_upd\CS_Acess_Dahsboard-main\*') -Destination '%TARGET_DIR%' -Recurse -Force"
+    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "Copy-Item -Path (Join-Path $env:TEMP 'smartcs_upd\CS_Acess_Dahsboard-main\*') -Destination '%TARGET_DIR%' -Recurse -Force"
 )
 
 :: Forcefully rewrite run_smartcs.bat with clean launcher
@@ -61,12 +61,8 @@ node -e "const sqlite3 = require('sqlite3').verbose(); const db = new sqlite3.Da
 echo.
 echo =======================================================================
 echo    Update Completed Successfully! 
-echo    PLEASE WAIT FOR CLOUD RESEED TO FINISH BEFORE PRESSING ANY KEY...
 echo =======================================================================
 echo.
-
-:: 3. التوقف المؤقت حتى أعطيك الإشارة
-pause
 
 start "" "http://localhost:8970"
 call "%TARGET_DIR%\run_smartcs.bat"

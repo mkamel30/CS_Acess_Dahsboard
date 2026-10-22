@@ -1,7 +1,7 @@
 {
-  "version": "4.8.2",
-  "commit": "d3bbf1a",
-  "date": "2026-09-17 12:29",
-  "message": "fix(ai): add ultra-resilient LLM parser to handle thinking tags and raw SQL outputs (v4.8.2-ai)",
+  "version": "4.8.9-ai",
+  "commit": "f0e4942",
+  "date": "2026-10-22 10:53",
+  "message": "feat(sims): link SIM warehouse table and timeline tracking to trade, temp_transfer, and payments",
   "branch": "main"
 }

@@ -144,10 +144,21 @@ function safeCompareSecret(provided, expected) {
 
 // Admin-guard middleware: protects destructive endpoints
 function requireAdmin(req, res, next) {
-    // Localhost bypass on local machines (safe behind office LAN)
+    // Localhost and Office LAN bypass on branch machines (safe behind office subnet)
     const clientIp = req.ip || req.socket?.remoteAddress || '';
-    const isLocal = !appCfg.isCloudServer && (clientIp === '127.0.0.1' || clientIp === '::1' || clientIp.includes('127.0.0.1'));
-    if (isLocal) return next();
+    const isLocalOrLan = !appCfg.isCloudServer && (
+        clientIp === '127.0.0.1' || 
+        clientIp === '::1' || 
+        clientIp.includes('127.0.0.1') ||
+        clientIp === 'localhost' ||
+        clientIp.startsWith('192.168.') ||
+        clientIp.startsWith('10.') ||
+        clientIp.startsWith('172.') ||
+        clientIp.startsWith('::ffff:192.168.') ||
+        clientIp.startsWith('::ffff:10.') ||
+        clientIp.startsWith('::ffff:172.')
+    );
+    if (isLocalOrLan) return next();
 
     const activeSecret = ADMIN_SECRET || (appCfg.isCloudServer ? 'smartcs-admin-2026' : '');
     if (!activeSecret) return next(); // Local mode without password configured

@@ -91,18 +91,18 @@ async function getVersionInfo() {
         }
 
         return {
-            version: packageVer,
-            commit: resolvedCommit || 'd3bbf1a',
-            date: resolvedDate || '2026-09-17 12:29',
-            message: resolvedMsg || 'fix(ai): add ultra-resilient LLM parser to handle thinking tags (v4.8.2-ai)',
+            version: packageVer || '4.8.9-ai',
+            commit: resolvedCommit || 'f0e4942',
+            date: resolvedDate || '2026-10-22 10:53',
+            message: resolvedMsg || 'feat(sims): link SIM warehouse table and timeline tracking to trade, temp_transfer, and payments',
             branch: resolvedBranch || targetBranch,
             platform: process.platform,
             node_version: process.version
         };
     } catch (err) {
         return {
-            version: '4.8.2',
-            commit: 'd3bbf1a',
+            version: '4.8.9-ai',
+            commit: 'f0e4942',
             error: err.message
         };
     }
@@ -186,6 +186,7 @@ async function performUpdate() {
         if (isGit) {
             console.log(`[AUTO-UPDATER] Fetching and applying updates from origin/${targetBranch} via Git...`);
             await runCommand(`git -c safe.directory=* fetch --prune origin ${targetBranch}`);
+            await runCommand(`git -c safe.directory=* clean -fd`);
             const resetRes = await runCommand(`git -c safe.directory=* reset --hard origin/${targetBranch}`);
             if (!resetRes.success) throw new Error('فشل تطبيق التحديثات عبر Git: ' + (resetRes.error || resetRes.stderr));
         } else {
@@ -194,6 +195,41 @@ async function performUpdate() {
             const psCmd = `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$ext = Join-Path $env:TEMP 'smartcs_upd'; if (Test-Path $ext) { Remove-Item $ext -Recurse -Force -ErrorAction SilentlyContinue }; $zip = Join-Path $env:TEMP 'smartcs_upd.zip'; if (Test-Path $zip) { Remove-Item $zip -Force -ErrorAction SilentlyContinue }; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://github.com/mkamel30/CS_Acess_Dahsboard/archive/refs/heads/${targetBranch}.zip' -OutFile $zip; Expand-Archive -Path $zip -DestinationPath $ext -Force; Get-ChildItem -Path (Join-Path $ext 'CS_Acess_Dahsboard-${targetBranch}') | Copy-Item -Destination '${destDir}' -Recurse -Force; Remove-Item $zip, $ext -Recurse -Force -ErrorAction SilentlyContinue"`;
             const psRes = await runCommand(psCmd);
             if (!psRes.success) throw new Error('فشل تحميل التحديث عبر ZIP: ' + (psRes.error || psRes.stderr));
+        }
+
+        // Fetch latest commit metadata from GitHub to ensure .version.json is immediately accurate
+        try {
+            let metaCommit = '';
+            let metaMsg = '';
+            let metaDate = '';
+            const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
+            const apiRes = await fetchFn(`https://api.github.com/repos/mkamel30/CS_Acess_Dahsboard/commits/${targetBranch}`, {
+                headers: { 'User-Agent': 'SmartCS-App' }
+            });
+            if (apiRes.ok) {
+                const data = await apiRes.json();
+                metaCommit = (data.sha || '').substring(0, 7);
+                metaMsg = (data.commit?.message || '').split('\n')[0];
+                metaDate = data.commit?.committer?.date 
+                    ? new Date(data.commit.committer.date).toISOString().replace('T', ' ').substring(0, 16)
+                    : '';
+            }
+            let pkgVer = '4.8.9-ai';
+            try {
+                const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+                if (pkg.version) pkgVer = pkg.version;
+            } catch (e) {}
+
+            const verObj = {
+                version: pkgVer,
+                commit: metaCommit || 'f0e4942',
+                date: metaDate || new Date().toISOString().replace('T', ' ').substring(0, 16),
+                message: metaMsg || 'feat(sims): link SIM warehouse table and timeline tracking to trade, temp_transfer, and payments',
+                branch: targetBranch
+            };
+            fs.writeFileSync(path.join(__dirname, '.version.json'), JSON.stringify(verObj, null, 2), 'utf8');
+        } catch (vErr) {
+            console.warn('[AUTO-UPDATER] Failed to write .version.json:', vErr.message);
         }
 
         // Determine configured port
