@@ -4007,24 +4007,24 @@ app.get('/api/sims/:serial/lifecycle', async (req, res) => {
                        COALESCE(a.Owner, a.Contact_person) as clean_owner,
                        COALESCE(a.dep, a.SupplyOffice) as clean_gov
                 FROM assets_raw a
-                WHERE a.Cell_Serial = ? OR a.Cell_Serial3 = ? OR a."cell_2-ser" = ? OR a.Cell_Serial4 = ?
-                   OR a.Cell_Serial LIKE ? OR a.Cell_Serial3 LIKE ? OR a."cell_2-ser" LIKE ?
+                WHERE a."Cell_Serial" = ? OR a."Cell_Serial3" = ? OR a."cell_2-ser" = ? OR a."Cell_Serial4" = ?
+                   OR a."Cell_Serial" LIKE ? OR a."Cell_Serial3" LIKE ? OR a."cell_2-ser" LIKE ?
                 LIMIT 1
             `, [serial, serial, serial, serial, `%${serial}%`, `%${serial}%`, `%${serial}%`]).catch(() => null),
             allQuery(`
                 SELECT * FROM trade_raw 
                 WHERE "Item Serial" = ? OR "Item Serial" LIKE ? OR Comments LIKE ?
-                ORDER BY rowid DESC
+                ORDER BY 1 DESC
             `, [serial, `%${serial}%`, `%${serial}%`]).catch(() => []),
             allQuery(`
                 SELECT * FROM temp_transfer_raw
                 WHERE OldPOS = ? OR NewPOS = ? OR OldPOS LIKE ? OR NewPOS LIKE ? OR Notes LIKE ?
-                ORDER BY rowid DESC
+                ORDER BY 1 DESC
             `, [serial, serial, `%${serial}%`, `%${serial}%`, `%${serial}%`]).catch(() => []),
             allQuery(`
                 SELECT * FROM payments_raw
                 WHERE pos_number = ? OR pos_number LIKE ?
-                ORDER BY ID DESC
+                ORDER BY 1 DESC
             `, [serial, `%${serial}%`]).catch(() => [])
         ]);
 

@@ -97,7 +97,7 @@ function translateSqliteToPostgres(sql, params) {
         'ReplacedDate', 'PinpadSerial', 'Commercial_register', 'Tax_Card',
         'Comments', 'Address', 'Condition', 'POS_2', 'Manufacturer',
         'Manufacturer2', 'Manufacturer3', 'Model2', 'Model3', 'Cell_Serial',
-        'Cell_type', 'Cell_Serial3', 'Cell_type3', 'Acquired Date',
+        'Cell_type', 'Cell_Serial3', 'Cell_type3', 'Cell_Serial4', 'Cell_type4', 'Acquired Date',
         'Unit Serial', 'Checked In Date', 'Checked Out Date', 'Checked In Condition',
         'Checked Out Condition', 'Checked Out To', 'Unit Type', 'Manufactor',
         'Notes', 'FixID', 'FixName', 'FaultID', 'FaultName', 'GateNo', 'GoldenCard',

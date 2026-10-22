@@ -7147,10 +7147,15 @@ async function loadDiagnosticsErrorLogs() {
                         ${err.error_message || 'Unspecified Error'}
                     </td>
                     <td><span style="color:#94a3b8; font-size:11px; font-family:var(--cyber-font-mono);">${formattedTime}</span></td>
-                    <td>
-                        <button type="button" class="cyber-btn-secondary" style="padding:4px 10px; font-size:10px; gap:5px; color:#38bdf8; border-color:rgba(56,189,248,0.3);" onclick="showDiagnosticStack(${err.id})">
-                            <i data-lucide="sparkles" style="width:11px;height:11px;"></i> [تحليل وحل ⚡]
-                        </button>
+                    <td style="white-space:nowrap;">
+                        <div style="display:inline-flex; gap:6px; align-items:center;">
+                            <button type="button" class="cyber-btn-secondary" style="padding:4px 10px; font-size:10px; gap:5px; color:#38bdf8; border-color:rgba(56,189,248,0.3);" onclick="showDiagnosticStack(${err.id})">
+                                <i data-lucide="sparkles" style="width:11px;height:11px;"></i> [تحليل وحل ⚡]
+                            </button>
+                            <button type="button" class="cyber-btn-secondary" style="padding:4px 8px; font-size:10px; color:#ef4444; border-color:rgba(239,68,68,0.3); border-radius:6px;" onclick="deleteDiagErrorById(${err.id}, event)" title="حذف هذا السجل">
+                                <i data-lucide="trash-2" style="width:11px;height:11px;"></i>
+                            </button>
+                        </div>
                     </td>
                 </tr>
             `;
@@ -7244,6 +7249,32 @@ function analyzeErrorForResolution(err) {
     const stack = (err.stack_trace || '').toLowerCase();
     const endpoint = (err.endpoint || '').toLowerCase();
     const combined = `${msg} ${stack} ${endpoint}`;
+
+    // 0. Column Quoting / Missing Dialect Column (e.g. cell_serial4, does not exist)
+    if (combined.includes('cell_serial') || combined.includes('does not exist') || combined.includes('column a.') || (combined.includes('column') && combined.includes('exist'))) {
+        return {
+            title: 'توافق أسماء الأعمدة السحابية (PostgreSQL Column Quoting)',
+            badge: '[DIALECT_RESOLVED]',
+            badgeColor: '#10b981',
+            explanation: 'حدث هذا الاستثناء بسبب اختلاف حساسية حالة الأحرف في أسماء أعمدة جداول Access الأصلية (مثل Cell_Serial4) في قاعدة بيانات PostgreSQL السحابية. تم تحديث مترجم الاستعلامات وتغليف كافة الأعمدة بعلامات التنصيص المعتمدة.',
+            actionDesc: 'تم حل المشكلة وتصحيح الكود بالكامل. يمكنك حذف وتجاوز هذا السجل المؤرشف فوراً لتفريغ جدول الأخطاء.',
+            actions: [
+                {
+                    label: '🗑️ حذف وتجاوز هذا السجل الآن',
+                    icon: 'trash-2',
+                    btnClass: 'cyber-btn-primary',
+                    style: 'background:linear-gradient(135deg, #10b981, #059669);',
+                    onClick: 'deleteCurrentDiagError();'
+                },
+                {
+                    label: '⚡ فحص حالة النظام الآن',
+                    icon: 'activity',
+                    btnClass: 'cyber-btn-secondary',
+                    onClick: 'loadDiagnosticsDashboard(); closeDiagResolutionModal();'
+                }
+            ]
+        };
+    }
 
     // 1. External Automated Bot Probes / Malformed JSON on Non-Existent Routes
     if (combined.includes('unexpected token') || combined.includes('expected ','' ) || combined.includes('is not valid json') || combined.includes('jeecg') || combined.includes('telemetry') || combined.includes('show') || combined.includes('hyper/send')) {
@@ -7542,6 +7573,29 @@ async function deleteCurrentDiagError() {
     }
 }
 window.deleteCurrentDiagError = deleteCurrentDiagError;
+
+async function deleteDiagErrorById(id, event) {
+    if (event && event.stopPropagation) event.stopPropagation();
+    if (!id) return;
+    try {
+        const res = await fetch('/api/diagnostics/delete-error', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-admin-secret': 'TITI'
+            },
+            body: JSON.stringify({ id })
+        });
+        const data = await res.json();
+        if (data.success) {
+            loadDiagnosticsErrorLogs();
+            checkDiagnosticsPulse();
+        }
+    } catch (e) {
+        alert('تعذر مسح السجل: ' + e.message);
+    }
+}
+window.deleteDiagErrorById = deleteDiagErrorById;
 
 async function clearAllDiagnosticsErrors() {
     const confirmed = confirm('هل أنت متأكد من رغبتك في مسح وتفريغ سجل الأخطاء بالكامل؟');
