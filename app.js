@@ -1563,6 +1563,7 @@ function renderSimsDevicesTable() {
         if (sortCol === 'serial') { valA = a.serial || ''; valB = b.serial || ''; }
         else if (sortCol === 'carrier') { valA = a.carrier || ''; valB = b.carrier || ''; }
         else if (sortCol === 'condition') { valA = a.condition_label || ''; valB = b.condition_label || ''; }
+        else if (sortCol === 'entry_date') { valA = a.entry_date || ''; valB = b.entry_date || ''; }
         else { valA = a[sortCol] || ''; valB = b[sortCol] || ''; }
 
         const res = String(valA).localeCompare(String(valB), 'ar-EG', { numeric: true });
@@ -1629,7 +1630,7 @@ function renderSimsDevicesTable() {
     tableBody.innerHTML = '';
 
     if (totalMatching === 0) {
-        tableBody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:30px; color:var(--md-sys-color-on-surface-variant);">لا توجد شرائح مطابقة لمعايير البحث في المخزن</td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--md-sys-color-on-surface-variant);">لا توجد شرائح مطابقة لمعايير البحث في المخزن</td></tr>`;
         return;
     }
 
@@ -1647,21 +1648,43 @@ function renderSimsDevicesTable() {
             badgeClass = 'inmerchant';
         }
 
+        const historyBadges = [];
+        if (s.has_transfers) {
+            historyBadges.push(`<span class="badge" style="background:rgba(168,85,247,0.15); color:#a855f7; font-size:10px; font-weight:700;" title="سبق صرفها أو استبدالها لعميل (${s.transfer_count} حركة)"><i data-lucide="truck" style="width:10px;height:10px;vertical-align:middle;"></i> سبق صرفها لعميل</span>`);
+        }
+        if (s.has_payments) {
+            historyBadges.push(`<span class="badge" style="background:rgba(16,185,129,0.15); color:#10b981; font-size:10px; font-weight:700;" title="مسدد عنها رسوم (${s.payment_count} إيصال)"><i data-lucide="receipt" style="width:10px;height:10px;vertical-align:middle;"></i> مسدد رسوم</span>`);
+        }
+        const historyBadgesHtml = historyBadges.length > 0 ? `<div style="display:flex; gap:4px; margin-top:4px; flex-wrap:wrap;">${historyBadges.join('')}</div>` : '';
+
+        const entryHtml = s.entry_date ? `
+            <div style="display:flex; flex-direction:column; gap:3px;">
+                <strong style="font-family:var(--font-en); font-size:12px; color:var(--md-sys-color-on-surface); font-weight:800;">${s.entry_date}</strong>
+                <span class="badge inmerchant" style="font-size:10px; width:fit-content; border:1px solid rgba(56,189,248,0.3); padding:2px 6px;">
+                    <i data-lucide="arrow-down-left" style="width:10px;height:10px;vertical-align:middle;"></i> وارد ${s.entry_source || 'HQ'}${s.entry_form ? ' (إذن #' + s.entry_form + ')' : ''}
+                </span>
+            </div>
+        ` : `<span style="color:var(--md-sys-color-on-surface-variant); font-size:11px;">غير مسجل بـ Trade</span>`;
+
         tableBody.innerHTML += `
             <tr>
                 <td style="font-family:var(--font-en); font-weight:700; color:var(--md-sys-color-on-surface-variant);">${startIdx + idx + 1}</td>
                 <td>
-                    <a href="javascript:void(0)" onclick="openAssetTimeline('${s.serial}')" style="font-family:var(--font-en); font-weight:800; color:var(--md-sys-color-primary); text-decoration:underline;">
+                    <a href="javascript:void(0)" onclick="openAssetTimeline('${s.serial}')" style="font-family:var(--font-en); font-weight:800; color:var(--md-sys-color-primary); text-decoration:underline;" title="انقر لتتبع مسار وتاريخ الشريحة بالكامل">
                         ${s.serial}
                     </a>
                 </td>
                 <td><strong style="color:var(--md-sys-color-on-surface); font-family:var(--font-en);">${s.carrier}</strong></td>
-                <td><span class="badge ${badgeClass}">${badgeText}</span></td>
+                <td>
+                    <span class="badge ${badgeClass}">${badgeText}</span>
+                    ${historyBadgesHtml}
+                </td>
+                <td>${entryHtml}</td>
                 <td style="max-width:280px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; font-size:12px; color:var(--md-sys-color-on-surface-variant);">
                     ${s.notes ? `<span style="font-weight:700; color:var(--md-sys-color-primary);">${s.notes}</span>` : 'سليمة بالمخزن'}
                 </td>
                 <td>
-                    <button type="button" class="btn btn-secondary" onclick="openAssetTimeline('${s.serial}')" style="padding:4px 10px; font-size:11px; border-radius:var(--md-shape-corner-full); display:flex; align-items:center; gap:4px;">
+                    <button type="button" class="btn btn-secondary" onclick="openAssetTimeline('${s.serial}')" style="padding:4px 10px; font-size:11px; border-radius:var(--md-shape-corner-full); display:flex; align-items:center; gap:4px;" title="تتبع كامل لحركات الشريحة وتاريخ دخولها وسدادها">
                         <i data-lucide="history" style="width:12px; height:12px;"></i>
                         <span>تتبع الشريحة</span>
                     </button>
@@ -1699,6 +1722,12 @@ function exportSimsStockToExcel() {
         "سيريال الشريحة (SIM Serial)": s.serial,
         "شركة الاتصالات / الشبكة": s.carrier,
         "حالة وتصنيف الشريحة": s.condition_label,
+        "تاريخ دخول الفرع (الوارد)": s.entry_date || 'غير مسجل',
+        "جهة الورود (المصدر)": s.entry_source || 'المركز الرئيسي (HQ)',
+        "رقم إذن الوارد": s.entry_form || '-',
+        "المستلم بالفرع": s.entry_operator || '-',
+        "سبق صرفها لعميل": s.has_transfers ? 'نعم (' + s.transfer_count + ')' : 'لا',
+        "رسوم مسددة": s.has_payments ? 'نعم (' + s.payment_count + ')' : 'لا',
         "ملاحظات الاستخدام والمشروع": s.notes || '-'
     }));
 
@@ -3569,16 +3598,28 @@ async function searchAssetTimeline(query) {
 
         if (card) {
             card.style.display = 'block';
-            const merchantCodeVal = mer?.merchant_code || dev?.merchant_code || (q.length <= 6 && /^\d+$/.test(q) ? q : '-');
+            const isSimCardMode = (sim?.serial && (q.startsWith('8920') || (!dev?.serial && !mer?.merchant_code)));
             const merchantCodeEl = document.getElementById('tl-merchant-code');
-            if (merchantCodeEl) merchantCodeEl.textContent = merchantCodeVal;
 
-            document.getElementById('tl-device-serial').textContent = dev?.serial || mer?.pos_serial || '-';
-            document.getElementById('tl-device-model').textContent = dev?.model ? `${dev.model} (${dev.manufacturer || ''})` : (mer?.pos_model || '-');
-            document.getElementById('tl-sim-serial').textContent = sim?.serial || mer?.sim_serial || dev?.sim_serial || '-';
-            document.getElementById('tl-sim-carrier').textContent = sim?.carrier || mer?.sim_carrier || dev?.sim_carrier || 'Orange';
-            document.getElementById('tl-merchant-name').textContent = mer?.name || dev?.merchant_name || (mer?.merchant_code ? `مخبز كود #${mer.merchant_code}` : '-');
-            document.getElementById('tl-merchant-gov').textContent = mer?.government || dev?.government || 'محافظة غير محددة';
+            if (isSimCardMode && sim) {
+                if (merchantCodeEl) merchantCodeEl.textContent = sim.in_warehouse ? 'بالمخزن' : (mer?.merchant_code || '-');
+                document.getElementById('tl-device-serial').textContent = sim.in_warehouse ? 'بالمخزن (غير مثبتة)' : (dev?.serial || mer?.pos_serial || '-');
+                document.getElementById('tl-device-model').textContent = sim.entry_date ? `تاريخ الدخول: ${sim.entry_date} (${sim.entry_source || 'HQ'})` : (dev?.model || 'شريحة اتصال');
+                document.getElementById('tl-sim-serial').textContent = sim.serial;
+                document.getElementById('tl-sim-carrier').textContent = `${sim.carrier} ${sim.in_warehouse ? ' (بالمخزن)' : ''}`;
+                document.getElementById('tl-merchant-name').textContent = sim.in_warehouse ? `مخزن الفرع - ${sim.notes || 'سليمة'}` : (mer?.name || 'عميل / مخبز');
+                document.getElementById('tl-merchant-gov').textContent = sim.entry_form ? `رقم إذن الوارد: #${sim.entry_form}` : (mer?.government || 'الفرع');
+            } else {
+                const merchantCodeVal = mer?.merchant_code || dev?.merchant_code || (q.length <= 6 && /^\d+$/.test(q) ? q : '-');
+                if (merchantCodeEl) merchantCodeEl.textContent = merchantCodeVal;
+
+                document.getElementById('tl-device-serial').textContent = dev?.serial || mer?.pos_serial || '-';
+                document.getElementById('tl-device-model').textContent = dev?.model ? `${dev.model} (${dev.manufacturer || ''})` : (mer?.pos_model || '-');
+                document.getElementById('tl-sim-serial').textContent = sim?.serial || mer?.sim_serial || dev?.sim_serial || '-';
+                document.getElementById('tl-sim-carrier').textContent = sim?.carrier || mer?.sim_carrier || dev?.sim_carrier || 'Orange';
+                document.getElementById('tl-merchant-name').textContent = mer?.name || dev?.merchant_name || (mer?.merchant_code ? `مخبز كود #${mer.merchant_code}` : '-');
+                document.getElementById('tl-merchant-gov').textContent = mer?.government || dev?.government || 'محافظة غير محددة';
+            }
         }
 
         const events = data.timeline || [];
@@ -3601,17 +3642,21 @@ async function searchAssetTimeline(query) {
                 const isBoardTrace = ev.title?.includes('مسارات') || ev.detail?.includes('مسارات') || ev.detail?.includes('مسار');
                 const isHqMaint = ev.type === 'HQ_MAINTENANCE';
                 const isBranchSp = ev.type === 'SPARE_PART_BRANCH' || ev.type === 'SPARE_PART';
-                const isTransfer = ev.type === 'TRANSFER';
-                const isPayment = ev.type === 'PAYMENT';
+                const isTransfer = ev.type === 'TRANSFER' || ev.type === 'SIM_TRANSFER';
+                const isPayment = ev.type === 'PAYMENT' || ev.type === 'SIM_PAYMENT';
+                const isLogistics = ev.type === 'LOGISTICS' || ev.type === 'TRADE_LOGISTICS';
+                const isCurrentStatus = ev.type === 'CURRENT_STATUS';
 
                 let colorClass = 'var(--color-primary)';
                 let iconName = ev.icon || 'activity';
 
-                if (isBoardTrace) { colorClass = '#c084fc'; iconName = 'cpu'; }
+                if (isCurrentStatus) { colorClass = '#38bdf8'; iconName = 'info'; }
+                else if (isBoardTrace) { colorClass = '#c084fc'; iconName = 'cpu'; }
                 else if (isHqMaint) { colorClass = '#f59e0b'; iconName = 'wrench'; }
                 else if (isBranchSp) { colorClass = '#06b6d4'; iconName = 'layers'; }
-                else if (isTransfer) { colorClass = '#a855f7'; iconName = 'truck'; }
+                else if (isTransfer) { colorClass = '#a855f7'; iconName = ev.icon || 'truck'; }
                 else if (isPayment) { colorClass = '#10b981'; iconName = 'receipt'; }
+                else if (isLogistics) { colorClass = '#059669'; iconName = 'package-check'; }
                 else if (ev.type === 'MAINTENANCE') { colorClass = '#38bdf8'; iconName = 'wrench'; }
 
                 let codeToShow = ev.merchant_code;
@@ -3630,6 +3675,8 @@ async function searchAssetTimeline(query) {
                     costBadgeHtml = `<span class="badge inmerchant" style="font-size:10px; font-weight:700;"><i data-lucide="cpu" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> استبدال قطع غيار</span>`;
                 } else if (ev.type === 'MAINTENANCE') {
                     costBadgeHtml = `<span class="badge" style="background:rgba(100,116,139,0.15); color:#64748b; border:1px solid rgba(100,116,139,0.3); font-size:10px; font-weight:700;"><i data-lucide="wrench" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> صيانة بالفرع</span>`;
+                } else if (isLogistics) {
+                    costBadgeHtml = `<span class="badge inmerchant" style="font-size:10px; font-weight:700; border:1px solid rgba(16,185,129,0.3);"><i data-lucide="package-check" style="width:10px;height:10px;vertical-align:middle;margin-left:3px;"></i> لوجستيات ووارد</span>`;
                 }
 
                 const item = document.createElement('div');

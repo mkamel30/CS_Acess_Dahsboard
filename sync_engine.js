@@ -601,7 +601,7 @@ function readJsonSafely(filePath) {
  */
 function enrichRecordsWithSyncKey(tableName, records) {
     if (!records || !Array.isArray(records)) return records;
-    if (tableName !== 'store_sp_raw' && tableName !== 'store_sp_maintenance_raw' && tableName !== 'failure_points_raw') {
+    if (tableName !== 'store_sp_raw' && tableName !== 'store_sp_maintenance_raw' && tableName !== 'failure_points_raw' && tableName !== 'temp_transfer_raw') {
         return records;
     }
     const occurrenceMap = new Map();
@@ -613,6 +613,8 @@ function enrichRecordsWithSyncKey(tableName, records) {
             sig = [row.Serial, row.formNo, row.type, row.out_date, row.notes, row.faulty_detils].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
         } else if (tableName === 'failure_points_raw') {
             sig = [row.type, row.model].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
+        } else if (tableName === 'temp_transfer_raw') {
+            sig = [row.POSCode, row.OldPOS, row.NewPOS, row.Transfer_Date, row.procedure, row.bkCode].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
         }
         const occ = (occurrenceMap.get(sig) || 0) + 1;
         occurrenceMap.set(sig, occ);
@@ -638,6 +640,10 @@ function getRowIdentifier(tableName, primaryKey, row) {
     }
     if (tableName === 'failure_points_raw') {
         const sig = [row.type, row.model].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
+        return crypto.createHash('md5').update(sig).digest('hex');
+    }
+    if (tableName === 'temp_transfer_raw') {
+        const sig = [row.POSCode, row.OldPOS, row.NewPOS, row.Transfer_Date, row.procedure, row.bkCode].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
         return crypto.createHash('md5').update(sig).digest('hex');
     }
     const val = row[primaryKey];
@@ -1314,7 +1320,9 @@ async function performFullSync(db) {
             { file: 'tblFaults.json', table: 'tblfaults_raw', pk: 'faultid', arabicName: 'قائمة الأعطال (tblFaults)' },
             { file: 'AuthorizedUsers.json', table: 'tblstaff_raw', pk: 'id', arabicName: 'طاقم العمل والفنيين (AuthorizedUsers)' },
             { file: 'tblFixes.json', table: 'tblfixes_raw', pk: 'FixID', arabicName: 'أنواع الإصلاحات (tblFixes)' },
-            { file: 'failure_points.json', table: 'failure_points_raw', pk: 'sync_key', arabicName: 'نقاط الأعطال (failure_points)' }
+            { file: 'failure_points.json', table: 'failure_points_raw', pk: 'sync_key', arabicName: 'نقاط الأعطال (failure_points)' },
+            { file: 'Trade.json', table: 'trade_raw', pk: 'ID', arabicName: 'حركات اللوجستيات والمخازن (Trade)' },
+            { file: 'temp_transfer.json', table: 'temp_transfer_raw', pk: 'sync_key', arabicName: 'استبدال ونقل الماكينات والشرائح (temp_transfer)' }
         ];
 
         setProgress(30, 'مقارنة وفحص التغييرات', 'بدء فحص وتتبع التغييرات ومقارنة الفروقات...', '', 3);

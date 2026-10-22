@@ -306,7 +306,9 @@ const RAW_TABLE_PK_MAP = {
     'tblfaults_raw': 'faultid',
     'tblstaff_raw': 'id',
     'tblfixes_raw': 'FixID',
-    'failure_points_raw': 'sync_key'
+    'failure_points_raw': 'sync_key',
+    'trade_raw': 'ID',
+    'temp_transfer_raw': null
 };
 
 let _pgConstraintCache = new Map();
@@ -1553,17 +1555,56 @@ app.get('/api/inventory/warehouse-dashboard', async (req, res) => {
 
 app.get('/api/inventory/sims-dashboard', async (req, res) => {
     try {
-        const [allSims, rawStoreSims, merchantAssets, allMerchants] = await Promise.all([
-            allQuery('SELECT * FROM sim_cards'),
+        const [allSims, rawStoreSims, merchantAssets, allMerchants, allTrade, allTransfers, allPayments] = await Promise.all([
+            allQuery('SELECT * FROM sim_cards').catch(() => []),
             allQuery('SELECT * FROM store_sim_raw ORDER BY sim_serial ASC').catch(() => []),
             allQuery(`
                 SELECT ma.*, m.name as merchant_name, m.government
                 FROM merchant_assets ma
                 LEFT JOIN merchants m ON m.merchant_code = ma.merchant_code
                 WHERE ma.sim_card_id IS NOT NULL
-            `),
-            allQuery('SELECT merchant_code, name, government FROM merchants')
+            `).catch(() => []),
+            allQuery('SELECT merchant_code, name, government FROM merchants').catch(() => []),
+            allQuery(`SELECT * FROM trade_raw WHERE "Item Type" LIKE '%SIM%' OR "Item Serial" LIKE '8920%' OR Comments LIKE '%شريح%'`).catch(() => []),
+            allQuery(`SELECT * FROM temp_transfer_raw WHERE OldPOS LIKE '8920%' OR NewPOS LIKE '8920%' OR Notes LIKE '%شريح%'`).catch(() => []),
+            allQuery(`SELECT * FROM payments_raw WHERE pos_number LIKE '%8920%' OR payment_reason LIKE '%شريح%'`).catch(() => [])
         ]);
+
+        // Build lookup map for trade records (Entry into branch from HQ/Logistics)
+        const tradeMap = new Map();
+        (allTrade || []).forEach(tr => {
+            const sn = String(tr['Item Serial'] || tr.item_serial || tr.Serial || '').trim();
+            if (sn) {
+                if (!tradeMap.has(sn)) tradeMap.set(sn, []);
+                tradeMap.get(sn).push(tr);
+            }
+        });
+
+        // Build lookup map for transfers (Replacements or Deployed to merchant)
+        const transferMap = new Map();
+        (allTransfers || []).forEach(tr => {
+            const oldP = String(tr.OldPOS || tr.oldpos || '').trim();
+            const newP = String(tr.NewPOS || tr.newpos || '').trim();
+            [oldP, newP].forEach(sn => {
+                if (sn && sn.length >= 10) {
+                    if (!transferMap.has(sn)) transferMap.set(sn, []);
+                    transferMap.get(sn).push(tr);
+                }
+            });
+        });
+
+        // Build lookup map for payments (Fees paid for this SIM)
+        const paymentMap = new Map();
+        (allPayments || []).forEach(p => {
+            const posNum = String(p.pos_number || '');
+            const matches = posNum.match(/\d{15,22}/g);
+            if (matches) {
+                matches.forEach(sn => {
+                    if (!paymentMap.has(sn)) paymentMap.set(sn, []);
+                    paymentMap.get(sn).push(p);
+                });
+            }
+        });
 
         function normalizeCarrier(carrier) {
             if (!carrier) return 'غير محدد';
@@ -1622,6 +1663,16 @@ app.get('/api/inventory/sims-dashboard', async (req, res) => {
                 readySimsCount++;
             }
 
+            // Trade correlation: entry date into branch
+            const simTrades = tradeMap.get(s) || [];
+            const inTrade = simTrades.find(t => String(t['Trade Type'] || t.trade_type || '').toLowerCase().includes('in') && (t['In Date'] || t.in_date)) || simTrades[0];
+
+            // Transfer correlation: past replacements or deployments
+            const simTransfers = transferMap.get(s) || [];
+
+            // Payments correlation: past fee payments
+            const simPayments = paymentMap.get(s) || [];
+
             return {
                 id: idx + 1,
                 serial: s,
@@ -1631,7 +1682,18 @@ app.get('/api/inventory/sims-dashboard', async (req, res) => {
                 condition_label: conditionLabel,
                 condition_badge: conditionBadge,
                 notes: notes || (conditionType === 'NEW_SIM' ? 'وارد جديد' : (conditionType === 'PROJECT_FUEL' ? 'مشروع الوقود' : (isFaulty ? 'شريحة تالفة' : 'سليمة'))),
-                reviewed: r.reviewed
+                reviewed: r.reviewed,
+                entry_date: inTrade ? (inTrade['In Date'] || inTrade.in_date || '') : '',
+                entry_source: inTrade ? (inTrade['Trade Location'] || inTrade.trade_location || 'المركز الرئيسي (HQ)') : '',
+                entry_form: inTrade ? (inTrade['Form Number'] || inTrade.form_number || '') : '',
+                entry_operator: inTrade ? (inTrade['IN/OUT BY'] || inTrade.operator || inTrade.in_out_by || '') : '',
+                entry_comments: inTrade ? (inTrade.Comments || inTrade.comments || '') : '',
+                has_trade: simTrades.length > 0,
+                trade_count: simTrades.length,
+                has_transfers: simTransfers.length > 0,
+                transfer_count: simTransfers.length,
+                has_payments: simPayments.length > 0,
+                payment_count: simPayments.length
             };
         });
 
@@ -3910,6 +3972,188 @@ app.get('/api/inventory/time-machine', async (req, res) => {
     }
 });
 
+// Dedicated SIM Lifecycle, Movements & Financial History API
+app.get('/api/sims/:serial/lifecycle', async (req, res) => {
+    try {
+        const rawSerial = String(req.params.serial || '').trim();
+        const serial = rawSerial.replace(/['"]/g, '');
+        if (!serial) return res.status(400).json({ success: false, error: 'SIM serial is required' });
+
+        const [storeSim, simCard, rawAsset, allTrades, allTransfers, allPayments] = await Promise.all([
+            getQuery(`SELECT * FROM store_sim_raw WHERE sim_serial = ? OR sim_serial LIKE ? LIMIT 1`, [serial, `%${serial}%`]).catch(() => null),
+            getQuery(`
+                SELECT s.*, m.name as merchant_name, m.merchant_code, m.government, d.serial as pos_serial, d.model as pos_model
+                FROM sim_cards s
+                LEFT JOIN merchant_assets ma ON ma.sim_card_id = s.id
+                LEFT JOIN merchants m ON m.merchant_code = ma.merchant_code
+                LEFT JOIN devices d ON d.id = ma.device_id
+                WHERE s.serial = ? OR s.serial LIKE ?
+                LIMIT 1
+            `, [serial, `%${serial}%`]).catch(() => null),
+            getQuery(`
+                SELECT a.*, 
+                       COALESCE(a.bkcode, a.POSID) as clean_bkcode,
+                       COALESCE(a.Owner, a.Contact_person) as clean_owner,
+                       COALESCE(a.dep, a.SupplyOffice) as clean_gov
+                FROM assets_raw a
+                WHERE a.Cell_Serial = ? OR a.Cell_Serial3 = ? OR a."cell_2-ser" = ? OR a.Cell_Serial4 = ?
+                   OR a.Cell_Serial LIKE ? OR a.Cell_Serial3 LIKE ? OR a."cell_2-ser" LIKE ?
+                LIMIT 1
+            `, [serial, serial, serial, serial, `%${serial}%`, `%${serial}%`, `%${serial}%`]).catch(() => null),
+            allQuery(`
+                SELECT * FROM trade_raw 
+                WHERE "Item Serial" = ? OR "Item Serial" LIKE ? OR Comments LIKE ?
+                ORDER BY rowid DESC
+            `, [serial, `%${serial}%`, `%${serial}%`]).catch(() => []),
+            allQuery(`
+                SELECT * FROM temp_transfer_raw
+                WHERE OldPOS = ? OR NewPOS = ? OR OldPOS LIKE ? OR NewPOS LIKE ? OR Notes LIKE ?
+                ORDER BY rowid DESC
+            `, [serial, serial, `%${serial}%`, `%${serial}%`, `%${serial}%`]).catch(() => []),
+            allQuery(`
+                SELECT * FROM payments_raw
+                WHERE pos_number = ? OR pos_number LIKE ?
+                ORDER BY ID DESC
+            `, [serial, `%${serial}%`]).catch(() => [])
+        ]);
+
+        const timeline = [];
+
+        // 1. Entry / Trade Events (from trade_raw)
+        allTrades.forEach(tr => {
+            const tradeType = String(tr['Trade Type'] || tr.trade_type || '').toUpperCase();
+            const isIn = tradeType.includes('IN');
+            const direction = isIn ? 'وارد للمخزن (دخول الفرع)' : 'صادر لجهة خارجية';
+            let tech = tr['IN/OUT BY'] || tr.operator || tr.in_out_by || '';
+            if (tech.toUpperCase() === 'MESSAM') tech = 'محمد عصام محمود فرغلي';
+            else if (tech.toUpperCase() === 'ELFAKHARANY' || tech.toUpperCase() === 'FOUAD') tech = 'أحمد فؤاد سيد الفخراني';
+            else if (tech.toUpperCase() === 'AHMEDMAHDY') tech = 'أحمد المهدي محفوظ المهدي';
+
+            timeline.push({
+                type: 'TRADE_LOGISTICS',
+                title: isIn ? `دخول الشريحة للفرع (وارد من ${tr['Trade Location'] || tr.trade_location || 'المركز الرئيسي HQ'})` : `خروج الشريحة (صادر إلى ${tr['Trade Location'] || tr.trade_location || 'جهة خارجية'})`,
+                date: tr['In Date'] || tr.in_date || tr['Out Date'] || tr.out_date || 'تاريخ غير محدد',
+                technician: tech || 'قسم اللوجستيات',
+                direction,
+                location: tr['Trade Location'] || tr.trade_location || 'المركز الرئيسي',
+                form_number: tr['Form Number'] || tr.form_number || '-',
+                comments: tr.Comments || tr.comments || '-',
+                detail: `نوع الحركة: ${direction} | المصدر/الجهة: ${tr['Trade Location'] || tr.trade_location || 'HQ'} | رقم الإذن/الاستمارة: ${tr['Form Number'] || tr.form_number || '-'} | المستلم: ${tech || 'الفرع'} | البيان: ${tr.Comments || tr.comments || '-'}`,
+                icon: isIn ? 'package-check' : 'package-minus'
+            });
+        });
+
+        // 2. Transfers / Movements (from temp_transfer_raw)
+        allTransfers.forEach(tr => {
+            let tech = tr.procedure || '';
+            if (tech.toUpperCase() === 'MESSAM') tech = 'محمد عصام محمود فرغلي';
+            else if (tech.toUpperCase() === 'ELFAKHARANY') tech = 'أحمد فؤاد سيد الفخراني';
+            else if (tech.toUpperCase() === 'AHMEDMAHDY') tech = 'أحمد المهدي محفوظ المهدي';
+
+            const oldPos = String(tr.OldPOS || tr.oldpos || '').trim();
+            const newPos = String(tr.NewPOS || tr.newpos || '').trim();
+            const isDeploy = newPos.includes(serial);
+            const isReplace = oldPos.includes(serial);
+
+            let eventTitle = `حركة نقل واستبدال شريحة: ${tr.POSCode || tr.poscode || 'عميل'}`;
+            let eventDetail = '';
+            let actionType = 'TRANSFER';
+
+            if (isDeploy) {
+                actionType = 'DEPLOY';
+                eventTitle = `صرف ونزول الشريحة لعميل/مخبز: ${tr.POSCode || tr.poscode || ''} (كود ${tr.bkCode || tr.bkcode || ''})`;
+                eventDetail = `تم صرف وتركيب الشريحة للعميل كبديل لـ (${oldPos || 'جديدة'}) | الشبكة: ${tr.NewType || tr.newtype || '-'} | الفني: ${tech || 'فني الفرع'}${tr.Notes ? ' | ملاحظات: ' + tr.Notes : ''}`;
+            } else if (isReplace) {
+                actionType = 'REPLACE';
+                eventTitle = `استبدال وإحلال الشريحة من العميل/المخبز: ${tr.POSCode || tr.poscode || ''} (كود ${tr.bkCode || tr.bkcode || ''})`;
+                eventDetail = `تم سحب الشريحة كإحلال واستبدالها بـ (${newPos || 'بديل'}) | الشبكة: ${tr.OldType || tr.oldtype || '-'} | الفني: ${tech || 'فني الفرع'}${tr.Notes ? ' | ملاحظات: ' + tr.Notes : ''}`;
+            } else {
+                eventDetail = `حركة نقل مرتبطة بالشريحة: ${oldPos} ➔ ${newPos} | الفني: ${tech || 'فني الفرع'}${tr.Notes ? ' | ملاحظات: ' + tr.Notes : ''}`;
+            }
+
+            timeline.push({
+                type: 'SIM_TRANSFER',
+                action_type: actionType,
+                title: eventTitle,
+                date: tr.Transfer_Date || tr.transfer_date || 'تاريخ سابق',
+                technician: tech || 'قسم الصيانة والتسليم',
+                merchant_code: tr.bkCode || tr.bkcode || '',
+                merchant_name: tr.POSCode || tr.poscode || '',
+                detail: eventDetail,
+                icon: isDeploy ? 'truck' : 'refresh-cw'
+            });
+        });
+
+        // 3. Payments (from payments_raw)
+        allPayments.forEach(p => {
+            timeline.push({
+                type: 'SIM_PAYMENT',
+                title: `سداد مالي للشريحة: ${p.payment_reason || 'رسوم شريحة'} (${Number(p.payment_amount || 0).toLocaleString('ar-EG')} جم)`,
+                date: p.payment_date || 'تاريخ غير محدد',
+                technician: p.payment_place || 'الفرع',
+                merchant_name: p.payer || '',
+                amount: p.payment_amount || 0,
+                reason: p.payment_reason || '',
+                ref_num: p.ref_num || '-',
+                place: p.payment_place || 'ضامن',
+                procedure_maker: p.procedure_maker || '-',
+                detail: `المسدد: ${p.payer || '-'} | سبب الدفع: ${p.payment_reason || '-'} | قيمة الرسوم: ${p.payment_amount} جم | رقم الإيصال: ${p.ref_num || '-'} | جهة التحصيل: ${p.payment_place || '-'} | المسؤول: ${p.procedure_maker || '-'}`,
+                icon: 'receipt'
+            });
+        });
+
+        // 4. Current State (Warehouse or Active Asset)
+        if (storeSim) {
+            timeline.unshift({
+                type: 'CURRENT_STATUS',
+                title: `الحالة الحالية: متواجدة بمخزن الفرع (${storeSim.notes || 'سليمة'})`,
+                date: 'الوضع الحالي',
+                technician: 'مخزن الفرع',
+                detail: `الشبكة: ${storeSim.sim_type || storeSim.network || 'عام'} | الملاحظات: ${storeSim.notes || 'سليمة وجاهزة للصرف'} | تالفة: ${storeSim.faulty === 'True' ? 'نعم' : 'لا'}`,
+                icon: 'warehouse'
+            });
+        } else if (rawAsset) {
+            timeline.unshift({
+                type: 'CURRENT_STATUS',
+                title: `الحالة الحالية: مثبتة بمخبز ${rawAsset.clean_owner || ''} (كود #${rawAsset.clean_bkcode})`,
+                date: 'الوضع الحالي',
+                technician: 'منظومة المخابز',
+                merchant_code: rawAsset.clean_bkcode,
+                merchant_name: rawAsset.clean_owner,
+                detail: `الماكينة: ${rawAsset.POS || rawAsset.POS_2 || '-'} | المخبز: ${rawAsset.clean_owner || '-'} | الإدارة: ${rawAsset.clean_gov || '-'} | هاتف: ${rawAsset.telephone_1 || '-'}`,
+                icon: 'store'
+            });
+        }
+
+        res.json({
+            success: true,
+            serial,
+            carrier: storeSim?.sim_type || simCard?.carrier || rawAsset?.Cell_type || 'عام',
+            is_in_warehouse: !!storeSim,
+            warehouse_details: storeSim,
+            active_merchant: rawAsset ? {
+                code: rawAsset.clean_bkcode,
+                name: rawAsset.clean_owner,
+                pos_serial: rawAsset.POS || rawAsset.POS_2 || '',
+                phone: rawAsset.telephone_1 || '',
+                governorate: rawAsset.clean_gov || ''
+            } : (simCard?.merchant_code ? {
+                code: simCard.merchant_code,
+                name: simCard.merchant_name,
+                pos_serial: simCard.pos_serial || '',
+                governorate: simCard.government || ''
+            } : null),
+            trade_count: allTrades.length,
+            transfer_count: allTransfers.length,
+            payment_count: allPayments.length,
+            timeline
+        });
+    } catch (err) {
+        console.error('SIM lifecycle API error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // Universal Asset Search & Historical Timeline API
 app.get('/api/assets/timeline', async (req, res) => {
     try {
@@ -4012,6 +4256,41 @@ app.get('/api/assets/timeline', async (req, res) => {
             merchant = await getQuery(`SELECT * FROM merchants WHERE merchant_code = ? LIMIT 1`, [device.merchant_code]);
         }
 
+        // Search in store_sim_raw if not found or if query looks like a SIM serial
+        if (!sim || cleanQ.startsWith('8920') || cleanQ.length >= 15) {
+            const storeSim = await getQuery(`SELECT * FROM store_sim_raw WHERE sim_serial = ? OR sim_serial LIKE ? LIMIT 1`, [cleanQ, `%${cleanQ}%`]).catch(() => null);
+            if (storeSim) {
+                if (!sim) {
+                    sim = {
+                        serial: storeSim.sim_serial,
+                        carrier: storeSim.sim_type || storeSim.network || 'عام',
+                        status: 'in_stock',
+                        notes: storeSim.notes,
+                        in_warehouse: true
+                    };
+                } else {
+                    sim.in_stock = true;
+                    sim.warehouse_notes = storeSim.notes;
+                }
+            }
+        }
+
+        // Correlate SIM entry into branch from trade_raw
+        if (sim?.serial || cleanQ.startsWith('8920')) {
+            const simSn = sim?.serial || cleanQ;
+            const simEntry = await getQuery(`
+                SELECT * FROM trade_raw 
+                WHERE ("Item Serial" = ? OR "Item Serial" LIKE ?) AND ("Trade Type" LIKE '%IN%' OR "In Date" IS NOT NULL)
+                ORDER BY rowid DESC LIMIT 1
+            `, [simSn, `%${simSn}%`]).catch(() => null);
+            if (simEntry) {
+                sim.entry_date = simEntry['In Date'] || simEntry.in_date || '';
+                sim.entry_source = simEntry['Trade Location'] || simEntry.trade_location || 'المركز الرئيسي (HQ)';
+                sim.entry_form = simEntry['Form Number'] || simEntry.form_number || '';
+                sim.entry_operator = simEntry['IN/OUT BY'] || simEntry.operator || simEntry.in_out_by || '';
+            }
+        }
+
         // Build list of all related lookup keys (POS Serial, Merchant Code, SIM, alt codes)
         const allPossibleCodes = Array.from(new Set([
             q, cleanQ, altQ,
@@ -4022,6 +4301,7 @@ app.get('/api/assets/timeline', async (req, res) => {
             rawAsset?.POSID,
             rawAsset?.Cell_Serial,
             rawAsset?.Cell_Serial3,
+            rawAsset?.['cell_2-ser'],
             device?.serial,
             merchant?.merchant_code,
             merchant?.pos_serial,
@@ -4211,28 +4491,49 @@ app.get('/api/assets/timeline', async (req, res) => {
                 else if (tech.toUpperCase() === 'ELFAKHARANY') tech = 'أحمد فؤاد سيد الفخراني';
                 else if (tech.toUpperCase() === 'AHMEDMAHDY') tech = 'أحمد المهدي محفوظ المهدي';
 
-                const oldPos = String(tr.OldPOS || '').trim();
-                const newPos = String(tr.NewPOS || '').trim();
+                const oldPos = String(tr.OldPOS || tr.oldpos || '').trim();
+                const newPos = String(tr.NewPOS || tr.newpos || '').trim();
 
-                let oldDesc = oldPos;
-                if (oldPos.startsWith('S') || oldPos.startsWith('s')) oldDesc = `${oldPos} (عهدة فرع)`;
-                else if (oldPos.startsWith('M-') || oldPos.startsWith('m-')) oldDesc = `${oldPos} (صيانة رئيسي)`;
+                const isOldSim = oldPos.startsWith('8920');
+                const isNewSim = newPos.startsWith('8920');
+                const isSimTransfer = isOldSim || isNewSim;
 
-                let newDesc = newPos;
-                if (newPos.startsWith('S') || newPos.startsWith('s')) newDesc = `${newPos} (عهدة فرع)`;
-                else if (newPos.startsWith('M-') || newPos.startsWith('m-')) newDesc = `${newPos} (صيانة رئيسي)`;
+                let title = `استبدال ونقل ماكينة/شريحة: ${oldPos} ➔ ${newPos}`;
+                let detail = `الملاحظات: ${tr.Notes || tr.notes || 'استبدال ماكينة/شريحة'} | النوع: ${tr.OldType || '-'} ➔ ${tr.NewType || '-'}`;
+                let icon = 'truck';
+
+                if (isSimTransfer) {
+                    icon = 'radio';
+                    if (isNewSim && allPossibleCodes.some(c => newPos.includes(c))) {
+                        title = `صرف ونزول الشريحة لعميل/مخبز: ${tr.POSCode || tr.poscode || ''} (كود ${tr.bkCode || tr.bkcode || ''})`;
+                        detail = `تم صرف وتركيب الشريحة للعميل كبديل لـ (${oldPos || 'جديدة'}) | الشبكة: ${tr.NewType || tr.newtype || '-'} | الفني: ${tech}${tr.Notes ? ' | ملاحظات: ' + tr.Notes : ''}`;
+                    } else if (isOldSim && allPossibleCodes.some(c => oldPos.includes(c))) {
+                        title = `استبدال وإحلال الشريحة من العميل/المخبز: ${tr.POSCode || tr.poscode || ''} (كود ${tr.bkCode || tr.bkcode || ''})`;
+                        detail = `تم سحب الشريحة كإحلال واستبدالها بـ (${newPos || 'بديل'}) | الشبكة: ${tr.OldType || tr.oldtype || '-'} | الفني: ${tech}${tr.Notes ? ' | ملاحظات: ' + tr.Notes : ''}`;
+                    }
+                } else {
+                    let oldDesc = oldPos;
+                    if (oldPos.startsWith('S') || oldPos.startsWith('s')) oldDesc = `${oldPos} (عهدة فرع)`;
+                    else if (oldPos.startsWith('M-') || oldPos.startsWith('m-')) oldDesc = `${oldPos} (صيانة رئيسي)`;
+
+                    let newDesc = newPos;
+                    if (newPos.startsWith('S') || newPos.startsWith('s')) newDesc = `${newPos} (عهدة فرع)`;
+                    else if (newPos.startsWith('M-') || newPos.startsWith('m-')) newDesc = `${newPos} (صيانة رئيسي)`;
+
+                    title = `استبدال ونقل ماكينة: ${oldDesc} ➔ ${newDesc}`;
+                }
 
                 timelineEvents.push({
                     type: 'TRANSFER',
-                    title: `استبدال ونقل ماكينة/شريحة: ${oldDesc} ➔ ${newDesc}`,
-                    date: tr.Transfer_Date || 'تاريخ سابق',
+                    title,
+                    date: tr.Transfer_Date || tr.transfer_date || 'تاريخ سابق',
                     technician: tech || 'قسم النقل والتسليم',
-                    merchant_code: tr.bkCode || merchant?.merchant_code || '',
-                    merchant_name: tr.POSCode || merchant?.name || '',
+                    merchant_code: tr.bkCode || tr.bkcode || merchant?.merchant_code || '',
+                    merchant_name: tr.POSCode || tr.poscode || merchant?.name || '',
                     pos_serial: tr.NewPOS || tr.OldPOS || '',
                     merchant: tr.POSCode ? `${tr.POSCode} (${tr.bkCode || ''})` : (tr.bkCode || ''),
-                    detail: `الملاحظات: ${tr.Notes || 'استبدال ماكينة/شريحة'} | النوع: ${tr.OldType || '-'} ➔ ${tr.NewType || '-'}`,
-                    icon: 'truck'
+                    detail,
+                    icon
                 });
             });
         }
@@ -4252,23 +4553,28 @@ app.get('/api/assets/timeline', async (req, res) => {
                 const isMatch = allPossibleCodes.some(c => c && (s.includes(c) || comments.includes(c)));
                 if (isMatch) {
                     const tradeType = tr['Trade Type'] || tr.trade_type || '';
-                    const direction = (String(tradeType).toLowerCase().includes('in')) ? 'وارد للمخزن' : 'صادر لجهة خارجية';
-                    let tech = tr['IN/OUT BY'] || tr.operator || '';
+                    const isIn = String(tradeType).toLowerCase().includes('in');
+                    const direction = isIn ? 'وارد للمخزن' : 'صادر لجهة خارجية';
+                    let tech = tr['IN/OUT BY'] || tr.operator || tr.in_out_by || '';
                     if (tech.toUpperCase() === 'MESSAM') tech = 'محمد عصام محمود فرغلي';
-                    else if (tech.toUpperCase() === 'ELFAKHARANY') tech = 'أحمد فؤاد سيد الفخراني';
+                    else if (tech.toUpperCase() === 'ELFAKHARANY' || tech.toUpperCase() === 'FOUAD') tech = 'أحمد فؤاد سيد الفخراني';
                     else if (tech.toUpperCase() === 'AHMEDMAHDY') tech = 'أحمد المهدي محفوظ المهدي';
+
+                    const isSimItem = String(tr['Item Type'] || tr.item_type || '').toLowerCase().includes('sim') || s.startsWith('8920');
 
                     timelineEvents.push({
                         type: 'LOGISTICS',
-                        title: `حركة لوجستيات (${direction}): ${tr['Trade Location'] || tr.trade_location || 'المركز الرئيسي'}`,
+                        title: isSimItem 
+                            ? (isIn ? `دخول الشريحة للفرع (وارد من ${tr['Trade Location'] || tr.trade_location || 'المركز الرئيسي HQ'})` : `خروج الشريحة (صادر إلى ${tr['Trade Location'] || tr.trade_location || 'جهة خارجية'})`)
+                            : `حركة لوجستيات (${direction}): ${tr['Trade Location'] || tr.trade_location || 'المركز الرئيسي'}`,
                         date: tr['In Date'] || tr.in_date || tr['Out Date'] || tr.out_date || 'تاريخ غير محدد',
                         technician: tech || 'لوجستيات ومخازن',
                         merchant_code: merchant?.merchant_code || '',
                         merchant_name: merchant?.name || '',
                         pos_serial: s || device?.serial || '',
                         merchant: tr['Trade Location'] || tr.trade_location || '',
-                        detail: `النوع: ${tr['Item Type'] || tr.item_type || 'POS'} | السيريال: ${s} | الاستمارة: ${tr['Form Number'] || tr.form_number || '-'} | البيان: ${comments || '-'}`,
-                        icon: 'package'
+                        detail: `النوع: ${tr['Item Type'] || tr.item_type || (isSimItem ? 'شريحة SIM' : 'POS')} | السيريال: ${s} | الاستمارة: ${tr['Form Number'] || tr.form_number || '-'} | المستلم: ${tech || 'الفرع'} | البيان: ${comments || '-'}`,
+                        icon: isSimItem ? 'radio' : 'package'
                     });
                 }
             });
@@ -4362,31 +4668,72 @@ app.get('/api/assets/timeline', async (req, res) => {
             });
         }
 
-        // 6. Events from Payments
+        // 6. Events from Payments (both high-level payments and payments_raw)
         if (allPossibleCodes.length > 0) {
-            const payParams = [...allPossibleCodes, ...allPossibleCodes];
-            const payments = await allQuery(`
-                SELECT p.*, m.name as merchant_name
-                FROM payments p
-                LEFT JOIN merchants m ON m.merchant_code = p.merchant_code
-                WHERE p.merchant_code IN (${placeholders}) OR p.ref_num IN (${placeholders})
-                ORDER BY p.id DESC
-            `, payParams);
+            let rawPayments = [];
+            try {
+                const payWhere = allPossibleCodes.map(() => `p.pos_number LIKE ? OR p.ref_num = ? OR p.policy = ?`).join(' OR ');
+                const payArgs = [];
+                allPossibleCodes.forEach(c => {
+                    payArgs.push(`%${c}%`, c, c);
+                });
+                rawPayments = await allQuery(`
+                    SELECT p.*
+                    FROM payments_raw p
+                    WHERE ${payWhere}
+                    ORDER BY CAST(p.ID AS INTEGER) DESC
+                `, payArgs);
+            } catch (e) {
+                rawPayments = [];
+            }
 
-            payments.forEach(p => {
+            const seenRefNums = new Set();
+            rawPayments.forEach(p => {
+                if (p.ref_num) seenRefNums.add(String(p.ref_num).trim());
+                const isSimPay = String(p.pos_number || '').includes('8920') || String(p.payment_reason || '').includes('شريح');
                 timelineEvents.push({
                     type: 'PAYMENT',
-                    title: `سداد مالي: ${Number(p.amount || 0).toLocaleString('ar-EG')} جم (#${p.ref_num || p.id})`,
+                    title: isSimPay 
+                        ? `سداد مالي للشريحة: ${p.payment_reason || 'رسوم شريحة'} (${Number(p.payment_amount || 0).toLocaleString('ar-EG')} جم)`
+                        : `سداد مالي: ${Number(p.payment_amount || 0).toLocaleString('ar-EG')} جم (#${p.ref_num || p.ID})`,
                     date: p.payment_date || 'تاريخ غير محدد',
                     technician: p.payment_place || 'الفرع',
-                    merchant_code: p.merchant_code || merchant?.merchant_code || '',
-                    merchant_name: p.merchant_name || merchant?.name || '',
-                    pos_serial: device?.serial || '',
-                    merchant: p.merchant_name ? `${p.merchant_name} (${p.merchant_code})` : p.merchant_code,
-                    detail: `السبب: ${p.reason || 'سداد مستحقات'} | الإيصال المرجعي: ${p.ref_num || '-'}`,
+                    merchant_code: p.policy || merchant?.merchant_code || '',
+                    merchant_name: p.payer || merchant?.name || '',
+                    pos_serial: p.pos_number || device?.serial || '',
+                    merchant: p.payer ? `${p.payer}` : (merchant?.name || ''),
+                    detail: `السبب: ${p.payment_reason || 'سداد مستحقات'} | المبلغ: ${p.payment_amount} جم | رقم الإيصال: ${p.ref_num || '-'} | جهة السداد: ${p.payment_place || 'الفرع'} | المسؤول: ${p.procedure_maker || '-'}`,
                     icon: 'receipt'
                 });
             });
+
+            // Also check high level payments table for anything not caught
+            try {
+                const payParams = [...allPossibleCodes, ...allPossibleCodes];
+                const highLevelPayments = await allQuery(`
+                    SELECT p.*, m.name as merchant_name
+                    FROM payments p
+                    LEFT JOIN merchants m ON m.merchant_code = p.merchant_code
+                    WHERE p.merchant_code IN (${placeholders}) OR p.ref_num IN (${placeholders})
+                    ORDER BY p.id DESC
+                `, payParams);
+
+                highLevelPayments.forEach(p => {
+                    if (p.ref_num && seenRefNums.has(String(p.ref_num).trim())) return;
+                    timelineEvents.push({
+                        type: 'PAYMENT',
+                        title: `سداد مالي: ${Number(p.amount || 0).toLocaleString('ar-EG')} جم (#${p.ref_num || p.id})`,
+                        date: p.payment_date || 'تاريخ غير محدد',
+                        technician: p.payment_place || 'الفرع',
+                        merchant_code: p.merchant_code || merchant?.merchant_code || '',
+                        merchant_name: p.merchant_name || merchant?.name || '',
+                        pos_serial: device?.serial || '',
+                        merchant: p.merchant_name ? `${p.merchant_name} (${p.merchant_code})` : p.merchant_code,
+                        detail: `السبب: ${p.reason || 'سداد مستحقات'} | الإيصال المرجعي: ${p.ref_num || '-'}`,
+                        icon: 'receipt'
+                    });
+                });
+            } catch (e) {}
         }
 
         res.json({
@@ -4595,7 +4942,7 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
         'assets_raw', 'transactions_raw', 'maintenance_raw', 'payments_raw',
         'store_pos_raw', 'store_sim_raw', 'store_sp_raw', 'store_sp_maintenance_raw',
         'installments_raw', 'tblfaults_raw', 'tblstaff_raw', 'tblfixes_raw',
-        'failure_points_raw', 'audit_change_logs', 'sync_history'
+        'failure_points_raw', 'trade_raw', 'temp_transfer_raw', 'audit_change_logs', 'sync_history'
     ]);
 
     try {

@@ -195,6 +195,8 @@ essentialTables.Add "tblFaults", True
 essentialTables.Add "AuthorizedUsers", True
 essentialTables.Add "tblFixes", True
 essentialTables.Add "failure_points", True
+essentialTables.Add "Trade", True
+essentialTables.Add "temp_transfer", True
 
 Dim tKey, tArr
 tArr = essentialTables.Keys
