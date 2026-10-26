@@ -465,6 +465,9 @@ function initNavigation() {
             if (target) target.classList.add('active');
 
             AppState.currentTab = tabName;
+            if (window.innerWidth <= 768) {
+                toggleSidebarDrawer(false);
+            }
 
             // Route handler
             if (tabName === 'dashboard') loadDashboard();

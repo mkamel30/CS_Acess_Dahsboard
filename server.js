@@ -1024,7 +1024,7 @@ app.get('/api/audit-logs', async (req, res) => {
         res.json({
             success: true,
             total,
-            limit: parseInt(limit),
+            limit: limit === 'all' ? 'all' : parsedLimit,
             offset: parseInt(offset),
             logs,
             typeStats
