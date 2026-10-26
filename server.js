@@ -325,7 +325,7 @@ const RAW_TABLE_PK_MAP = {
     'tblfixes_raw': 'FixID',
     'failure_points_raw': 'sync_key',
     'trade_raw': 'ID',
-    'temp_transfer_raw': null
+    'temp_transfer_raw': 'sync_key'
 };
 
 let _pgConstraintCache = new Map();
