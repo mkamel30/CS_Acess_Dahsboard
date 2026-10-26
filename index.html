@@ -18,10 +18,13 @@
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- Stylesheet -->
-    <link rel="stylesheet" href="index.css?v=4.9.0">
+    <link rel="stylesheet" href="index.css?v=4.9.1">
 </head>
 <body>
-    <div class="app-container">
+    <div class="app-container" id="main-app-container">
+        <!-- Sidebar Backdrop for Mobile Drawer -->
+        <div id="sidebar-mobile-backdrop" class="sidebar-mobile-backdrop" onclick="toggleSidebarDrawer(false)"></div>
+
         <!-- Sidebar Navigation (M3 Navigation Rail) -->
         <aside class="sidebar" id="app-sidebar">
             <div class="logo-area">
@@ -32,54 +35,53 @@
                     <h2>CS Dashboard</h2>
                     <span>Customer Support Operations</span>
                 </div>
+                <button type="button" class="sidebar-toggle-btn" id="btn-toggle-sidebar" title="طي / توسيع القائمة الجانبية">
+                    <i data-lucide="panel-right-close" id="icon-toggle-sidebar" style="width:18px; height:18px;"></i>
+                </button>
             </div>
             
             <nav class="nav-menu">
-                <a href="#" class="nav-item active" data-tab="dashboard" id="tab-btn-dashboard">
+                <a href="#" class="nav-item active" data-tab="dashboard" id="tab-btn-dashboard" title="لوحة القيادة والمؤشرات">
                     <i data-lucide="layout-dashboard"></i>
                     <span>لوحة القيادة والمؤشرات</span>
                 </a>
-                <a href="#" class="nav-item" data-tab="customers" id="tab-btn-customers">
+                <a href="#" class="nav-item" data-tab="customers" id="tab-btn-customers" title="إدارة وبيانات العملاء">
                     <i data-lucide="users"></i>
                     <span>إدارة وبيانات العملاء</span>
                 </a>
-                <a href="#" class="nav-item" data-tab="branch-warehouse" id="tab-btn-branch-warehouse">
+                <a href="#" class="nav-item" data-tab="branch-warehouse" id="tab-btn-branch-warehouse" title="مخزون ماكينات المخزن">
                     <i data-lucide="boxes"></i>
                     <span>مخزون ماكينات المخزن</span>
                 </a>
-                <a href="#" class="nav-item" data-tab="sim-warehouse" id="tab-btn-sim-warehouse">
+                <a href="#" class="nav-item" data-tab="sim-warehouse" id="tab-btn-sim-warehouse" title="مخزون شرائح الاتصال">
                     <i data-lucide="signal"></i>
                     <span>مخزون شرائح الاتصال</span>
                 </a>
-                <a href="#" class="nav-item" data-tab="hq-maintenance" id="tab-btn-hq-maintenance">
+                <a href="#" class="nav-item" data-tab="hq-maintenance" id="tab-btn-hq-maintenance" title="متابعة الصيانة المركزية">
                     <i data-lucide="wrench"></i>
                     <span>متابعة الصيانة المركزية</span>
                 </a>
-                <a href="#" class="nav-item" data-tab="installments" id="tab-btn-installments">
+                <a href="#" class="nav-item" data-tab="installments" id="tab-btn-installments" title="عقود وأقساط الماكينات">
                     <i data-lucide="calculator"></i>
                     <span>عقود وأقساط الماكينات</span>
                 </a>
-                <a href="#" class="nav-item" data-tab="spare-parts-inventory" id="tab-btn-spare-parts-inventory">
+                <a href="#" class="nav-item" data-tab="spare-parts-inventory" id="tab-btn-spare-parts-inventory" title="مخزن وحركات قطع الغيار">
                     <i data-lucide="layers"></i>
                     <span>مخزن وحركات قطع الغيار</span>
                 </a>
-                <a href="#" class="nav-item" data-tab="time-machine" id="tab-btn-time-machine">
-                    <i data-lucide="hourglass"></i>
-                    <span>آلة الزمن المخزنية</span>
-                </a>
-                <a href="#" class="nav-item" data-tab="sync-monitor" id="tab-btn-sync-monitor">
+                <a href="#" class="nav-item" data-tab="sync-monitor" id="tab-btn-sync-monitor" title="مراقبة التغيرات والمزامنة">
                     <i data-lucide="refresh-cw"></i>
                     <span>مراقبة التغيرات والمزامنة</span>
                 </a>
-                <a href="#" class="nav-item" data-tab="data-explorer" id="tab-btn-data-explorer">
+                <a href="#" class="nav-item" data-tab="data-explorer" id="tab-btn-data-explorer" title="مستكشف بيانات الجداول">
                     <i data-lucide="table-2"></i>
                     <span>مستكشف بيانات الجداول</span>
                 </a>
-                <a href="#" class="nav-item" data-tab="ai-analytics" id="tab-btn-ai-analytics" style="background: linear-gradient(135deg, rgba(168, 85, 247, 0.12), rgba(99, 102, 241, 0.06)); border: 1px solid rgba(168, 85, 247, 0.35); border-radius: 12px; margin: 4px 0;">
+                <a href="#" class="nav-item" data-tab="ai-analytics" id="tab-btn-ai-analytics" title="المساعد الذكي (AI)" style="background: linear-gradient(135deg, rgba(168, 85, 247, 0.12), rgba(99, 102, 241, 0.06)); border: 1px solid rgba(168, 85, 247, 0.35); border-radius: 12px; margin: 4px 0;">
                     <i data-lucide="sparkles" style="color: #c084fc;"></i>
-                    <span style="font-weight: 700; color: #c084fc;">المساعد الذكي (AI) 🤖</span>
+                    <span style="font-weight: 700; color: #c084fc;">المساعد الذكي (AI)</span>
                 </a>
-                <a href="#" class="nav-item" data-tab="settings" id="tab-btn-settings">
+                <a href="#" class="nav-item" data-tab="settings" id="tab-btn-settings" title="إعدادات النظام والاتصال">
                     <i data-lucide="settings"></i>
                     <span>إعدادات النظام والاتصال</span>
                 </a>
@@ -104,6 +106,9 @@
         <main class="main-content">
             <!-- M3 Floating Top App Bar -->
             <header class="app-header">
+                <button type="button" class="header-menu-btn" id="btn-header-menu-toggle" title="القائمة الرئيسية" onclick="toggleSidebarDrawer()">
+                    <i data-lucide="menu" style="width:20px; height:20px;"></i>
+                </button>
                 <div class="header-search">
                     <i data-lucide="search" style="color:var(--md-sys-color-on-surface-variant); width:18px; height:18px;"></i>
                     <input type="text" id="global-search" placeholder="بحث سريع بكود المخبز، الاسم، السيريال، أو الهاتف...">
@@ -211,10 +216,6 @@
                                 <button class="btn btn-secondary" id="btn-goto-spare-parts" style="white-space:nowrap; flex-shrink:0; border-color: rgba(168, 85, 247, 0.4); background: rgba(168, 85, 247, 0.08); color: #c084fc; border-radius: var(--md-shape-corner-full); padding: 7px 14px; font-size: 12px; font-weight: 700;">
                                     <i data-lucide="layers"></i>
                                     <span>مخزن قطع الغيار</span>
-                                </button>
-                                <button class="btn btn-secondary" id="btn-goto-time-machine" style="white-space:nowrap; flex-shrink:0; border-color: rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.08); color: #38bdf8; border-radius: var(--md-shape-corner-full); padding: 7px 14px; font-size: 12px; font-weight: 700;">
-                                    <i data-lucide="hourglass"></i>
-                                    <span>آلة الزمن المخزنية</span>
                                 </button>
                                 <button class="btn btn-secondary" id="btn-goto-maintenance" style="white-space:nowrap; flex-shrink:0; border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.08); color: #f59e0b; border-radius: var(--md-shape-corner-full); padding: 7px 14px; font-size: 12px; font-weight: 700;">
                                     <i data-lucide="wrench"></i>
@@ -584,10 +585,10 @@
                                 <input type="text" id="wh-table-search-input" placeholder="بحث بالسيريال، الموديل، الملاحظات..." style="padding:8px 14px; font-size:12px; border-radius:var(--md-shape-corner-full); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container-low); color:var(--md-sys-color-on-surface); width:220px;">
                                 <select id="wh-table-status-filter" style="padding:8px 14px; font-size:12px; border-radius:var(--md-shape-corner-full); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container-low); color:var(--md-sys-color-on-surface);">
                                     <option value="all">كافة حالات المخزن</option>
-                                    <option value="NEW_FOR_SALE">ماكينات جديدة للبيع فقط 🛍️ (New)</option>
-                                    <option value="READY_IN_STOCK">سليمة وجاهزة للصرف فقط ✅ (Ready)</option>
-                                    <option value="FAULTY_IN_BRANCH">معطلة وقيد الصيانة بالفرع ⚠️ (Faulty)</option>
-                                    <option value="BRANCH_INTERNAL">عهدة واستخدام الفرع 🏢 (Branch)</option>
+                                    <option value="NEW_FOR_SALE">ماكينات جديدة للبيع فقط (New)</option>
+                                    <option value="READY_IN_STOCK">سليمة وجاهزة للصرف فقط (Ready)</option>
+                                    <option value="FAULTY_IN_BRANCH">معطلة وقيد الصيانة بالفرع (Faulty)</option>
+                                    <option value="BRANCH_INTERNAL">عهدة واستخدام الفرع (Branch)</option>
                                 </select>
                                 <select id="wh-table-model-filter" style="padding:8px 14px; font-size:12px; border-radius:var(--md-shape-corner-full); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container-low); color:var(--md-sys-color-on-surface);">
                                     <option value="all">كافة الموديلات</option>
@@ -810,10 +811,10 @@
                                 <input type="text" id="sims-table-search-input" placeholder="بحث بالسيريال، الشبكة، الملاحظات..." style="padding:8px 14px; font-size:12px; border-radius:var(--md-shape-corner-full); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container-low); color:var(--md-sys-color-on-surface); width:220px;">
                                 <select id="sims-table-status-filter" style="padding:8px 14px; font-size:12px; border-radius:var(--md-shape-corner-full); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container-low); color:var(--md-sys-color-on-surface);">
                                     <option value="all">كافة حالات الشرائح</option>
-                                    <option value="NEW_SIM">شرائح جديدة واردة 🛍️ (New)</option>
-                                    <option value="READY_IN_STOCK">سليمة وجاهزة للصرف ✅ (Ready)</option>
-                                    <option value="PROJECT_FUEL">مشروع الوقود ⛽ (Fuel Project)</option>
-                                    <option value="FAULTY_SIM">معطلة / لا تعمل ⚠️ (Faulty)</option>
+                                    <option value="NEW_SIM">شرائح جديدة واردة (New)</option>
+                                    <option value="READY_IN_STOCK">سليمة وجاهزة للصرف (Ready)</option>
+                                    <option value="PROJECT_FUEL">مشروع الوقود (Fuel Project)</option>
+                                    <option value="FAULTY_SIM">معطلة / لا تعمل (Faulty)</option>
                                 </select>
                                 <select id="sims-table-carrier-filter" style="padding:8px 14px; font-size:12px; border-radius:var(--md-shape-corner-full); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container-low); color:var(--md-sys-color-on-surface);">
                                     <option value="all">كافة شبكات الاتصال</option>
@@ -1472,10 +1473,10 @@
                                 <label style="display:block; font-size:11px; font-weight:700; color:var(--md-sys-color-on-surface-variant); margin-bottom:6px;">حالة السداد والمقابل المالي:</label>
                                 <select id="sp-payment-filter" style="width:100%;">
                                     <option value="all">كافة الحركات والمصروفات</option>
-                                    <option value="PAID">مسدد بمقابل (بإيصال إيداع) ✅</option>
-                                    <option value="FREE">مجاني (بدون مقابل) 🛡️</option>
-                                    <option value="DEFERRED">تحصيلات مؤجلة ومستحقات ⚠️</option>
-                                    <option value="STOCK_IN">رصيد وتوريدات واردة للمخزن 📥</option>
+                                    <option value="PAID">مسدد بمقابل (بإيصال إيداع)</option>
+                                    <option value="FREE">مجاني (بدون مقابل)</option>
+                                    <option value="DEFERRED">تحصيلات مؤجلة ومستحقات</option>
+                                    <option value="STOCK_IN">رصيد وتوريدات واردة للمخزن</option>
                                 </select>
                             </div>
                             <!-- Part Type -->
@@ -1508,7 +1509,7 @@
                             </div>
                             <div style="margin-top:10px; font-size:11px; color:var(--md-sys-color-on-surface-variant); display:flex; justify-content:space-between; align-items:center;">
                                 <span>وارد: <strong id="sp-kpi-sub-in" style="color:var(--md-sys-color-primary); font-family:var(--font-en);">0</strong> قطعة</span>
-                                <span class="badge inmerchant" style="font-size:10px; padding:2px 6px;">جرد حي 🔍</span>
+                                <span class="badge inmerchant" style="font-size:10px; padding:2px 6px;">جرد حي</span>
                             </div>
                         </div>
 
@@ -2066,13 +2067,25 @@
                             <table class="data-table" id="audit-logs-table" style="width:100%;">
                                 <thead>
                                     <tr>
-                                        <th>#</th>
-                                        <th>التاريخ والوقت</th>
-                                        <th>الجدول</th>
-                                        <th>نوع العملية</th>
-                                        <th>معرف السجل</th>
-                                        <th>ملخص التغيير</th>
-                                        <th>الإجراء</th>
+                                        <th class="sortable" onclick="sortAuditLogsTable('id')" style="cursor:pointer; width:50px;">
+                                            <span>#</span> <span class="sort-icon" id="audit-sort-id">⬍</span>
+                                        </th>
+                                        <th class="sortable" onclick="sortAuditLogsTable('timestamp')" style="cursor:pointer; white-space:nowrap;">
+                                            <span>التاريخ والوقت</span> <span class="sort-icon" id="audit-sort-timestamp">⬍</span>
+                                        </th>
+                                        <th class="sortable" onclick="sortAuditLogsTable('table_name')" style="cursor:pointer;">
+                                            <span>الجدول</span> <span class="sort-icon" id="audit-sort-table_name">⬍</span>
+                                        </th>
+                                        <th class="sortable" onclick="sortAuditLogsTable('change_type')" style="cursor:pointer;">
+                                            <span>نوع العملية</span> <span class="sort-icon" id="audit-sort-change_type">⬍</span>
+                                        </th>
+                                        <th class="sortable" onclick="sortAuditLogsTable('record_id')" style="cursor:pointer;">
+                                            <span>معرف السجل</span> <span class="sort-icon" id="audit-sort-record_id">⬍</span>
+                                        </th>
+                                        <th class="sortable" onclick="sortAuditLogsTable('summary')" style="cursor:pointer;">
+                                            <span>ملخص التغيير</span> <span class="sort-icon" id="audit-sort-summary">⬍</span>
+                                        </th>
+                                        <th style="width:100px;">الإجراء</th>
                                     </tr>
                                 </thead>
                                 <tbody id="audit-logs-body">
@@ -2080,8 +2093,20 @@
                                 </tbody>
                             </table>
                         </div>
-                        <div class="pagination-bar" id="audit-pagination" style="border-radius:0; border:none; border-top:1px solid var(--md-sys-color-outline-variant);">
-                            <span id="audit-page-info">الصفحة 1</span>
+                        <div class="pagination-bar" id="audit-pagination" style="border-radius:0; border:none; border-top:1px solid var(--md-sys-color-outline-variant); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                                <span id="audit-page-info">الصفحة 1</span>
+                                <div style="display:flex; align-items:center; gap:6px; font-size:12px;">
+                                    <span>العدد بالصفحة:</span>
+                                    <select id="audit-page-size-select" style="padding:4px 10px; font-size:12px; border-radius:var(--md-shape-corner-full); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container); color:var(--md-sys-color-on-surface); font-weight:700;">
+                                        <option value="15">15</option>
+                                        <option value="25" selected>25</option>
+                                        <option value="50">50</option>
+                                        <option value="100">100</option>
+                                        <option value="all">الكل</option>
+                                    </select>
+                                </div>
+                            </div>
                             <div class="pagination-actions">
                                 <button type="button" class="btn btn-secondary" id="btn-audit-prev-page" style="padding:6px 16px; font-size:12px;">السابق</button>
                                 <button type="button" class="btn btn-secondary" id="btn-audit-next-page" style="padding:6px 16px; font-size:12px;">التالي</button>
@@ -2161,21 +2186,21 @@
                     </div>
 
                     <!-- Settings Sub-Navigation Header -->
-                    <div class="settings-subtabs-nav" style="display:flex; gap:10px; border-bottom:1px solid var(--border-color); margin-bottom:20px; overflow-x:auto; padding-bottom:8px;">
+                    <div class="settings-subtabs-nav" style="display:flex; gap:10px; border-bottom:1px solid var(--border-color); margin-bottom:20px; overflow-x:auto; padding-bottom:8px; flex-wrap:nowrap;">
                         <button type="button" class="btn btn-secondary settings-subtab-btn active" data-subtab="settings-db" id="btn-subtab-settings-db" onclick="switchSettingsSubtab('settings-db')">
                             <i data-lucide="database"></i> <span>اتصال الآكسيس والشبكة</span>
                         </button>
                         <button type="button" class="btn btn-secondary settings-subtab-btn" data-subtab="settings-fonts" id="btn-subtab-settings-fonts" onclick="switchSettingsSubtab('settings-fonts')">
-                            <i data-lucide="type"></i> <span>تخصيص الخطوط والمظهر 🎨</span>
+                            <i data-lucide="type"></i> <span>تخصيص الخطوط والمظهر</span>
                         </button>
                         <button type="button" class="btn btn-secondary settings-subtab-btn" data-subtab="settings-sync-logs" id="btn-subtab-settings-sync-logs" onclick="switchSettingsSubtab('settings-sync-logs')">
-                            <i data-lucide="activity"></i> <span>سجل (لوج) المزامنة اللوكال والـ VPS 📜</span>
+                            <i data-lucide="activity"></i> <span>سجل المزامنة والـ VPS</span>
                         </button>
                         <button type="button" class="btn btn-secondary settings-subtab-btn" data-subtab="settings-updates" id="btn-subtab-settings-updates" onclick="switchSettingsSubtab('settings-updates')" style="background:rgba(56, 189, 248, 0.08); border-color:rgba(56, 189, 248, 0.3); color:#38bdf8;">
-                            <i data-lucide="git-branch"></i> <span>التحديث التلقائي وإصدار GitHub 🚀</span>
+                            <i data-lucide="git-branch"></i> <span>التحديث التلقائي وإصدار GitHub</span>
                         </button>
                         <button type="button" class="btn btn-secondary settings-subtab-btn" data-subtab="settings-diagnostics" id="btn-subtab-settings-diagnostics" onclick="switchSettingsSubtab('settings-diagnostics')" style="background:rgba(239, 68, 68, 0.08); border-color:rgba(239, 68, 68, 0.3); color:#f87171;">
-                            <i data-lucide="stethoscope"></i> <span>مركز التشخيص وتتبع الأخطاء والتطابق 🩺⚡</span>
+                            <i data-lucide="stethoscope"></i> <span>مركز التشخيص وتتبع الأخطاء</span>
                         </button>
                     </div>
 
@@ -2387,8 +2412,8 @@
                                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
                                     <select id="sync-log-filter-type" style="padding:6px 12px; font-size:12px;" onchange="loadSyncTelemetryLogs()">
                                         <option value="ALL">كافة سجلات المزامنة (اللوكال + الـ VPS)</option>
-                                        <option value="LOCAL_ACCESS">سجلات السيرفر المحلي (Access File Watcher) 🖥️</option>
-                                        <option value="CLOUD_VPS">سجلات السيرفر السحابي (Oracle Cloud Delta) ☁️</option>
+                                        <option value="LOCAL_ACCESS">سجلات السيرفر المحلي (Access File Watcher)</option>
+                                        <option value="CLOUD_VPS">سجلات السيرفر السحابي (Oracle Cloud Delta)</option>
                                     </select>
                                     <button type="button" class="btn btn-secondary" onclick="loadSyncTelemetryLogs()" style="padding:6px 12px; font-size:12px;">
                                         <i data-lucide="refresh-cw" id="icon-sync-log-refresh"></i> تحديث
@@ -2563,9 +2588,9 @@
                                 <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
                                     <select id="diag-error-filter-severity" style="background:#0a0f1d; border:1px solid rgba(0,240,255,0.3); color:#38bdf8; font-family:var(--cyber-font-mono); font-size:11px; padding:6px 12px; border-radius:6px;" onchange="loadDiagnosticsErrorLogs()">
                                         <option value="ALL">>_ كافة درجات الخطورة</option>
-                                        <option value="CRITICAL">>_ أخطاء حرجة (CRITICAL) 🚨</option>
-                                        <option value="ERROR">>_ أخطاء عادية (ERROR) ⚠️</option>
-                                        <option value="CLIENT_UI">>_ أخطاء المتصفح والواجهة (CLIENT_UI) 🖥️</option>
+                                        <option value="CRITICAL">>_ أخطاء حرجة (CRITICAL)</option>
+                                        <option value="ERROR">>_ أخطاء عادية (ERROR)</option>
+                                        <option value="CLIENT_UI">>_ أخطاء المتصفح والواجهة (CLIENT_UI)</option>
                                     </select>
                                     <button type="button" class="cyber-btn-secondary" onclick="loadDiagnosticsErrorLogs()">
                                         <i data-lucide="refresh-cw" id="icon-diag-refresh"></i> تحديث
@@ -2649,7 +2674,7 @@
                                         </button>
                                         <button type="button" class="btn btn-secondary" id="btn-apply-github-update" onclick="applyGitHubUpdate()" style="padding:10px 18px; font-size:12px; display:none; align-items:center; gap:6px; background:linear-gradient(135deg, #059669, #10b981); color:#fff; border:none; box-shadow:0 2px 8px rgba(16,185,129,0.3);">
                                             <i data-lucide="download-cloud"></i>
-                                            <span>تثبيت التحديث الآن وإعادة التشغيل 🚀</span>
+                                            <span>تثبيت التحديث الآن وإعادة التشغيل</span>
                                         </button>
                                     </div>
                                     <div id="settings-update-result-msg" style="margin-top:12px; font-size:12px; display:none;"></div>
@@ -2663,254 +2688,6 @@
 
                 <!-- ======================================================== -->
                 <!-- TIME MACHINE TAB (آلة الزمن المخزنية - جرد تاريخي)       -->
-                <!-- ======================================================== -->
-                <section class="tab-content" id="tab-time-machine">
-                    <div class="page-title-area" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
-                        <div>
-                            <h1>آلة الزمن وسجل المخزن التاريخي</h1>
-                            <p>استرجاع وتدقيق رصيد مخزن الفرع في أي يوم أو تاريخ محدد بالماضي للماكينات، الشرائح، وقطع الغيار</p>
-                        </div>
-
-                        <!-- Date Controls -->
-                        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                            <div style="display:flex; align-items:center; gap:8px; background:var(--md-sys-color-surface-container); padding:6px 14px; border-radius:var(--md-shape-corner-full); border:1px solid var(--md-sys-color-outline);">
-                                <label for="tm-date-input" style="font-size:12px; font-weight:700; color:var(--text-secondary); white-space:nowrap;"><i data-lucide="calendar" style="width:13px; height:13px; vertical-align:middle;"></i> تاريخ الرصيد:</label>
-                                <input type="date" id="tm-date-input" style="padding:4px 8px; font-size:13px; border-radius:6px; border:1px solid var(--md-sys-color-outline-variant); background:var(--md-sys-color-surface-container-low); color:var(--md-sys-color-on-surface); font-family:var(--font-en); font-weight:700;">
-                            </div>
-                            <button type="button" class="btn btn-primary" id="btn-tm-query" style="background: linear-gradient(135deg, #2563eb, #3b82f6); box-shadow: 0 4px 14px rgba(37,99,235,0.35); padding:8px 18px; font-size:12px; font-weight:700; display:inline-flex; align-items:center; gap:6px;">
-                                <i data-lucide="play" style="width:14px; height:14px;"></i>
-                                <span>استرجاع الرصيد</span>
-                            </button>
-                            <button type="button" class="btn btn-secondary" id="btn-tm-print" style="padding:8px 16px; font-size:12px; font-weight:700; display:inline-flex; align-items:center; gap:6px; border-radius:var(--md-shape-corner-full);">
-                                <i data-lucide="printer" style="width:14px; height:14px;"></i>
-                                <span>طباعة كشف الجرد</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Date Presets Bar -->
-                    <div style="display:flex; gap:8px; margin: 0 0 24px 0; overflow-x:auto; padding-bottom:4px;">
-                        <button type="button" class="btn btn-secondary tm-preset-btn active" data-preset="today" style="font-size:11px; padding:6px 14px; border-radius:var(--md-shape-corner-full); font-weight:700;">اليوم الحالي (اللحظي)</button>
-                        <button type="button" class="btn btn-secondary tm-preset-btn" data-preset="end_last_month" style="font-size:11px; padding:6px 14px; border-radius:var(--md-shape-corner-full); font-weight:700;">نهاية الشهر الماضي</button>
-                        <button type="button" class="btn btn-secondary tm-preset-btn" data-preset="start_year_2026" style="font-size:11px; padding:6px 14px; border-radius:var(--md-shape-corner-full); font-weight:700;">بداية عام 2026</button>
-                        <button type="button" class="btn btn-secondary tm-preset-btn" data-preset="end_year_2025" style="font-size:11px; padding:6px 14px; border-radius:var(--md-shape-corner-full); font-weight:700;">نهاية عام 2025</button>
-                        <button type="button" class="btn btn-secondary tm-preset-btn" data-preset="mid_year_2025" style="font-size:11px; padding:6px 14px; border-radius:var(--md-shape-corner-full); font-weight:700;">منتصف عام 2025 (30 يونيو)</button>
-                    </div>
-
-                    <!-- Standard 4 KPI Stat Cards matching the whole app -->
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px;">
-                        <!-- POS Card -->
-                        <div class="wh-stat-card wh-card-total" style="background: linear-gradient(135deg, rgba(56,189,248,0.12), rgba(2,132,199,0.05)); border: 1px solid rgba(56,189,248,0.3); border-radius: 16px; padding: 18px; position: relative; overflow: hidden; box-shadow: var(--md-elevation-1);">
-                            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                                <div>
-                                    <span style="font-size:11px; font-weight:700; color:var(--md-sys-color-on-surface-variant); display:block; margin-bottom:4px;">ماكينات الـ POS بالمخزن</span>
-                                    <h2 id="tm-stat-pos-count" style="font-size:30px; font-weight:800; font-family:var(--font-en); color:var(--md-sys-color-primary); margin:0;">0</h2>
-                                </div>
-                                <div style="width:40px; height:40px; border-radius:12px; background:rgba(56,189,248,0.2); display:flex; align-items:center; justify-content:center; color:var(--md-sys-color-primary);">
-                                    <i data-lucide="boxes" style="width:22px; height:22px;"></i>
-                                </div>
-                            </div>
-                            <div style="margin-top:10px; font-size:11px; color:var(--md-sys-color-on-surface-variant);">
-                                <span class="badge inmerchant" id="tm-stat-pos-sub" style="font-weight:700; font-size:10px;">موزعة على الموديلات</span>
-                            </div>
-                        </div>
-
-                        <!-- SIMs Card -->
-                        <div class="wh-stat-card wh-card-ready" style="background: linear-gradient(135deg, rgba(16,185,129,0.12), rgba(5,150,105,0.05)); border: 1px solid rgba(16,185,129,0.3); border-radius: 16px; padding: 18px; position: relative; overflow: hidden; box-shadow: var(--md-elevation-1);">
-                            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                                <div>
-                                    <span style="font-size:11px; font-weight:700; color:var(--md-sys-color-on-surface-variant); display:block; margin-bottom:4px;">شرائح الاتصال بالمخزن</span>
-                                    <h2 id="tm-stat-sims-count" style="font-size:30px; font-weight:800; font-family:var(--font-en); color:#10b981; margin:0;">0</h2>
-                                </div>
-                                <div style="width:40px; height:40px; border-radius:12px; background:rgba(16,185,129,0.2); display:flex; align-items:center; justify-content:center; color:#10b981;">
-                                    <i data-lucide="signal" style="width:22px; height:22px;"></i>
-                                </div>
-                            </div>
-                            <div style="margin-top:10px; font-size:11px; color:var(--md-sys-color-on-surface-variant);">
-                                <span class="badge ready" id="tm-stat-sims-sub" style="font-weight:700; font-size:10px;">متاحة بالمخزن</span>
-                            </div>
-                        </div>
-
-                        <!-- Spare Parts Units Card -->
-                        <div class="wh-stat-card wh-card-parts" style="background: linear-gradient(135deg, rgba(168,85,247,0.12), rgba(147,51,234,0.05)); border: 1px solid rgba(168,85,247,0.3); border-radius: 16px; padding: 18px; position: relative; overflow: hidden; box-shadow: var(--md-elevation-1);">
-                            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                                <div>
-                                    <span style="font-size:11px; font-weight:700; color:var(--md-sys-color-on-surface-variant); display:block; margin-bottom:4px;">إجمالي قطع الغيار المتبقية</span>
-                                    <h2 id="tm-stat-sp-units" style="font-size:30px; font-weight:800; font-family:var(--font-en); color:#c084fc; margin:0;">0</h2>
-                                </div>
-                                <div style="width:40px; height:40px; border-radius:12px; background:rgba(168,85,247,0.2); display:flex; align-items:center; justify-content:center; color:#c084fc;">
-                                    <i data-lucide="layers" style="width:22px; height:22px;"></i>
-                                </div>
-                            </div>
-                            <div style="margin-top:10px; font-size:11px; color:var(--md-sys-color-on-surface-variant);">
-                                <span class="badge inmerchant" id="tm-stat-sp-sub" style="font-weight:700; font-size:10px;">رصيد تراكمي صافي</span>
-                            </div>
-                        </div>
-
-                        <!-- Financial Valuation Card -->
-                        <div class="wh-stat-card wh-card-branchuse" style="background: linear-gradient(135deg, rgba(245,158,11,0.12), rgba(217,119,6,0.05)); border: 1px solid rgba(245,158,11,0.3); border-radius: 16px; padding: 18px; position: relative; overflow: hidden; box-shadow: var(--md-elevation-1);">
-                            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                                <div>
-                                    <span style="font-size:11px; font-weight:700; color:var(--md-sys-color-on-surface-variant); display:block; margin-bottom:4px;">القيمة المالية لرصيد القطع</span>
-                                    <h2 id="tm-stat-sp-valuation" style="font-size:30px; font-weight:800; font-family:var(--font-en); color:#f59e0b; margin:0;">0 جم</h2>
-                                </div>
-                                <div style="width:40px; height:40px; border-radius:12px; background:rgba(245,158,11,0.2); display:flex; align-items:center; justify-content:center; color:#f59e0b;">
-                                    <i data-lucide="calculator" style="width:22px; height:22px;"></i>
-                                </div>
-                            </div>
-                            <div style="margin-top:10px; font-size:11px; color:var(--md-sys-color-on-surface-variant);">
-                                <span class="badge branch-use" id="tm-stat-valuation-sub" style="font-weight:700; font-size:10px;">بالسعر الرسمي المعتمد</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Interactive Subtab Buttons Bar -->
-                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--md-sys-color-outline-variant); margin-bottom:20px; flex-wrap:wrap; gap:12px;">
-                        <div style="display:flex; gap:8px;">
-                            <button type="button" class="btn btn-secondary tm-subtab-btn active" data-subtab="sp" style="font-weight:700; padding:9px 18px; border-radius:10px 10px 0 0; font-size:13px;">
-                                <i data-lucide="layers" style="width:14px; height:14px;"></i>
-                                <span>قطع الغيار والأرصدة (<span id="tm-subcount-sp">0</span>)</span>
-                            </button>
-                            <button type="button" class="btn btn-secondary tm-subtab-btn" data-subtab="pos" style="font-weight:700; padding:9px 18px; border-radius:10px 10px 0 0; font-size:13px;">
-                                <i data-lucide="boxes" style="width:14px; height:14px;"></i>
-                                <span>ماكينات الـ POS بالموديلات (<span id="tm-subcount-pos">0</span>)</span>
-                            </button>
-                            <button type="button" class="btn btn-secondary tm-subtab-btn" data-subtab="sims" style="font-weight:700; padding:9px 18px; border-radius:10px 10px 0 0; font-size:13px;">
-                                <i data-lucide="signal" style="width:14px; height:14px;"></i>
-                                <span>شرائح الاتصال (<span id="tm-subcount-sims">0</span>)</span>
-                            </button>
-                        </div>
-                        <div id="tm-as-of-badge" style="font-size:12px; font-weight:700; color:var(--text-secondary); background:var(--md-sys-color-surface-container); padding:6px 14px; border-radius:var(--md-shape-corner-full); border:1px solid var(--md-sys-color-outline-variant);">
-                            كشف الرصيد حتى: <strong id="tm-as-of-date-text" style="color:var(--md-sys-color-primary); font-weight:800;">-</strong>
-                        </div>
-                    </div>
-
-                    <!-- SUBTAB 1: SPARE PARTS -->
-                    <div class="tm-subpane" id="tm-pane-sp">
-                        <div class="card" style="padding: 24px; border-radius: 16px; margin-bottom: 24px; background:var(--md-sys-color-surface-container); border:1px solid var(--md-sys-color-outline);">
-                            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
-                                <div>
-                                    <h3 style="font-size:16px; font-weight:800; margin:0 0 4px 0; display:flex; align-items:center; gap:8px;">
-                                        <i data-lucide="layers" style="color:var(--md-sys-color-primary);"></i>
-                                        <span>رصيد قطع الغيار في التاريخ المحدد</span>
-                                    </h3>
-                                    <p style="font-size:12px; color:var(--md-sys-color-on-surface-variant); margin:0;">حساب تراكمي لمعادلة [إجمالي الوارد حتى التاريخ - إجمالي المنصرف حتى التاريخ]</p>
-                                </div>
-                                <input type="text" id="tm-sp-search" placeholder="بحث باسم القطعة..." style="padding:8px 14px; font-size:12px; border-radius:var(--md-shape-corner-full); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container-low); color:var(--md-sys-color-on-surface); width:220px;">
-                            </div>
-                            <div class="table-responsive">
-                                <table class="data-table" style="width:100%; min-width:700px;">
-                                    <thead>
-                                        <tr>
-                                            <th style="width:45px;">#</th>
-                                            <th>نوع قطعة الغيار</th>
-                                            <th>السعر الرسمي</th>
-                                            <th>إجمالي الوارد</th>
-                                            <th>إجمالي المنصرف</th>
-                                            <th>الرصيد المتاح</th>
-                                            <th>إجمالي القيمة التقديرية</th>
-                                            <th>الحالة التقديرية</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="tm-sp-table-body">
-                                        <tr><td colspan="8" style="text-align:center; padding:35px; color:var(--text-muted);">جاري تجهيز رصيد آلة الزمن لقطع الغيار...</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- SUBTAB 2: POS MACHINES -->
-                    <div class="tm-subpane" id="tm-pane-pos" style="display:none;">
-                        <!-- Section Title: Models Cards -->
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
-                            <h2 style="font-size:18px; font-weight:800; display:flex; align-items:center; gap:8px; margin:0;">
-                                <i data-lucide="cpu" style="color:var(--md-sys-color-primary);"></i>
-                                <span>حصر ماكينات المخزن مصنفة بالموديل (Model Cards)</span>
-                            </h2>
-                        </div>
-
-                        <!-- Models Breakdown Matrix -->
-                        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:16px; margin-bottom:30px;" id="tm-pos-models-grid">
-                            <!-- Populated dynamically -->
-                        </div>
-
-                        <div class="card" style="padding: 24px; border-radius: 16px; margin-bottom: 24px; background:var(--md-sys-color-surface-container); border:1px solid var(--md-sys-color-outline);">
-                            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
-                                <div>
-                                    <h3 style="font-size:16px; font-weight:800; margin:0 0 4px 0; display:flex; align-items:center; gap:8px;">
-                                        <i data-lucide="boxes" style="color:var(--md-sys-color-primary);"></i>
-                                        <span>سجل الماكينات الموجودة بالمخزن في هذا التاريخ</span>
-                                    </h3>
-                                    <p style="font-size:12px; color:var(--md-sys-color-on-surface-variant); margin:0;">تشمل الماكينات الاحتياطية للفرع (S) والماكينات المتاحة</p>
-                                </div>
-                                <input type="text" id="tm-pos-search" placeholder="بحث بالسيريال أو الموديل..." style="padding:8px 14px; font-size:12px; border-radius:var(--md-shape-corner-full); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container-low); color:var(--md-sys-color-on-surface); width:220px;">
-                            </div>
-                            <div class="table-responsive">
-                                <table class="data-table" style="width:100%; min-width:650px;">
-                                    <thead>
-                                        <tr>
-                                            <th style="width:45px;">#</th>
-                                            <th>سيريال الماكينة</th>
-                                            <th>الشركة المصنعة والموديل</th>
-                                            <th>نوع الماكينة</th>
-                                            <th>الحالة الفنية</th>
-                                            <th>الملاحظات</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="tm-pos-table-body">
-                                        <tr><td colspan="6" style="text-align:center; padding:35px; color:var(--text-muted);">جاري تحميل ماكينات المخزن...</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- SUBTAB 3: SIM CARDS -->
-                    <div class="tm-subpane" id="tm-pane-sims" style="display:none;">
-                        <!-- Section Title: Carrier Cards -->
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
-                            <h2 style="font-size:18px; font-weight:800; display:flex; align-items:center; gap:8px; margin:0;">
-                                <i data-lucide="signal" style="color:var(--md-sys-color-primary);"></i>
-                                <span>توزيع شرائح الاتصال حسب الشبكات</span>
-                            </h2>
-                        </div>
-
-                        <!-- SIM Carriers Grid -->
-                        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:16px; margin-bottom:30px;" id="tm-sims-carriers-grid">
-                            <!-- Populated dynamically -->
-                        </div>
-
-                        <div class="card" style="padding: 24px; border-radius: 16px; margin-bottom: 24px; background:var(--md-sys-color-surface-container); border:1px solid var(--md-sys-color-outline);">
-                            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
-                                <div>
-                                    <h3 style="font-size:16px; font-weight:800; margin:0 0 4px 0; display:flex; align-items:center; gap:8px;">
-                                        <i data-lucide="signal" style="color:var(--md-sys-color-primary);"></i>
-                                        <span>سجل شرائح الاتصال المتاحة بالمخزن</span>
-                                    </h3>
-                                    <p style="font-size:12px; color:var(--md-sys-color-on-surface-variant); margin:0;">رصيد الشرائح غير المربوطة والموجودة بعهدة الفرع</p>
-                                </div>
-                                <input type="text" id="tm-sims-search" placeholder="بحث برقم الشريحة..." style="padding:8px 14px; font-size:12px; border-radius:var(--md-shape-corner-full); border:1px solid var(--md-sys-color-outline); background:var(--md-sys-color-surface-container-low); color:var(--md-sys-color-on-surface); width:220px;">
-                            </div>
-                            <div class="table-responsive">
-                                <table class="data-table" style="width:100%; min-width:600px;">
-                                    <thead>
-                                        <tr>
-                                            <th style="width:45px;">#</th>
-                                            <th>سيريال الشريحة (SIM)</th>
-                                            <th>الشبكة المشغلة</th>
-                                            <th>الملاحظات</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="tm-sims-table-body">
-                                        <tr><td colspan="4" style="text-align:center; padding:35px; color:var(--text-muted);">جاري تحميل شرائح المخزن...</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
                 <!-- ======================================================== -->
                 <!-- AI ANALYTICS TAB (المساعد الذكي واستعلامات اللغة الطبيعية) -->
                 <!-- ======================================================== -->
@@ -3718,19 +3495,19 @@
                 <div style="display:flex; gap:8px; overflow-x:auto; border-bottom:1px solid var(--md-sys-color-outline-variant); padding-bottom:10px; margin-bottom:16px; scrollbar-width:none; -webkit-overflow-scrolling: touch;">
                     <button type="button" class="btn btn-primary dev-deepdive-tab active" data-subtab="maintenance" id="btn-dev-tab-maint" style="padding:8px 14px; font-size:12px; white-space:nowrap; flex-shrink:0;">
                         <i data-lucide="wrench"></i>
-                        <span>🛠️ صيانات وبلاغات الفرع (<span id="dev-tab-count-maint">0</span>)</span>
+                        <span>صيانات وبلاغات الفرع (<span id="dev-tab-count-maint">0</span>)</span>
                     </button>
                     <button type="button" class="btn btn-secondary dev-deepdive-tab" data-subtab="replacements" id="btn-dev-tab-rep" style="padding:8px 14px; font-size:12px; white-space:nowrap; flex-shrink:0;">
                         <i data-lucide="repeat"></i>
-                        <span>🔄 استبدالات وتغيير الماكينة (<span id="dev-tab-count-rep">0</span>)</span>
+                        <span>استبدالات وتغيير الماكينة (<span id="dev-tab-count-rep">0</span>)</span>
                     </button>
                     <button type="button" class="btn btn-secondary dev-deepdive-tab" data-subtab="spare-parts" id="btn-dev-tab-sp" style="padding:8px 14px; font-size:12px; white-space:nowrap; flex-shrink:0;">
                         <i data-lucide="layers"></i>
-                        <span>⚙️ قطع الغيار المستبدلة (<span id="dev-tab-count-sp">0</span>)</span>
+                        <span>قطع الغيار المستبدلة (<span id="dev-tab-count-sp">0</span>)</span>
                     </button>
                     <button type="button" class="btn btn-secondary dev-deepdive-tab" data-subtab="hq-cycles" id="btn-dev-tab-hq" style="padding:8px 14px; font-size:12px; white-space:nowrap; flex-shrink:0;">
                         <i data-lucide="building-2"></i>
-                        <span>🏢 الصيانة المركزية بالشركة (<span id="dev-tab-count-hq">0</span>)</span>
+                        <span>الصيانة المركزية بالشركة (<span id="dev-tab-count-hq">0</span>)</span>
                     </button>
                 </div>
 
@@ -3987,6 +3764,6 @@
     </div>
 
     <!-- Main Client Application Script -->
-    <script src="app.js?v=4.9.0"></script>
+    <script src="app.js?v=4.9.1"></script>
 </body>
 </html>

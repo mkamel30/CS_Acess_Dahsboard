@@ -45,7 +45,7 @@ const AppState = {
     theme: safeStorageGet('Br_Theme', 'dark'),
     audit: {
         currentPage: 1,
-        pageSize: 20,
+        pageSize: 25,
         total: 0,
         sortBy: 'timestamp',
         sortOrder: 'desc',
@@ -372,6 +372,9 @@ function switchTab(tabName) {
         const target = document.getElementById(`tab-${tabName}`);
         if (target) target.classList.add('active');
         AppState.currentTab = tabName;
+            if (window.innerWidth <= 768) {
+                toggleSidebarDrawer(false);
+            }
         
         if (tabName === 'dashboard') loadDashboard();
         else if (tabName === 'customers') initCustomerManagement();
@@ -380,7 +383,7 @@ function switchTab(tabName) {
         else if (tabName === 'hq-maintenance') loadHqMaintenanceInventory();
         else if (tabName === 'installments') loadInstallmentsDashboard();
         else if (tabName === 'spare-parts-inventory') loadSparePartsInventory();
-        else if (tabName === 'time-machine') initTimeMachineTab();
+        // time-machine removed
         else if (tabName === 'sync-monitor') loadSyncMonitor();
         else if (tabName === 'data-explorer') loadDataExplorer();
         else if (tabName === 'ai-analytics') loadAiAnalyticsTab();
@@ -388,6 +391,61 @@ function switchTab(tabName) {
     }
 }
 window.switchTab = switchTab;
+
+
+// ==========================================
+// SIDEBAR COLLAPSE & MOBILE DRAWER LOGIC
+// ==========================================
+function toggleSidebarDrawer(force) {
+    const sidebar = document.getElementById('app-sidebar');
+    const backdrop = document.getElementById('sidebar-mobile-backdrop');
+    if (!sidebar) return;
+    const isOpen = sidebar.classList.contains('sidebar-mobile-open');
+    const shouldOpen = typeof force === 'boolean' ? force : !isOpen;
+    if (shouldOpen) {
+        sidebar.classList.add('sidebar-mobile-open');
+        backdrop?.classList.add('active');
+        document.body.style.overflow = 'hidden';
+    } else {
+        sidebar.classList.remove('sidebar-mobile-open');
+        backdrop?.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+}
+window.toggleSidebarDrawer = toggleSidebarDrawer;
+
+function toggleSidebarCollapse() {
+    const container = document.getElementById('main-app-container');
+    if (!container) return;
+    const isCollapsed = container.classList.toggle('sidebar-collapsed');
+    safeStorageSet('sidebar_collapsed', isCollapsed ? '1' : '0');
+    
+    const icon = document.getElementById('icon-toggle-sidebar');
+    if (icon) {
+        icon.setAttribute('data-lucide', isCollapsed ? 'panel-right-open' : 'panel-right-close');
+    }
+    refreshIcons();
+}
+window.toggleSidebarCollapse = toggleSidebarCollapse;
+
+function initSidebar() {
+    const isCollapsed = safeStorageGet('sidebar_collapsed', '0') === '1';
+    const container = document.getElementById('main-app-container');
+    const icon = document.getElementById('icon-toggle-sidebar');
+    if (isCollapsed && window.innerWidth > 768) {
+        container?.classList.add('sidebar-collapsed');
+        if (icon) icon.setAttribute('data-lucide', 'panel-right-open');
+    }
+    document.getElementById('btn-toggle-sidebar')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleSidebarCollapse();
+    });
+    document.querySelector('.logo-area .logo-icon-box')?.addEventListener('click', () => {
+        if (container?.classList.contains('sidebar-collapsed')) {
+            toggleSidebarCollapse();
+        }
+    });
+}
 
 function initNavigation() {
     const navItems = document.querySelectorAll('.nav-item');
@@ -416,7 +474,7 @@ function initNavigation() {
             else if (tabName === 'hq-maintenance') loadHqMaintenanceInventory();
             else if (tabName === 'installments') loadInstallmentsDashboard();
             else if (tabName === 'spare-parts-inventory') loadSparePartsInventory();
-            else if (tabName === 'time-machine') initTimeMachineTab();
+            // time-machine removed
             else if (tabName === 'sync-monitor') loadSyncMonitor();
             else if (tabName === 'data-explorer') loadDataExplorer();
             else if (tabName === 'ai-analytics') loadAiAnalyticsTab();
@@ -448,9 +506,7 @@ function initNavigation() {
     document.getElementById('btn-goto-spare-parts')?.addEventListener('click', () => {
         document.getElementById('tab-btn-spare-parts-inventory')?.click();
     });
-    document.getElementById('btn-goto-time-machine')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-time-machine')?.click();
-    });
+    // btn-goto-time-machine removed
     document.getElementById('btn-goto-maintenance')?.addEventListener('click', () => {
         document.getElementById('tab-btn-hq-maintenance')?.click();
     });
@@ -3223,15 +3279,18 @@ async function fetchAndRenderAuditLogs() {
     const tbody = document.getElementById('audit-logs-body');
     if (!tbody) return;
 
-    const page = AppState.audit.currentPage;
-    const pageSize = AppState.audit.pageSize;
+    const page = AppState.audit.currentPage || 1;
+    const pageSize = AppState.audit.pageSize || 25;
+    const sortBy = AppState.audit.sortBy || 'timestamp';
+    const sortOrder = AppState.audit.sortOrder || 'desc';
 
     const tableName = document.getElementById('audit-table-filter')?.value || 'all';
     const changeType = document.getElementById('audit-type-filter')?.value || 'all';
     const search = document.getElementById('audit-search-input')?.value.trim() || '';
 
-    const offset = (page - 1) * pageSize;
-    const url = `/api/audit-logs?table_name=${encodeURIComponent(tableName)}&change_type=${encodeURIComponent(changeType)}&search=${encodeURIComponent(search)}&limit=${pageSize}&offset=${offset}`;
+    const offset = pageSize === 'all' ? 0 : (page - 1) * pageSize;
+    const limitParam = pageSize === 'all' ? 'all' : pageSize;
+    const url = `/api/audit-logs?table_name=${encodeURIComponent(tableName)}&change_type=${encodeURIComponent(changeType)}&search=${encodeURIComponent(search)}&limit=${limitParam}&offset=${offset}&sortField=${encodeURIComponent(sortBy)}&sortOrder=${encodeURIComponent(sortOrder)}`;
 
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 25px; color: var(--text-muted);"><i data-lucide="loader-2" class="spin-animation" style="vertical-align:middle; margin-left:8px;"></i> جاري تحميل سجلات التغيير...</td></tr>`;
     refreshIcons();
@@ -3273,9 +3332,10 @@ async function fetchAndRenderAuditLogs() {
 
             const cleanRecordId = formatAuditRecordId(log.table_name, log.record_id);
             const cleanSummary = formatAuditSummary(log);
+            const rowNumber = pageSize === 'all' ? (idx + 1) : (offset + idx + 1);
 
             tr.innerHTML = `
-                <td style="font-family: var(--font-en);">${offset + idx + 1}</td>
+                <td style="font-family: var(--font-en);">${rowNumber}</td>
                 <td style="font-family: var(--font-en); white-space: nowrap;">${time}</td>
                 <td><strong style="color: var(--color-primary); font-family: var(--font-en);">${log.table_name}</strong></td>
                 <td><span class="change-type-badge ${typeBadgeClass}">${typeLabel}</span></td>
@@ -3290,11 +3350,21 @@ async function fetchAndRenderAuditLogs() {
             tbody.appendChild(tr);
         });
 
-        // Pagination
-        const totalPages = Math.ceil(data.total / pageSize) || 1;
-        document.getElementById('audit-page-info').textContent = `الصفحة ${page} من ${totalPages} (إجمالي ${data.total.toLocaleString('ar-EG')} عملية)`;
-        document.getElementById('btn-audit-prev-page').disabled = page <= 1;
-        document.getElementById('btn-audit-next-page').disabled = page >= totalPages;
+        // Pagination UI update
+        const pageInfoEl = document.getElementById('audit-page-info');
+        const prevBtn = document.getElementById('btn-audit-prev-page');
+        const nextBtn = document.getElementById('btn-audit-next-page');
+
+        if (pageSize === 'all') {
+            if (pageInfoEl) pageInfoEl.textContent = `عرض كافة السجلات (إجمالي ${(data.total || 0).toLocaleString('ar-EG')} عملية)`;
+            if (prevBtn) prevBtn.disabled = true;
+            if (nextBtn) nextBtn.disabled = true;
+        } else {
+            const totalPages = Math.ceil(data.total / pageSize) || 1;
+            if (pageInfoEl) pageInfoEl.textContent = `الصفحة ${page} من ${totalPages} (إجمالي ${(data.total || 0).toLocaleString('ar-EG')} عملية)`;
+            if (prevBtn) prevBtn.disabled = page <= 1;
+            if (nextBtn) nextBtn.disabled = page >= totalPages;
+        }
 
         refreshIcons();
     } catch (err) {
@@ -3302,6 +3372,35 @@ async function fetchAndRenderAuditLogs() {
         tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--color-critical); padding: 25px;">خطأ: ${err.message}</td></tr>`;
     }
 }
+
+// Global Sorting Handler for Audit Table Columns
+window.sortAuditLogsTable = function(field) {
+    if (!field) return;
+    if (AppState.audit.sortBy === field) {
+        AppState.audit.sortOrder = AppState.audit.sortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+        AppState.audit.sortBy = field;
+        AppState.audit.sortOrder = 'desc';
+    }
+
+    const sortFields = ['id', 'timestamp', 'table_name', 'change_type', 'record_id', 'summary'];
+    sortFields.forEach(f => {
+        const iconEl = document.getElementById(`audit-sort-${f}`);
+        const thEl = iconEl?.closest('th');
+        if (iconEl) {
+            if (f === AppState.audit.sortBy) {
+                iconEl.textContent = AppState.audit.sortOrder === 'asc' ? '▲' : '▼';
+                thEl?.classList.add('active-sort');
+            } else {
+                iconEl.textContent = '⬍';
+                thEl?.classList.remove('active-sort');
+            }
+        }
+    });
+
+    AppState.audit.currentPage = 1;
+    fetchAndRenderAuditLogs();
+};
 
 function formatAuditRecordId(tableName, recordId) {
     if (!recordId || recordId === '-') return '-';
@@ -4724,6 +4823,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 2. Navigation, Notifications, PWA, & Real-time Listeners
     initNavigation();
+    initSidebar();
     initNotifications();
     initPwaInstall();
     initSettingsListeners();
@@ -4769,6 +4869,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     document.getElementById('btn-audit-next-page')?.addEventListener('click', () => {
         AppState.audit.currentPage++;
+        fetchAndRenderAuditLogs();
+    });
+    document.getElementById('audit-page-size-select')?.addEventListener('change', (e) => {
+        const val = e.target.value;
+        AppState.audit.pageSize = val === 'all' ? 'all' : (parseInt(val, 10) || 25);
+        AppState.audit.currentPage = 1;
         fetchAndRenderAuditLogs();
     });
 

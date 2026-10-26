@@ -963,10 +963,10 @@ app.get('/api/sync/history', async (req, res) => {
 // 2. AUDIT LOGS & DIFF VIEWER ENDPOINTS
 // ==========================================
 
-// Query Audit Change Logs with filtering & pagination
+// Query Audit Change Logs with filtering & pagination & dynamic column sorting
 app.get('/api/audit-logs', async (req, res) => {
     try {
-        const { table_name, change_type, record_id, limit = 50, offset = 0, search } = req.query;
+        const { table_name, change_type, record_id, limit = 50, offset = 0, search, sortField = 'id', sortOrder = 'DESC' } = req.query;
         let whereClauses = [];
         let params = [];
 
@@ -987,17 +987,31 @@ app.get('/api/audit-logs', async (req, res) => {
             params.push(`%${search}%`, `%${search}%`, `%${search}%`);
         }
 
+        const ALLOWED_SORT_COLS = {
+            'id': 'id',
+            'timestamp': 'timestamp',
+            'table_name': 'table_name',
+            'change_type': 'change_type',
+            'record_id': 'record_id',
+            'summary': 'summary'
+        };
+        const safeSortCol = ALLOWED_SORT_COLS[sortField] || 'id';
+        const safeSortDir = String(sortOrder).toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
+        const parsedLimit = limit === 'all' ? 1000 : Math.min(Math.max(parseInt(limit) || 20, 1), 1000);
+        const parsedOffset = Math.max(parseInt(offset) || 0, 0);
+
         const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
         const countRow = await getQuery(`SELECT COUNT(*) as count FROM audit_change_logs ${whereSql}`, params);
-        const total = countRow ? countRow.count : 0;
+        const total = countRow ? parseInt(countRow.count) : 0;
 
         const logs = await allQuery(`
             SELECT id, timestamp, table_name, record_id, change_type, summary, old_data, new_data
             FROM audit_change_logs
             ${whereSql}
-            ORDER BY id DESC
+            ORDER BY ${safeSortCol} ${safeSortDir}
             LIMIT ? OFFSET ?
-        `, [...params, parseInt(limit), parseInt(offset)]);
+        `, [...params, parsedLimit, parsedOffset]);
 
         // Aggregated Stats for change types
         const typeStats = await allQuery(`
