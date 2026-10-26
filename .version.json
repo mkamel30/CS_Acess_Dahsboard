@@ -1,6 +1,6 @@
 {
   "version": "4.9.2",
-  "commit": "pending",
+  "commit": "e21ab4c",
   "date": "2026-10-26 11:25",
   "message": "fix(pwa): force service worker auto-update, purge stale cache, bypass HTML/doc from SW cache",
   "branch": "main"
