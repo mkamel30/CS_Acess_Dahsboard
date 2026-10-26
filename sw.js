@@ -1,8 +1,6 @@
-// Smart Cards PWA Service Worker v4.9.0
-const CACHE_NAME = 'smartcards-v4.9.1';
+// Smart Cards PWA Service Worker v4.9.2
+const CACHE_NAME = 'smartcards-v4.9.2';
 const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
   '/manifest.json'
 ];
 
@@ -20,7 +18,7 @@ self.addEventListener('activate', (e) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
-            console.log(`[SW] Deleting old stale cache: ${key}`);
+            console.log(`[SW] Purging old stale cache: ${key}`);
             return caches.delete(key);
           }
         })
@@ -32,9 +30,13 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
 
-  // Bypass API calls, events streams, diagnostic tunnels, and favicon completely
-  if (url.pathname.startsWith('/api/') || url.pathname === '/favicon.ico') {
-    return;
+  // Bypass API calls, events streams, diagnostic tunnels, favicon, and HTML documents completely
+  if (url.pathname.startsWith('/api/') || 
+      url.pathname === '/favicon.ico' || 
+      url.pathname === '/' || 
+      url.pathname.endsWith('.html') || 
+      e.request.destination === 'document') {
+    return; // Pass through directly to network
   }
 
   // Network-first strategy with safe fallback that never rejects or returns undefined

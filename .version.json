@@ -1,7 +1,7 @@
 {
-  "version": "4.9.1",
-  "commit": "f7d71b4",
-  "date": "2026-10-26 11:10",
-  "message": "feat(ux): collapsible sidebar, mobile drawer, minimal icons, remove time machine, audit trail column sorting",
+  "version": "4.9.2",
+  "commit": "pending",
+  "date": "2026-10-26 11:25",
+  "message": "fix(pwa): force service worker auto-update, purge stale cache, bypass HTML/doc from SW cache",
   "branch": "main"
 }

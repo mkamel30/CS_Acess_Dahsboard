@@ -69,8 +69,10 @@ app.use((req, res, next) => {
 
 app.use(express.static(path.join(__dirname), {
     setHeaders: (res, filePath) => {
-        if (filePath.endsWith('.html') || filePath.endsWith('sw.js')) {
-            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        if (filePath.endsWith('.html') || filePath.endsWith('sw.js') || filePath.endsWith('manifest.json')) {
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
         } else {
             res.setHeader('Cache-Control', 'public, max-age=86400');
         }
