@@ -16,21 +16,21 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="CS Dashboard">
     <script>
-        // Automatic Service Worker Recovery & Cache Auto-Update
+        // Automatic Service Worker Cleanup & Cache Purge
         (function() {
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.getRegistrations().then(function(regs) {
                     for (var i = 0; i < regs.length; i++) {
-                        regs[i].update().catch(function() {});
+                        regs[i].unregister();
                     }
                 }).catch(function() {});
-                var isRefreshing = false;
-                navigator.serviceWorker.addEventListener('controllerchange', function() {
-                    if (!isRefreshing) {
-                        isRefreshing = true;
-                        window.location.reload();
+            }
+            if ('caches' in window) {
+                caches.keys().then(function(keys) {
+                    for (var i = 0; i < keys.length; i++) {
+                        caches.delete(keys[i]);
                     }
-                });
+                }).catch(function() {});
             }
         })();
     </script>

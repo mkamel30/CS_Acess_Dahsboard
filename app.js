@@ -4776,11 +4776,11 @@ async function loadTechniciansPerformance() {
 // ==========================================
 let deferredPrompt = null;
 function initPwaInstall() {
-    // 1. Register Service Worker
+    // 1. Unregister any legacy Service Worker to ensure direct network requests
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/sw.js')
-            .then(reg => console.log('[PWA] Service Worker registered:', reg.scope))
-            .catch(err => console.error('[PWA] Service Worker registration failed:', err));
+        navigator.serviceWorker.getRegistrations().then(regs => {
+            regs.forEach(r => r.unregister());
+        }).catch(() => {});
     }
 
     // 2. Install Prompt Listener
