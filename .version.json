@@ -1,6 +1,6 @@
 {
   "version": "4.9.0-sync",
-  "commit": "pending",
+  "commit": "2d00516",
   "date": "2026-10-26 10:15",
   "message": "fix(sync,tables,pwa): fix VPS sync watcher, restore table vertical scrollbars, and upgrade Service Worker to v4.9.0",
   "branch": "main"
