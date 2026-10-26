@@ -34,7 +34,8 @@ initPgPool();
 
 const DATA_SYNC_DIR = path.join(__dirname, 'data_sync');
 const CONFIG_FILE_PATH = path.join(__dirname, 'config.json');
-const DEFAULT_ACCESS_FILE_PATH = 'h:\\Programming\\Br_DB\\BE\\Bread_Final_be.accdb';
+const DEFAULT_ACCESS_FILE_PATH = '\\\\Share\\d\\gROCER SUPPORT\\0 Gro.Support\\DB\\BRrelease\\BE\\Bread_Final_be.accdb';
+const FALLBACK_LOCAL_ACCESS_PATH = 'h:\\Programming\\Br_DB\\BE\\Bread_Final_be.accdb';
 const VBS_EXPORTER_PATH = path.join(__dirname, 'export_accdb_tables.vbs');
 
 function readConfigSafely() {
@@ -55,8 +56,11 @@ function getAccessFilePath() {
     const config = readConfigSafely();
     const p = config.accessFilePath || config.accessDbPath || config.dbPath;
     if (p && typeof p === 'string' && p.trim()) {
-        return p.trim();
+        const candidate = p.trim();
+        if (fs.existsSync(candidate)) return candidate;
     }
+    if (fs.existsSync(DEFAULT_ACCESS_FILE_PATH)) return DEFAULT_ACCESS_FILE_PATH;
+    if (fs.existsSync(FALLBACK_LOCAL_ACCESS_PATH)) return FALLBACK_LOCAL_ACCESS_PATH;
     return DEFAULT_ACCESS_FILE_PATH;
 }
 
@@ -116,41 +120,38 @@ function startFileWatcher(db) {
     }
 
     const accessPath = getAccessFilePath();
-    if (!fs.existsSync(accessPath)) {
-        console.warn(`[FILE WATCHER] Access file not found: ${accessPath}`);
-        return;
-    }
-
-    try {
-        lastKnownMtime = fs.statSync(accessPath).mtimeMs;
-    } catch (e) {
+    if (fs.existsSync(accessPath)) {
+        try {
+            lastKnownMtime = fs.statSync(accessPath).mtimeMs;
+        } catch (e) {
+            lastKnownMtime = Date.now();
+        }
+    } else {
+        console.warn(`[FILE WATCHER] Access file currently unreachable: ${accessPath} (Continuous watcher will keep retrying in background)`);
         lastKnownMtime = Date.now();
     }
 
-    const dir = path.dirname(accessPath);
-    const fileName = path.basename(accessPath);
-    const baseTarget = fileName.toLowerCase().replace(/\.(accdb|mdb)$/, '');
-
-    let pendingResync = false;
+    let lastHeartbeatSync = Date.now();
 
     const triggerAutoSync = (reason) => {
         clearTimeout(watcherDebounceTimer);
         watcherDebounceTimer = setTimeout(async () => {
             if (isSyncInProgress) {
-                pendingResync = true; // Don't lose this event - resync when current sync finishes
+                pendingResync = true;
                 console.log(`[FILE WATCHER] Sync in progress, deferring resync for: ${reason}`);
                 return;
             }
             try {
-                if (fs.existsSync(accessPath)) {
-                    const curMtime = fs.statSync(accessPath).mtimeMs;
+                const curAccessPath = getAccessFilePath();
+                if (fs.existsSync(curAccessPath)) {
+                    const curMtime = fs.statSync(curAccessPath).mtimeMs;
                     lastKnownMtime = curMtime;
+                    lastHeartbeatSync = Date.now();
                     console.log(`[FILE WATCHER] Auto-triggering sync (${reason})...`);
                     const result = await performFullSync(db);
                     if (onSyncCompleteCallback && typeof onSyncCompleteCallback === 'function') {
                         onSyncCompleteCallback(result);
                     }
-                    // If events arrived while we were syncing, run one more sync
                     if (pendingResync) {
                         pendingResync = false;
                         console.log('[FILE WATCHER] Running deferred resync...');
@@ -163,55 +164,87 @@ function startFileWatcher(db) {
         }, 3000);
     };
 
-    // 1. Native Directory Watcher
-    try {
-        console.log(`[FILE WATCHER] Real-Time Watcher active on: ${accessPath}`);
-        fileWatcher = fs.watch(dir, { persistent: true }, (eventType, triggerFile) => {
-            if (!isAutoSyncEnabled() || isSyncInProgress) return;
-            if (!triggerFile) return;
+    // Attach fs.watch if access file directory is currently reachable
+    const attachNativeWatcher = () => {
+        if (fileWatcher) return;
+        const curPath = getAccessFilePath();
+        if (!fs.existsSync(curPath)) return;
+        try {
+            const dir = path.dirname(curPath);
+            const fileName = path.basename(curPath);
+            const baseTarget = fileName.toLowerCase().replace(/\.(accdb|mdb)$/, '');
 
-            const lower = triggerFile.toLowerCase();
-            // Ignore lock files, temporary files, and backup files to avoid false sync triggers
-            if (lower.endsWith('.laccdb') || lower.endsWith('.ldb') || lower.startsWith('~$') || lower.endsWith('.tmp')) {
-                return;
-            }
-            if (lower.includes(baseTarget) || lower.endsWith('.accdb')) {
-                triggerAutoSync(`detected modification in ${triggerFile}`);
-            }
-        });
+            fileWatcher = fs.watch(dir, { persistent: true }, (eventType, triggerFile) => {
+                if (!isAutoSyncEnabled() || isSyncInProgress) return;
+                if (!triggerFile) return;
 
-        if (fileWatcher) {
+                const lower = triggerFile.toLowerCase();
+                if (lower.endsWith('.laccdb') || lower.endsWith('.ldb') || lower.startsWith('~$') || lower.endsWith('.tmp')) {
+                    return;
+                }
+                if (lower.includes(baseTarget) || lower.endsWith('.accdb')) {
+                    triggerAutoSync(`detected modification in ${triggerFile}`);
+                }
+            });
+
             fileWatcher.on('error', (err) => {
                 console.warn('[FILE WATCHER] Network share watcher notice (recovering gracefully):', err.message);
                 try { fileWatcher.close(); } catch(e){}
                 fileWatcher = null;
-                setTimeout(() => {
-                    if (isAutoSyncEnabled()) {
-                        startFileWatcher(db);
-                    }
-                }, 15000);
             });
+            console.log(`[FILE WATCHER] Real-Time Watcher active on: ${curPath}`);
+        } catch (err) {
+            fileWatcher = null;
+            console.warn('[FILE WATCHER] fs.watch not attached (polling active):', err.message);
         }
-    } catch (err) {
-        console.error('[FILE WATCHER] Could not attach fs.watch (will rely on polling):', err.message);
-    }
+    };
 
-    // 2. Periodic Polling fallback (every 25 seconds) + Outbox retry flush
+    attachNativeWatcher();
+
+    // 2. Continuous Background Interval (Every 20 seconds):
+    //    - Flushes outbox to Cloud VPS
+    //    - Re-attaches native watcher if network share was reconnected
+    //    - Detects mtime changes
+    //    - Triggers heartbeat resync every 10 minutes to beat SMB caching
     periodicInterval = setInterval(() => {
-        // Always try to flush outbox if any pending
+        // 1. Always flush outbox to Cloud VPS if changes are waiting
         flushDeltaOutbox(db).catch(() => {});
 
-        if (!isAutoSyncEnabled() || isSyncInProgress) return;
+        if (!isAutoSyncEnabled()) return;
+
+        // 2. Ensure native watcher is active if directory reachable
+        if (!fileWatcher) {
+            attachNativeWatcher();
+        }
+
+        if (isSyncInProgress) return;
+
         try {
-            if (fs.existsSync(accessPath)) {
-                const curMtime = fs.statSync(accessPath).mtimeMs;
+            const curAccessPath = getAccessFilePath();
+            if (fs.existsSync(curAccessPath)) {
+                const curMtime = fs.statSync(curAccessPath).mtimeMs;
                 if (curMtime > lastKnownMtime) {
                     lastKnownMtime = curMtime;
                     triggerAutoSync('mtime changed');
+                    return;
                 }
             }
+
+            // Periodic heartbeat full check every 10 minutes (600,000 ms)
+            if (Date.now() - lastHeartbeatSync >= 600000) {
+                lastHeartbeatSync = Date.now();
+                triggerAutoSync('scheduled-10m-heartbeat');
+            }
         } catch (e) {}
-    }, 25000);
+    }, 20000);
+
+    // 3. Proactive Initial Startup Sync (after 10s to let server settle)
+    setTimeout(() => {
+        if (isAutoSyncEnabled() && !isSyncInProgress) {
+            console.log('[FILE WATCHER] Running startup verification sync...');
+            triggerAutoSync('startup-verification');
+        }
+    }, 10000);
 }
 
 function setAutoSyncEnabled(enabled, db) {

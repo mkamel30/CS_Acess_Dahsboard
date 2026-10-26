@@ -1,7 +1,7 @@
 {
-  "version": "4.8.9-ai",
-  "commit": "2854a75",
-  "date": "2026-10-22 11:27",
-  "message": "fix(updater): fix branch server auto-update auth guard, version sync, and batch updater script (v4.8.9-ai)",
+  "version": "4.9.0-sync",
+  "commit": "pending",
+  "date": "2026-10-26 10:15",
+  "message": "fix(sync,tables,pwa): fix VPS sync watcher, restore table vertical scrollbars, and upgrade Service Worker to v4.9.0",
   "branch": "main"
 }

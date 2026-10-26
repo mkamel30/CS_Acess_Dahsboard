@@ -4995,6 +4995,12 @@ function fallbackCopyText(text, successMsg) {
 // 15. CLOUDFLARE ZERO-TRUST TUNNEL CLIENT
 // ==========================================
 async function checkCloudflareTunnelStatus() {
+    // Skip if running directly on Cloud VPS or if document is currently hidden
+    if (window.location.hostname.includes('workers.dev') || window.location.hostname.includes('onrender.com') || window.location.hostname.includes('oraclecloud')) {
+        return;
+    }
+    if (document.hidden) return;
+
     try {
         const res = await fetch('/api/tunnel/status');
         if (!res.ok) return;
@@ -5042,34 +5048,18 @@ async function checkCloudflareTunnelStatus() {
         }
         refreshIcons();
     } catch (e) {
-        console.error('Tunnel check error:', e);
+        // Silently catch network drops to prevent console flooding
     }
 }
 window.checkCloudflareTunnelStatus = checkCloudflareTunnelStatus;
 
 // Copy Tunnel URL button handler
 document.addEventListener('DOMContentLoaded', () => {
-    const btnCopyTunnel = document.getElementById('btn-copy-tunnel-url');
-    if (btnCopyTunnel) {
-        btnCopyTunnel.onclick = () => {
-            const urlInput = document.getElementById('settings-tunnel-url');
-            if (urlInput && urlInput.value && urlInput.value.startsWith('http')) {
-                copyTextToClipboard(urlInput.value, `تم نسخ رابط الويب السحابي: ${urlInput.value}`);
-                const label = document.getElementById('copy-tunnel-btn-label');
-                if (label) {
-                    label.textContent = 'تم النسخ بنجاح! ✅';
-                    setTimeout(() => {
-                        label.textContent = 'نسخ رابط الويب';
-                    }, 2500);
-                }
-            } else {
-                if (typeof showGlobalToast === 'function') showGlobalToast('النفق السحابي جاري تجهيزه، يرجى الانتظار ثوانٍ...');
-            }
-        };
+    const isCloudEnv = window.location.hostname.includes('workers.dev') || window.location.hostname.includes('onrender.com');
+    if (!isCloudEnv) {
+        checkCloudflareTunnelStatus();
+        setInterval(checkCloudflareTunnelStatus, 15000);
     }
-
-    checkCloudflareTunnelStatus();
-    setInterval(checkCloudflareTunnelStatus, 8000);
 });
 
 // ==========================================

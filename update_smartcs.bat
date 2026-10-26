@@ -54,9 +54,9 @@ echo [*] Updating dependencies...
 call npm install --omit=dev --no-audit --no-fund
 
 echo.
-:: 2. تفريغ صندوق الصادر القديم لمنع التعارض مع السحابة
-echo [*] Clearing old delta_outbox to prevent cloud sync conflicts...
-node -e "const sqlite3 = require('sqlite3').verbose(); const db = new sqlite3.Database('branch_database.db'); db.run('DELETE FROM delta_outbox', (err) => console.log(err ? 'Error clearing outbox: ' + err : 'Outbox Cleared Successfully!'));"
+:: 2. التحقق من صندوق الصادر لضمان عدم فقدان أي بيانات غير مرفوعة
+echo [*] Checking delta_outbox before launch...
+node -e "const sqlite3 = require('sqlite3').verbose(); const db = new sqlite3.Database('data_sync/sync_db.sqlite'); db.get('SELECT count(*) as cnt FROM delta_outbox', (err, row) => console.log(err ? 'Notice: ' + err.message : 'Pending cloud deltas in outbox: ' + (row ? row.cnt : 0)));"
 
 echo.
 echo =======================================================================

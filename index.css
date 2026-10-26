@@ -2825,7 +2825,8 @@ body.light-theme .toggle-slider {
     .table-responsive,
     .table-container {
         overflow-x: auto !important;
-        overflow-y: hidden !important;
+        overflow-y: auto !important;
+        max-height: 70vh !important;
         -webkit-overflow-scrolling: touch !important;
         width: 100% !important;
         max-width: 100% !important;
@@ -2986,7 +2987,8 @@ body.light-theme .toggle-slider {
 .table-responsive,
 .table-container {
     overflow-x: auto !important;
-    overflow-y: hidden !important;
+    overflow-y: auto !important;
+        max-height: 70vh !important;
     -webkit-overflow-scrolling: touch !important;
     position: relative !important;
     max-width: 100% !important;
@@ -3001,7 +3003,8 @@ body.light-theme .toggle-slider {
 
 .table-responsive::-webkit-scrollbar,
 .table-container::-webkit-scrollbar {
-    height: 6px !important;
+    width: 8px !important;
+    height: 8px !important;
 }
 
 .table-responsive::-webkit-scrollbar-track,

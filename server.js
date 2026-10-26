@@ -97,9 +97,13 @@ app.use('/api/', apiLimiter);
 
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
-// ==========================================
-// SECURITY: Config-driven secrets & admin guard
-// ==========================================
+// Instant Favicon Handler (Prevents 404 and Cloudflare Worker Promise Rejections)
+app.get('/favicon.ico', (req, res) => {
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.status(200).send('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#0284c7"><rect width="24" height="24" rx="6" fill="#0284c7"/><path d="M4 7h16M4 12h16M4 17h16" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/></svg>');
+});
+
 function readAppConfig() {
     let cfg = {};
     try { cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) || {}; } catch (e) {}
