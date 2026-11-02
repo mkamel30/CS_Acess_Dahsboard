@@ -1596,7 +1596,7 @@ app.get('/api/inventory/sims-dashboard', async (req, res) => {
                 WHERE ma.sim_card_id IS NOT NULL
             `).catch(() => []),
             allQuery('SELECT merchant_code, name, government FROM merchants').catch(() => []),
-            allQuery(`SELECT * FROM trade_raw WHERE "Item Type" LIKE '%SIM%' OR "Item Serial" LIKE '8920%' OR Comments LIKE '%شريح%'`).catch(() => []),
+            allQuery(`SELECT * FROM trade_raw WHERE "Item Type" LIKE '%SIM%' OR "Item Serial" LIKE '8920%' OR "Comments" LIKE '%شريح%'`).catch(() => []),
             allQuery(`SELECT * FROM temp_transfer_raw WHERE OldPOS LIKE '8920%' OR NewPOS LIKE '8920%' OR Notes LIKE '%شريح%'`).catch(() => []),
             allQuery(`SELECT * FROM payments_raw WHERE pos_number LIKE '%8920%' OR payment_reason LIKE '%شريح%'`).catch(() => [])
         ]);

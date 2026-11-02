@@ -88,6 +88,7 @@ let watcherDebounceTimer = null;
 let periodicInterval = null;
 let onSyncCompleteCallback = null;
 let lastKnownMtime = 0;
+let pendingResync = false;
 
 function isAutoSyncEnabled() {
     const config = readConfigSafely();
