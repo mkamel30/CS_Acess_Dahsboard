@@ -2195,7 +2195,19 @@ app.get('/api/inventory/installments-dashboard', async (req, res) => {
 // ==========================================
 app.get('/api/inventory/spare-parts-dashboard', async (req, res) => {
     try {
-        const { date_from = '', date_to = '', payment_status = 'all', part_type = 'all', search = '', limit = 50, offset = 0 } = req.query;
+        let { date_from = '', date_to = '', payment_status = 'all', part_type = 'all', search = '', limit = 50, offset = 0 } = req.query;
+        const isExplicitAll = req.query.all === 'true' || req.query.period === 'all';
+
+        // Default to current month if no dates provided and not explicitly requesting all historical periods
+        if (!date_from && !date_to && !isExplicitAll) {
+            const now = new Date();
+            const pad = (n) => String(n).padStart(2, '0');
+            const formatYMD = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+            date_from = formatYMD(startOfMonth);
+            date_to = formatYMD(endOfMonth);
+        }
 
         const [allMovementsRaw, allPartsDef, allMerchants, allMerchantAssets, allPayments, allTransactions] = await Promise.all([
             allQuery(`

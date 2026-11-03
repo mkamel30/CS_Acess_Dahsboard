@@ -178,7 +178,8 @@ const UniversalDateEngine = {
             return { from: formatYMD(weekAgo), to: formatYMD(now) };
         } else if (preset === 'month') {
             const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-            return { from: formatYMD(startOfMonth), to: formatYMD(now) };
+            const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+            return { from: formatYMD(startOfMonth), to: formatYMD(endOfMonth) };
         }
         return { from: '', to: '' };
     },
@@ -2679,6 +2680,7 @@ function exportInstallmentsToExcel() {
 // ==========================================
 let sparePartsDataCache = null;
 let sparePartsListenersBound = false;
+let spFilterExplicitlyAll = false;
 
 const SparePartsTableState = {
     page: 1,
@@ -2698,13 +2700,37 @@ async function loadSparePartsInventory() {
     }
 
     try {
-        const dateFrom = document.getElementById('sp-date-from')?.value || '';
-        const dateTo = document.getElementById('sp-date-to')?.value || '';
+        const fromEl = document.getElementById('sp-date-from');
+        const toEl = document.getElementById('sp-date-to');
+
+        // Auto-initialize to current month on initial load if not set and not explicitly cleared by user
+        if (fromEl && toEl && !fromEl.value && !toEl.value && !spFilterExplicitlyAll) {
+            const monthRange = UniversalDateEngine.getPresetRange('month');
+            fromEl.value = monthRange.from;
+            toEl.value = monthRange.to;
+
+            const allBtns = document.querySelectorAll('.btn-sp-quick-date');
+            allBtns.forEach(b => {
+                b.classList.remove('active');
+                b.style.background = '';
+                b.style.color = '';
+            });
+            const monthBtn = document.getElementById('btn-sp-date-month');
+            if (monthBtn) {
+                monthBtn.classList.add('active');
+                monthBtn.style.background = 'var(--md-sys-color-primary-container)';
+                monthBtn.style.color = 'var(--md-sys-color-primary)';
+            }
+        }
+
+        const dateFrom = fromEl?.value || '';
+        const dateTo = toEl?.value || '';
         const payStatus = document.getElementById('sp-payment-filter')?.value || 'all';
         const partType = document.getElementById('sp-type-filter')?.value || 'all';
         const search = document.getElementById('sp-search-input')?.value.trim() || '';
 
-        const url = `/api/inventory/spare-parts-dashboard?date_from=${encodeURIComponent(dateFrom)}&date_to=${encodeURIComponent(dateTo)}&payment_status=${encodeURIComponent(payStatus)}&part_type=${encodeURIComponent(partType)}&search=${encodeURIComponent(search)}&limit=5000&offset=0`;
+        const isAll = spFilterExplicitlyAll || (!dateFrom && !dateTo);
+        const url = `/api/inventory/spare-parts-dashboard?date_from=${encodeURIComponent(dateFrom)}&date_to=${encodeURIComponent(dateTo)}&all=${isAll ? 'true' : 'false'}&payment_status=${encodeURIComponent(payStatus)}&part_type=${encodeURIComponent(partType)}&search=${encodeURIComponent(search)}&limit=5000&offset=0`;
 
         const res = await fetch(url);
         const data = await res.json();
@@ -2865,10 +2891,22 @@ async function loadSparePartsInventory() {
                 loadSparePartsInventory();
             });
             document.getElementById('sp-date-from')?.addEventListener('change', () => {
+                spFilterExplicitlyAll = false;
+                document.querySelectorAll('.btn-sp-quick-date').forEach(b => {
+                    b.classList.remove('active');
+                    b.style.background = '';
+                    b.style.color = '';
+                });
                 SparePartsTableState.page = 1;
                 loadSparePartsInventory();
             });
             document.getElementById('sp-date-to')?.addEventListener('change', () => {
+                spFilterExplicitlyAll = false;
+                document.querySelectorAll('.btn-sp-quick-date').forEach(b => {
+                    b.classList.remove('active');
+                    b.style.background = '';
+                    b.style.color = '';
+                });
                 SparePartsTableState.page = 1;
                 loadSparePartsInventory();
             });
@@ -2903,6 +2941,7 @@ async function loadSparePartsInventory() {
 }
 
 function setSparePartsQuickDate(preset) {
+    spFilterExplicitlyAll = (preset === 'all');
     UniversalDateEngine.setQuickDate('sp', preset, () => {
         SparePartsTableState.page = 1;
         loadSparePartsInventory();
@@ -4831,6 +4870,13 @@ document.addEventListener('DOMContentLoaded', () => {
     initPwaInstall();
     initSettingsListeners();
     initLiveSyncStream();
+
+    // 2.1 Pre-populate date filters with Current Month by default for high-speed initial loads
+    const initialMonthRange = UniversalDateEngine.getPresetRange('month');
+    const spFromInit = document.getElementById('sp-date-from');
+    const spToInit = document.getElementById('sp-date-to');
+    if (spFromInit && !spFromInit.value) spFromInit.value = initialMonthRange.from;
+    if (spToInit && !spToInit.value) spToInit.value = initialMonthRange.to;
 
     // 3. Sync Triggers
     const btnDashSync = document.getElementById('btn-dashboard-sync-now');
