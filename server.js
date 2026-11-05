@@ -3670,7 +3670,13 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
             ORDER BY t.rowid DESC
         `, [...searchTerms, ...searchTerms, ...likeParams]).catch(() => []);
 
-        const replacements = transferRows.map(r => {
+        const seenTransferKeys = new Set();
+        const replacements = [];
+        for (const r of transferRows) {
+            const rowKey = String(r.TransferID || r.transfer_id || r.sync_key || r.id || r.rowid || '').trim();
+            if (rowKey && seenTransferKeys.has(rowKey)) continue;
+            if (rowKey) seenTransferKeys.add(rowKey);
+
             const oldSerial = r.OldPOS || r.old_serial || '-';
             const newSerial = r.NewPOS || r.new_serial || '-';
             let role = 'استبدال ماكينة';
@@ -3682,7 +3688,7 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
                 role = 'ماكينة بديلة منصرفة (تم تسليمها)';
             }
 
-            return {
+            replacements.push({
                 id: r.TransferID || r.transfer_id || r.id || r.rowid || '-',
                 date: r.Transfer_Date || r.transfer_date || '-',
                 merchant_code: r.bkCode || r.bkcode || '-',
@@ -3694,8 +3700,8 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
                 role: role,
                 technician: r.procedure || r.procedure_maker || 'فني الصيانة',
                 notes: r.Notes || r.notes || '-'
-            };
-        });
+            });
+        }
 
         // 3. TAB 2: Branch Maintenance Tickets (with Entry Date/Time & Exit Date/Time)
         const maintenanceTickets = await allQuery(`
