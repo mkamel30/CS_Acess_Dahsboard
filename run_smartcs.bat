@@ -24,8 +24,10 @@ for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8970" ^| findstr "LISTENING
     taskkill /F /PID %%a >nul 2>nul
 )
 
-:: Open browser
-start "" "http://localhost:8970"
+:: Open browser unless running in silent background mode
+if /I not "%~1"=="--silent" (
+    start "" "http://localhost:8970"
+)
 
 :loop
 echo.

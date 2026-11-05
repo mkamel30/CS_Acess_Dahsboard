@@ -51,5 +51,9 @@
   {"id": "62", "pos": "2331947680", "installments": "6", "unitprice": "10800", "monthlyinstallmentprice": "1510", "finalunitprice": "12060"},
   {"id": "63", "pos": "3210616793", "installments": "6", "unitprice": "10800", "monthlyinstallmentprice": "1510", "finalunitprice": "12060"},
   {"id": "64", "pos": "3210616790", "installments": "6", "unitprice": "10800", "monthlyinstallmentprice": "1510", "finalunitprice": "12060"},
-  {"id": "65", "pos": "3210616794", "installments": "6", "unitprice": "10800", "monthlyinstallmentprice": "1510", "finalunitprice": "12060"}
+  {"id": "65", "pos": "3210616794", "installments": "6", "unitprice": "10800", "monthlyinstallmentprice": "1510", "finalunitprice": "12060"},
+  {"id": "66", "pos": "3210940219", "installments": "6", "unitprice": "10800", "monthlyinstallmentprice": "1510", "finalunitprice": "12060"},
+  {"id": "67", "pos": "3210940227", "installments": "6", "unitprice": "10800", "monthlyinstallmentprice": "1510", "finalunitprice": "12060"},
+  {"id": "68", "pos": "3210940232", "installments": "6", "unitprice": "10800", "monthlyinstallmentprice": "1510", "finalunitprice": "12060"},
+  {"id": "69", "pos": "3210940231", "installments": "6", "unitprice": "10800", "monthlyinstallmentprice": "1510", "finalunitprice": "12060"}
 ]

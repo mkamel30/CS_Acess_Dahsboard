@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CS Dashboard | Customer Support & Operations Platform</title>
-    <!-- Google Fonts: Cairo, Alexandria, Tajawal, Almarai, Readex Pro, IBM Plex Sans Arabic, Noto Sans Arabic, JetBrains Mono, Orbitron, Fira Code, Share Tech Mono -->
+    <!-- Google Fonts: Consolidated Enterprise Arabic & Monospace -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;600;700;800&family=Almarai:wght@400;700;800&family=Cairo:wght@400;500;600;700;800;900&family=Fira+Code:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;0,800;1,400&family=Noto+Sans+Arabic:wght@400;600;700;800&family=Orbitron:wght@500;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Readex+Pro:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600&family=Share+Tech+Mono&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&family=Readex+Pro:wght@400;600&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
     <!-- PWA & Mobile Meta -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0284c7">
@@ -123,36 +123,89 @@
 
         <!-- Main Content Area -->
         <main class="main-content">
-            <!-- M3 Floating Top App Bar -->
+            <!-- M3 Floating Top App Bar (4-Zone Layout) -->
             <header class="app-header">
-                <button type="button" class="header-menu-btn" id="btn-header-menu-toggle" title="القائمة الرئيسية" onclick="toggleSidebarDrawer()">
-                    <i data-lucide="menu" style="width:20px; height:20px;"></i>
-                </button>
-                <div class="header-search">
-                    <i data-lucide="search" style="color:var(--md-sys-color-on-surface-variant); width:18px; height:18px;"></i>
-                    <input type="text" id="global-search" placeholder="بحث سريع بكود المخبز، الاسم، السيريال، أو الهاتف...">
-                    <button type="button" class="btn btn-secondary" id="btn-open-universal-search" style="padding: 6px 14px; font-size: 12px; white-space: nowrap; border-radius: var(--md-shape-corner-full); background: var(--md-sys-color-primary-container); color: var(--md-sys-color-primary); border: 1px solid rgba(56, 189, 248, 0.3);">
-                        <i data-lucide="history" style="width:14px; height:14px;"></i>
-                        <span>تتبع وسجل الماكينة</span>
+                <!-- Zone 1: Navigation Toggle & Dynamic Context Breadcrumb -->
+                <div class="header-start-zone">
+                    <button type="button" class="header-menu-btn" id="btn-header-menu-toggle" title="القائمة الرئيسية" onclick="toggleSidebarDrawer()">
+                        <i data-lucide="menu" style="width:20px; height:20px;"></i>
                     </button>
+                    <nav class="header-breadcrumb" id="header-breadcrumb" aria-label="مسار التنقل">
+                        <span class="breadcrumb-main" id="breadcrumb-section-title">لوحة القيادة</span>
+                        <span class="breadcrumb-sep"><i data-lucide="chevron-left" class="icon-rtl-flip" style="width:14px; height:14px;"></i></span>
+                        <span class="breadcrumb-current" id="breadcrumb-current-tab">المؤشرات العامة</span>
+                    </nav>
                 </div>
-                <div class="header-meta" style="display:flex; align-items:center; gap:10px;">
+
+                <!-- Zone 2: Global Search Input -->
+                <div class="header-search">
+                    <i data-lucide="search" style="color:var(--text-secondary); width:16px; height:16px; flex-shrink:0;"></i>
+                    <input type="search" id="global-search" placeholder="بحث شامل بالسيريال، الكود، الاسم... (اضغط / للتركيز)" autocomplete="off">
+                    <kbd class="mono-ltr">/</kbd>
+                </div>
+
+                <!-- Zone 3: AI Copilot & Non-Blocking Sync Telemetry -->
+                <div class="header-center-end-zone" style="position:relative;">
+                    <!-- AI Copilot Quick Launcher Button -->
+                    <button type="button" class="btn-ai-copilot-pill" id="btn-open-ai-drawer" title="المساعد التحليلي الذكي (AI Copilot)">
+                        <i data-lucide="sparkles" style="width:14px; height:14px;"></i>
+                        <span>اسأل الذكاء الاصطناعي</span>
+                    </button>
+
+                    <!-- Database Sync Status Pill (Toggles Popover) -->
+                    <div class="meta-pill system-status" id="header-db-pill" style="cursor:pointer; transition: all 0.2s ease; padding: 6px 14px; border-radius: var(--md-shape-corner-full); border: 1px solid var(--border-subtle); background: var(--surface-2); display:flex; align-items:center; gap:8px;" title="حالة المزامنة وقاعدة البيانات">
+                        <i data-lucide="database" id="header-db-icon" style="color:var(--color-success); width:16px; height:16px;"></i>
+                        <span id="header-db-status" style="font-size:12px; font-weight:700;" class="mono-ltr">Bread_Final_be.accdb</span>
+                    </div>
+
+                    <!-- Non-Blocking Sync Progress Popover -->
+                    <div id="sync-progress-popover" role="region" aria-label="تفاصيل المزامنة اللحظية">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; border-bottom:1px solid var(--border-subtle); padding-bottom:8px;">
+                            <strong style="font-size:13px; display:flex; align-items:center; gap:6px;">
+                                <i data-lucide="refresh-cw" id="icon-sync-popover-spinner" style="width:15px; height:15px; color:var(--accent-primary);"></i>
+                                <span>المزامنة مع قاعدة بيانات الآكسيس</span>
+                            </strong>
+                            <button type="button" class="btn-text" id="btn-close-sync-popover" style="background:none; border:none; color:var(--text-muted); cursor:pointer; padding:2px 6px; display:inline-flex; align-items:center; justify-content:center;"><i data-lucide="x" style="width:14px; height:14px;"></i></button>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
+                            <span id="sync-progress-stage" style="font-size:12px; color:var(--text-secondary);">جاهز ومستعد للمزامنة</span>
+                            <span id="sync-progress-percent" class="mono-ltr" style="font-size:16px; font-weight:800; color:var(--accent-primary);">0%</span>
+                        </div>
+                        <div style="height:6px; background:var(--surface-3); border-radius:4px; overflow:hidden; margin-bottom:10px;">
+                            <div id="sync-progress-bar-fill" style="width:0%; height:100%; background:linear-gradient(90deg, #0284c7, #38bdf8); transition:width 0.3s ease;"></div>
+                        </div>
+                        <div id="sync-progress-detail" style="font-size:11px; color:var(--text-muted); min-height:20px; margin-bottom:12px;">
+                            <span id="sync-progress-detail-text">BE\Bread_Final_be.accdb</span>
+                        </div>
+                        <div style="display:flex; justify-content:flex-end; gap:8px;">
+                            <button type="button" class="btn btn-secondary btn-sm" id="btn-close-sync-progress" style="padding:4px 10px; font-size:11px;">إغلاق</button>
+                            <button type="button" class="btn btn-primary btn-sm" id="btn-sync-popover-run" style="padding:4px 12px; font-size:11px; background:var(--accent-primary); color:#082f49; font-weight:700;">
+                                <i data-lucide="refresh-cw" style="width:12px; height:12px;"></i>
+                                <span>مزامنة فورية الآن</span>
+                            </button>
+                            <button type="button" class="btn btn-primary btn-sm" id="btn-sync-progress-done" style="display:none; padding:4px 12px; font-size:11px; background:var(--status-success-fg); color:#fff; font-weight:700;">تم ✓</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Zone 4: External Access, Notifications, Diagnostics & Theme -->
+                <div class="header-meta" style="display:flex; align-items:center; gap:8px;">
                     <!-- Cloudflare Global Web Access Button -->
-                    <button type="button" class="btn btn-secondary" id="btn-header-tunnel" style="display:none; padding:6px 14px; font-size:12px; font-weight:700; border-radius:var(--md-shape-corner-full); background:linear-gradient(135deg, rgba(245,158,11,0.12), rgba(217,119,6,0.06)); color:#f59e0b; border:1px solid rgba(245,158,11,0.3); align-items:center; gap:6px; cursor:pointer;" title="رابط الوصول السحابي الخارجي (Cloudflare)">
-                        <i data-lucide="globe" style="width:14px; height:14px;"></i>
+                    <button type="button" class="btn btn-secondary" id="btn-header-tunnel" style="display:none; padding:6px 12px; font-size:11px; font-weight:700; border-radius:var(--md-shape-corner-full); background:var(--status-warning-bg); color:var(--status-warning-fg); border:1px solid rgba(245,158,11,0.3); align-items:center; gap:6px; cursor:pointer;" title="رابط الوصول السحابي الخارجي (Cloudflare)">
+                        <i data-lucide="globe" style="width:13px; height:13px;"></i>
                         <span>رابط الويب</span>
                     </button>
 
                     <!-- PWA Install Button -->
-                    <button type="button" class="btn btn-secondary" id="btn-pwa-install" style="display:none; padding:6px 14px; font-size:12px; font-weight:700; border-radius:var(--md-shape-corner-full); background:linear-gradient(135deg, rgba(6,182,212,0.12), rgba(14,165,233,0.06)); color:#38bdf8; border:1px solid rgba(56,189,248,0.3); align-items:center; gap:6px;" title="تثبيت كتطبيق على الجهاز">
-                        <i data-lucide="download" style="width:14px; height:14px;"></i>
-                        <span>تثبيت التطبيق</span>
+                    <button type="button" class="btn btn-secondary" id="btn-pwa-install" style="display:none; padding:6px 12px; font-size:11px; font-weight:700; border-radius:var(--md-shape-corner-full); background:var(--accent-primary-subtle); color:var(--accent-primary); border:1px solid rgba(56,189,248,0.3); align-items:center; gap:6px;" title="تثبيت كتطبيق على الجهاز">
+                        <i data-lucide="download" style="width:13px; height:13px;"></i>
+                        <span>تثبيت</span>
                     </button>
 
                     <!-- Smart Notifications Bell -->
                     <div class="notifications-wrapper" style="position:relative;">
-                        <button type="button" class="icon-btn" id="btn-header-notifications" style="position:relative; width:40px; height:40px; border-radius:50%; background:var(--md-sys-color-surface-container); border:1px solid var(--md-sys-color-outline-variant); color:var(--md-sys-color-on-surface); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all 0.2s;" title="التنبيهات والإشعارات الذكية">
-                            <i data-lucide="bell" style="width:18px; height:18px;"></i>
+                        <button type="button" class="icon-btn" id="btn-header-notifications" style="position:relative; width:36px; height:36px; border-radius:50%; background:var(--surface-2); border:1px solid var(--border-subtle); color:var(--text-primary); display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all 0.2s;" title="التنبيهات والإشعارات الذكية">
+                            <i data-lucide="bell" style="width:16px; height:16px;"></i>
                             <span id="header-notifications-badge" class="badge-pulse-count" style="display:none;">0</span>
                         </button>
 
@@ -188,16 +241,15 @@
                     </div>
 
                     <!-- Diagnostics & Error Alert Pill (Appears on errors or drift) -->
-                    <div class="meta-pill system-status" id="header-diagnostic-pill" style="display:none; cursor:pointer; transition: all 0.2s ease; padding: 6px 14px; border-radius: var(--md-shape-corner-full); border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1); color: #f87171; align-items:center; gap:8px;" onclick="openDiagnosticsTab()" title="مركز تتبع الأخطاء والتطابق">
-                        <i data-lucide="alert-triangle" style="width:16px; height:16px;"></i>
-                        <span id="header-diagnostic-text" style="font-size:12px; font-weight:700;">0 أخطاء</span>
+                    <div class="meta-pill system-status" id="header-diagnostic-pill" style="display:none; cursor:pointer; transition: all 0.2s ease; padding: 6px 12px; border-radius: var(--md-shape-corner-full); border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.1); color: #f87171; align-items:center; gap:6px;" onclick="openDiagnosticsTab()" title="مركز تتبع الأخطاء والتطابق">
+                        <i data-lucide="alert-triangle" style="width:14px; height:14px;"></i>
+                        <span id="header-diagnostic-text" style="font-size:11px; font-weight:700;">0 أخطاء</span>
                     </div>
 
-                    <!-- Database Sync Status Pill -->
-                    <div class="meta-pill system-status" id="header-db-pill" style="cursor:pointer; transition: all 0.2s ease; padding: 6px 14px; border-radius: var(--md-shape-corner-full); border: 1px solid var(--md-sys-color-outline-variant); background: var(--md-sys-color-surface-container); display:flex; align-items:center; gap:8px;" onclick="switchTab('settings')" title="حالة اتصال قاعدة بيانات الآكسيس والمزامنة">
-                        <i data-lucide="database" id="header-db-icon" style="color:var(--color-success); width:16px; height:16px;"></i>
-                        <span id="header-db-status" style="font-size:12px; font-weight:700; font-family:var(--font-en);">Bread_Final_be.accdb</span>
-                    </div>
+                    <!-- Quick Universal Timeline Search Trigger -->
+                    <button type="button" class="icon-btn" id="btn-open-universal-search" style="width:36px; height:36px; border-radius:50%; background:var(--surface-2); border:1px solid var(--border-subtle); color:var(--text-secondary); display:flex; align-items:center; justify-content:center; cursor:pointer;" title="سجل وتتبع الأصول الزمني">
+                        <i data-lucide="history" style="width:16px; height:16px;"></i>
+                    </button>
                 </div>
             </header>
 
@@ -213,42 +265,11 @@
                             <h1>لوحة القيادة والمؤشرات الحية</h1>
                             <p>تحليلات شاملة لمنظومة المخابز وقاعدة بيانات الآكسيس والعمليات التشغيلية</p>
                         </div>
-                        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; overflow:hidden;">
-                            <button class="btn btn-primary" id="btn-dashboard-sync-now" style="background: linear-gradient(135deg, #2563eb, #3b82f6); box-shadow: 0 4px 14px rgba(37,99,235,0.35); flex-shrink:0;">
+                        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                            <button class="btn btn-primary" id="btn-dashboard-sync-now" style="background: linear-gradient(135deg, #0284c7, #38bdf8); box-shadow: 0 4px 14px rgba(2,132,199,0.35); color:#082f49; font-weight:800; flex-shrink:0;">
                                 <i data-lucide="refresh-cw" id="icon-dash-sync"></i>
                                 <span>مزامنة فورية من الآكسيس</span>
                             </button>
-                            
-                            <div class="dashboard-quick-actions" style="display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; max-width: 100%; scrollbar-width: none;">
-                                <button class="btn btn-secondary" id="btn-goto-customers" style="white-space:nowrap; flex-shrink:0; border-color: rgba(99, 102, 241, 0.4); background: rgba(99, 102, 241, 0.1); color: #818cf8; border-radius: var(--md-shape-corner-full); padding: 7px 14px; font-size: 12px; font-weight: 700;">
-                                    <i data-lucide="users"></i>
-                                    <span>إدارة وبيانات العملاء</span>
-                                </button>
-                                <button class="btn btn-secondary" id="btn-goto-warehouse" style="white-space:nowrap; flex-shrink:0; border-color: rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.08); color: #38bdf8; border-radius: var(--md-shape-corner-full); padding: 7px 14px; font-size: 12px; font-weight: 700;">
-                                    <i data-lucide="boxes"></i>
-                                    <span>ماكينات المخزن</span>
-                                </button>
-                                <button class="btn btn-secondary" id="btn-goto-sims" style="white-space:nowrap; flex-shrink:0; border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.08); color: #10b981; border-radius: var(--md-shape-corner-full); padding: 7px 14px; font-size: 12px; font-weight: 700;">
-                                    <i data-lucide="signal"></i>
-                                    <span>شرائح الاتصال</span>
-                                </button>
-                                <button class="btn btn-secondary" id="btn-goto-spare-parts" style="white-space:nowrap; flex-shrink:0; border-color: rgba(168, 85, 247, 0.4); background: rgba(168, 85, 247, 0.08); color: #c084fc; border-radius: var(--md-shape-corner-full); padding: 7px 14px; font-size: 12px; font-weight: 700;">
-                                    <i data-lucide="layers"></i>
-                                    <span>مخزن قطع الغيار</span>
-                                </button>
-                                <button class="btn btn-secondary" id="btn-goto-maintenance" style="white-space:nowrap; flex-shrink:0; border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.08); color: #f59e0b; border-radius: var(--md-shape-corner-full); padding: 7px 14px; font-size: 12px; font-weight: 700;">
-                                    <i data-lucide="wrench"></i>
-                                    <span>الصيانة المركزية (HQ)</span>
-                                </button>
-                                <button class="btn btn-secondary" id="btn-goto-installments" style="white-space:nowrap; flex-shrink:0; border-color: rgba(251, 191, 36, 0.4); background: rgba(251, 191, 36, 0.08); color: #fbbf24; border-radius: var(--md-shape-corner-full); padding: 7px 14px; font-size: 12px; font-weight: 700;">
-                                    <i data-lucide="calculator"></i>
-                                    <span>عقود الأقساط</span>
-                                </button>
-                                <button class="btn btn-secondary" id="btn-goto-reports" style="white-space:nowrap; flex-shrink:0; border-color: rgba(148, 163, 184, 0.3); background: rgba(148, 163, 184, 0.06); color: #94a3b8; border-radius: var(--md-shape-corner-full); padding: 7px 14px; font-size: 12px; font-weight: 700;">
-                                    <i data-lucide="file-spreadsheet"></i>
-                                    <span>التقارير</span>
-                                </button>
-                            </div>
                         </div>
                     </div>
 
@@ -451,32 +472,7 @@
                     </div>
 
                     <!-- Warehouse Sub-tab Switcher -->
-                    <div class="warehouse-tab-switcher">
-                        <button type="button" class="wh-switch-btn" id="switch-to-customers">
-                            <i data-lucide="users" style="width:16px;height:16px;"></i>
-                            <span>إدارة وبيانات العملاء</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn active" id="switch-to-pos">
-                            <i data-lucide="boxes" style="width:16px;height:16px;"></i>
-                            <span>ماكينات الـ POS بالمخزن</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-sims">
-                            <i data-lucide="signal" style="width:16px;height:16px;"></i>
-                            <span>شرائح الاتصال بالمخزن</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-maint">
-                            <i data-lucide="wrench" style="width:16px;height:16px;"></i>
-                            <span>الماكينات بالصيانة المركزية (HQ)</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-inst">
-                            <i data-lucide="calculator" style="width:16px;height:16px;"></i>
-                            <span>عقود وأقساط الماكينات</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-sp">
-                            <i data-lucide="layers" style="width:16px;height:16px;"></i>
-                            <span>مخزن وحركات قطع الغيار</span>
-                        </button>
-                    </div>
+                    
 
                     <!-- Top KPI Summary Cards Row -->
                     <div class="warehouse-kpi-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
@@ -562,32 +558,46 @@
                         </div>
                     </div>
 
-                    <!-- Section Title: Models Cards -->
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
-                        <h2 style="font-size:18px; font-weight:800; display:flex; align-items:center; gap:8px; margin:0;">
-                            <i data-lucide="cpu" style="color:var(--md-sys-color-primary);"></i>
-                            <span>حصر ماكينات المخزن مصنفة بالموديل (Model Cards)</span>
-                        </h2>
-                        <span style="font-size:12px; color:var(--md-sys-color-on-surface-variant);" id="wh-models-count-label">جاري التحميل...</span>
-                    </div>
+                    <!-- Collapsible Models & Manufacturers Analytics Drawer -->
+                    <details class="ui-analytics-drawer" open style="margin-bottom:24px;">
+                        <summary style="cursor:pointer; display:flex; align-items:center; justify-content:space-between; padding:12px 18px; border-radius:12px; background:var(--surface-2); border:1px solid var(--border-subtle); font-weight:700; user-select:none;">
+                            <span style="display:flex; align-items:center; gap:8px;">
+                                <i data-lucide="layers" style="width:16px; height:16px; color:var(--accent-primary);"></i>
+                                <span>حصر وتوزيع ماكينات المخزن بالموديل والشركات المصنعة</span>
+                            </span>
+                            <span style="font-size:11px; color:var(--text-muted); display:flex; align-items:center; gap:6px;">
+                                <span id="wh-models-count-label">جاري التحميل...</span>
+                                <i data-lucide="chevron-down" class="drawer-chevron" style="width:14px; height:14px;"></i>
+                            </span>
+                        </summary>
+                        <div class="drawer-content" style="padding-top:16px;">
+                            <!-- Section Title: Models Cards -->
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
+                                <h3 style="font-size:15px; font-weight:800; display:flex; align-items:center; gap:8px; margin:0;">
+                                    <i data-lucide="cpu" style="width:16px; height:16px; color:var(--accent-primary);"></i>
+                                    <span>حصر ماكينات المخزن مصنفة بالموديل (Model Cards)</span>
+                                </h3>
+                            </div>
 
-                    <!-- Models Grid Cards Container -->
-                    <div id="wh-models-cards-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-bottom: 30px;">
-                        <!-- Injected dynamically -->
-                    </div>
+                            <!-- Models Grid Cards Container -->
+                            <div id="wh-models-cards-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-bottom: 24px;">
+                                <!-- Injected dynamically -->
+                            </div>
 
-                    <!-- Section Title: Manufacturers Cards -->
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-                        <h2 style="font-size:18px; font-weight:800; display:flex; align-items:center; gap:8px; margin:0;">
-                            <i data-lucide="building-2" style="color:var(--md-sys-color-primary);"></i>
-                            <span>تصنيف الشركات المصنعة (Manufacturers)</span>
-                        </h2>
-                    </div>
+                            <!-- Section Title: Manufacturers Cards -->
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                                <h3 style="font-size:15px; font-weight:800; display:flex; align-items:center; gap:8px; margin:0;">
+                                    <i data-lucide="building-2" style="width:16px; height:16px; color:var(--accent-primary);"></i>
+                                    <span>تصنيف الشركات المصنعة (Manufacturers)</span>
+                                </h3>
+                            </div>
 
-                    <!-- Manufacturers Cards Container -->
-                    <div id="wh-manufacturers-cards-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 30px;">
-                        <!-- Injected dynamically -->
-                    </div>
+                            <!-- Manufacturers Cards Container -->
+                            <div id="wh-manufacturers-cards-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-bottom: 12px;">
+                                <!-- Injected dynamically -->
+                            </div>
+                        </div>
+                    </details>
 
                     <!-- Interactive Devices Explorer Table Section -->
                     <div class="card" style="padding: 24px; border-radius: 16px; margin-bottom: 24px; background:var(--md-sys-color-surface-container); border:1px solid var(--md-sys-color-outline);">
@@ -615,25 +625,25 @@
                             </div>
                         </div>
 
-                        <div class="table-responsive">
+                        <div class="table-responsive ui-table-scroll" tabindex="0" role="region" aria-label="جدول ماكينات المخزن">
                             <table class="data-table" id="wh-devices-table">
                                 <thead>
                                     <tr>
-                                        <th>#</th>
-                                        <th style="cursor:pointer; user-select:none;" onclick="sortWarehouseTable('serial')">
-                                            <span>السيريال (Serial)</span> <span id="wh-sort-serial" style="font-size:10px; color:var(--md-sys-color-primary);">⇕</span>
+                                        <th style="width:40px;">#</th>
+                                        <th class="sortable col-sticky-start" style="cursor:pointer; user-select:none;" onclick="sortWarehouseTable('serial')">
+                                            <span>السيريال (Serial)</span> <span id="wh-sort-serial" class="sort-icon"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
-                                        <th style="cursor:pointer; user-select:none;" onclick="sortWarehouseTable('manufacturer')">
-                                            <span>الشركة المصنعة</span> <span id="wh-sort-manufacturer" style="font-size:10px; color:var(--md-sys-color-primary);">⇕</span>
+                                        <th class="sortable" style="cursor:pointer; user-select:none;" onclick="sortWarehouseTable('manufacturer')">
+                                            <span>الشركة المصنعة</span> <span id="wh-sort-manufacturer" class="sort-icon"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
-                                        <th style="cursor:pointer; user-select:none;" onclick="sortWarehouseTable('model')">
-                                            <span>الموديل</span> <span id="wh-sort-model" style="font-size:10px; color:var(--md-sys-color-primary);">⇕</span>
+                                        <th class="sortable" style="cursor:pointer; user-select:none;" onclick="sortWarehouseTable('model')">
+                                            <span>الموديل</span> <span id="wh-sort-model" class="sort-icon"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
-                                        <th style="cursor:pointer; user-select:none;" onclick="sortWarehouseTable('condition')">
-                                            <span>حالة وتصنيف الماكينة</span> <span id="wh-sort-condition" style="font-size:10px; color:var(--md-sys-color-primary);">⇕</span>
+                                        <th class="sortable" style="cursor:pointer; user-select:none;" onclick="sortWarehouseTable('condition')">
+                                            <span>حالة وتصنيف الماكينة</span> <span id="wh-sort-condition" class="sort-icon"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
                                         <th>ملاحظات الفحص والعهدة</th>
-                                        <th>الإجراءات</th>
+                                        <th class="col-sticky-end">الإجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody id="wh-devices-table-body">
@@ -690,32 +700,7 @@
                     </div>
 
                     <!-- Warehouse Sub-tab Switcher -->
-                    <div class="warehouse-tab-switcher">
-                        <button type="button" class="wh-switch-btn" id="switch-to-customers-2">
-                            <i data-lucide="users" style="width:16px;height:16px;"></i>
-                            <span>إدارة وبيانات العملاء</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-pos-2">
-                            <i data-lucide="boxes" style="width:16px;height:16px;"></i>
-                            <span>ماكينات الـ POS بالمخزن</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn active" id="switch-to-sims-2">
-                            <i data-lucide="signal" style="width:16px;height:16px;"></i>
-                            <span>شرائح الاتصال بالمخزن</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-maint-2">
-                            <i data-lucide="wrench" style="width:16px;height:16px;"></i>
-                            <span>الماكينات بالصيانة المركزية (HQ)</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-inst-2">
-                            <i data-lucide="calculator" style="width:16px;height:16px;"></i>
-                            <span>عقود وأقساط الماكينات</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-sp-2">
-                            <i data-lucide="layers" style="width:16px;height:16px;"></i>
-                            <span>مخزن وحركات قطع الغيار</span>
-                        </button>
-                    </div>
+                    
 
                     <!-- Top KPI Summary Cards Row for SIMs -->
                     <div class="warehouse-kpi-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
@@ -801,19 +786,24 @@
                         </div>
                     </div>
 
-                    <!-- Section Title: Telecom Operators Cards -->
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:8px;">
-                        <h2 style="font-size:18px; font-weight:800; display:flex; align-items:center; gap:8px; margin:0;">
-                            <i data-lucide="radio" style="color:var(--md-sys-color-primary);"></i>
-                            <span>حصر شرائح الاتصال مصنفة بالشبكة (Telecom Operators Cards)</span>
-                        </h2>
-                        <span style="font-size:12px; color:var(--md-sys-color-on-surface-variant);" id="sims-carriers-count-label">جاري التحميل...</span>
-                    </div>
-
-                    <!-- Carriers Grid Cards Container -->
-                    <div id="sims-carriers-cards-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-bottom: 30px;">
-                        <!-- Injected dynamically -->
-                    </div>
+                    <!-- Collapsible Telecom Operators Analytics Drawer -->
+                    <details class="ui-analytics-drawer" open style="margin-bottom:24px;">
+                        <summary style="cursor:pointer; display:flex; align-items:center; justify-content:space-between; padding:12px 18px; border-radius:12px; background:var(--surface-2); border:1px solid var(--border-subtle); font-weight:700; user-select:none;">
+                            <span style="display:flex; align-items:center; gap:8px;">
+                                <i data-lucide="radio" style="width:16px; height:16px; color:var(--accent-primary);"></i>
+                                <span>حصر وتوزيع شرائح الاتصال حسب شبكة المحمول</span>
+                            </span>
+                            <span style="font-size:11px; color:var(--text-muted); display:flex; align-items:center; gap:6px;">
+                                <span id="sims-carriers-count-label">جاري التحميل...</span>
+                                <i data-lucide="chevron-down" class="drawer-chevron" style="width:14px; height:14px;"></i>
+                            </span>
+                        </summary>
+                        <div class="drawer-content" style="padding-top:16px;">
+                            <div id="sims-carriers-cards-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin-bottom: 12px;">
+                                <!-- Injected dynamically -->
+                            </div>
+                        </div>
+                    </details>
 
                     <!-- Interactive SIM Cards Explorer Table Section -->
                     <div class="card" style="padding: 24px; border-radius: 16px; margin-bottom: 24px; background:var(--md-sys-color-surface-container); border:1px solid var(--md-sys-color-outline);">
@@ -841,25 +831,25 @@
                             </div>
                         </div>
 
-                        <div class="table-responsive">
+                        <div class="table-responsive ui-table-scroll" tabindex="0" role="region" aria-label="جدول شرائح المخزن">
                             <table class="data-table" id="sims-devices-table">
                                 <thead>
                                     <tr>
-                                        <th>#</th>
-                                        <th style="cursor:pointer; user-select:none;" onclick="sortSimsTable('serial')">
-                                            <span>رقم وسيريال الشريحة (SIM Serial)</span> <span id="sims-sort-serial" style="font-size:10px; color:var(--md-sys-color-primary);">⇕</span>
+                                        <th style="width:40px;">#</th>
+                                        <th class="sortable col-sticky-start" style="cursor:pointer; user-select:none;" onclick="sortSimsTable('serial')">
+                                            <span>رقم وسيريال الشريحة (SIM Serial)</span> <span id="sims-sort-serial" class="sort-icon"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
-                                        <th style="cursor:pointer; user-select:none;" onclick="sortSimsTable('carrier')">
-                                            <span>شركة الاتصالات / الشبكة</span> <span id="sims-sort-carrier" style="font-size:10px; color:var(--md-sys-color-primary);">⇕</span>
+                                        <th class="sortable" style="cursor:pointer; user-select:none;" onclick="sortSimsTable('carrier')">
+                                            <span>شركة الاتصالات / الشبكة</span> <span id="sims-sort-carrier" class="sort-icon"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
-                                        <th style="cursor:pointer; user-select:none;" onclick="sortSimsTable('condition')">
-                                            <span>حالة وتصنيف الشريحة</span> <span id="sims-sort-condition" style="font-size:10px; color:var(--md-sys-color-primary);">⇕</span>
+                                        <th class="sortable" style="cursor:pointer; user-select:none;" onclick="sortSimsTable('condition')">
+                                            <span>حالة وتصنيف الشريحة</span> <span id="sims-sort-condition" class="sort-icon"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
-                                        <th style="cursor:pointer; user-select:none;" onclick="sortSimsTable('entry_date')">
-                                            <span>تاريخ دخول الفرع (الوارد)</span> <span id="sims-sort-entry" style="font-size:10px; color:var(--md-sys-color-primary);">⇕</span>
+                                        <th class="sortable" style="cursor:pointer; user-select:none;" onclick="sortSimsTable('entry_date')">
+                                            <span>تاريخ دخول الفرع (الوارد)</span> <span id="sims-sort-entry" data-sort-col="entry_date" class="sort-icon"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
                                         <th>ملاحظات الاستخدام والمشروع</th>
-                                        <th>الإجراءات</th>
+                                        <th class="col-sticky-end">الإجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody id="sims-devices-table-body">
@@ -916,32 +906,7 @@
                     </div>
 
                     <!-- Warehouse Sub-tab Switcher -->
-                    <div class="warehouse-tab-switcher">
-                        <button type="button" class="wh-switch-btn" id="switch-to-customers-3">
-                            <i data-lucide="users" style="width:16px;height:16px;"></i>
-                            <span>إدارة وبيانات العملاء</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-pos-3">
-                            <i data-lucide="boxes" style="width:16px;height:16px;"></i>
-                            <span>ماكينات الـ POS بالمخزن</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-sims-3">
-                            <i data-lucide="signal" style="width:16px;height:16px;"></i>
-                            <span>شرائح الاتصال بالمخزن</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn active" id="switch-to-maint-3">
-                            <i data-lucide="wrench" style="width:16px;height:16px;"></i>
-                            <span>الماكينات بالصيانة المركزية (HQ)</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-inst-3">
-                            <i data-lucide="calculator" style="width:16px;height:16px;"></i>
-                            <span>عقود وأقساط الماكينات</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-sp-3">
-                            <i data-lucide="layers" style="width:16px;height:16px;"></i>
-                            <span>مخزن وحركات قطع الغيار</span>
-                        </button>
-                    </div>
+                    
 
                     <!-- Top KPI Summary Cards Row for HQ Maintenance -->
                     <div class="warehouse-kpi-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; margin-bottom: 24px;">
@@ -1072,31 +1037,31 @@
                             </div>
                         </div>
 
-                        <div class="table-responsive">
+                        <div class="table-responsive ui-table-scroll" tabindex="0" role="region" aria-label="جدول الصيانة المركزية">
                             <table class="data-table" id="hq-devices-table">
                                 <thead>
                                     <tr>
-                                        <th>#</th>
-                                        <th style="cursor:pointer; user-select:none;" onclick="sortHqMaintenanceTable('serial')">
-                                            <span>السيريال (Serial)</span> <span id="hq-sort-serial" style="font-size:10px; color:var(--md-sys-color-primary);">⇕</span>
+                                        <th style="width:40px;">#</th>
+                                        <th class="sortable col-sticky-start" style="cursor:pointer; user-select:none;" onclick="sortHqMaintenanceTable('serial')">
+                                            <span>السيريال (Serial)</span> <span id="hq-sort-serial" class="sort-icon"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
-                                        <th style="cursor:pointer; user-select:none;" onclick="sortHqMaintenanceTable('model')">
-                                            <span>الموديل</span> <span id="hq-sort-model" style="font-size:10px; color:var(--md-sys-color-primary);">⇕</span>
+                                        <th class="sortable" style="cursor:pointer; user-select:none;" onclick="sortHqMaintenanceTable('model')">
+                                            <span>الموديل</span> <span id="hq-sort-model" class="sort-icon"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
-                                        <th style="cursor:pointer; user-select:none;" onclick="sortHqMaintenanceTable('out_date')">
-                                            <span>تاريخ الإرسال (Out)</span> <span id="hq-sort-out_date" style="font-size:10px; color:var(--md-sys-color-primary);">⇕</span>
+                                        <th class="sortable" style="cursor:pointer; user-select:none;" onclick="sortHqMaintenanceTable('out_date')">
+                                            <span>تاريخ الإرسال (Out)</span> <span id="hq-sort-out_date" class="sort-icon"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
-                                        <th style="cursor:pointer; user-select:none;" onclick="sortHqMaintenanceTable('in_date')">
-                                            <span>تاريخ العودة (In)</span> <span id="hq-sort-in_date" style="font-size:10px; color:var(--md-sys-color-primary);">⇕</span>
+                                        <th class="sortable" style="cursor:pointer; user-select:none;" onclick="sortHqMaintenanceTable('in_date')">
+                                            <span>تاريخ العودة (In)</span> <span id="hq-sort-in_date" class="sort-icon"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
-                                        <th style="cursor:pointer; user-select:none;" onclick="sortHqMaintenanceTable('status')">
-                                            <span>موقف الصيانة</span> <span id="hq-sort-status" style="font-size:10px; color:var(--md-sys-color-primary);">⇕</span>
+                                        <th class="sortable" style="cursor:pointer; user-select:none;" onclick="sortHqMaintenanceTable('status')">
+                                            <span>موقف الصيانة</span> <span id="hq-sort-status" class="sort-icon"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
-                                        <th style="cursor:pointer; user-select:none;" onclick="sortHqMaintenanceTable('form_no')">
-                                            <span>رقم الإذن (Form)</span> <span id="hq-sort-form_no" style="font-size:10px; color:var(--md-sys-color-primary);">⇕</span>
+                                        <th class="sortable" style="cursor:pointer; user-select:none;" onclick="sortHqMaintenanceTable('form_no')">
+                                            <span>رقم الإذن (Form)</span> <span id="hq-sort-form_no" class="sort-icon"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
                                         <th>تشخيص العطل والقطع المستبدلة</th>
-                                        <th>الإجراءات</th>
+                                        <th class="col-sticky-end">الإجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody id="hq-devices-table-body">
@@ -1153,32 +1118,7 @@
                     </div>
 
                     <!-- Warehouse Sub-tab Switcher -->
-                    <div class="warehouse-tab-switcher">
-                        <button type="button" class="wh-switch-btn" id="switch-to-customers-4">
-                            <i data-lucide="users" style="width:16px;height:16px;"></i>
-                            <span>إدارة وبيانات العملاء</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-pos-4">
-                            <i data-lucide="boxes" style="width:16px;height:16px;"></i>
-                            <span>ماكينات الـ POS بالمخزن</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-sims-4">
-                            <i data-lucide="signal" style="width:16px;height:16px;"></i>
-                            <span>شرائح الاتصال بالمخزن</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-maint-4">
-                            <i data-lucide="wrench" style="width:16px;height:16px;"></i>
-                            <span>الماكينات بالصيانة المركزية (HQ)</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn active" id="switch-to-inst-4">
-                            <i data-lucide="calculator" style="width:16px;height:16px;"></i>
-                            <span>عقود وأقساط الماكينات</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-sp-4">
-                            <i data-lucide="layers" style="width:16px;height:16px;"></i>
-                            <span>مخزن وحركات قطع الغيار</span>
-                        </button>
-                    </div>
+                    
 
                     <!-- Top KPI Summary Cards Row for Installments -->
                     <div class="warehouse-kpi-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 16px; margin-bottom: 24px;">
@@ -1267,51 +1207,60 @@
                         </div>
                     </div>
 
-                    <!-- Breakdown & Plans Grid with Government Distribution -->
-                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 20px; margin-bottom: 24px;">
-                        <!-- Plans Cards -->
-                        <div>
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                                <h3 style="font-size:16px; font-weight:800; margin:0; display:flex; align-items:center; gap:8px;">
-                                    <i data-lucide="layers" style="color:var(--md-sys-color-primary);"></i>
-                                    <span>أنظمة وخطط التقسيط المعتمدة</span>
-                                </h3>
-                            </div>
-                            <div class="warehouse-models-grid" id="inst-plans-grid" style="display:grid; grid-template-columns: 1fr; gap: 14px;">
-                                <!-- Rendered dynamically -->
-                            </div>
-                        </div>
-
-                        <!-- Financial Structure Card -->
-                        <div>
-                            <div style="margin-bottom:12px;">
-                                <h3 style="font-size:16px; font-weight:800; margin:0; display:flex; align-items:center; gap:8px;">
-                                    <i data-lucide="pie-chart" style="color:#10b981;"></i>
-                                    <span>الهيكل المالي ونسب التحصيل</span>
-                                </h3>
-                            </div>
-                            <div class="card" id="inst-finance-card" style="padding:16px; border-radius:16px; height:calc(100% - 32px); display:flex; flex-direction:column; justify-content:space-between;">
-                                <div id="inst-finance-breakdown" style="display:flex; flex-direction:column; gap:12px;">
+                    <!-- Breakdown & Plans Grid with Government Distribution (Collapsible Analytics Drawer) -->
+                    <details class="ui-analytics-drawer" open style="margin-bottom: 24px;">
+                        <summary>
+                            <span style="display:flex; align-items:center; gap:8px;">
+                                <i data-lucide="pie-chart" style="color:var(--status-warning); width:18px; height:18px;"></i>
+                                <span style="font-weight:700;">التحليلات المالية وتوزيع خطط الأقساط والمحافظ التموينية</span>
+                            </span>
+                            <span class="drawer-badge">إحصائيات تفصيلية</span>
+                        </summary>
+                        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 20px; padding: 16px 0 8px 0;">
+                            <!-- Plans Cards -->
+                            <div>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                                    <h3 style="font-size:16px; font-weight:800; margin:0; display:flex; align-items:center; gap:8px;">
+                                        <i data-lucide="layers" style="color:var(--md-sys-color-primary);"></i>
+                                        <span>أنظمة وخطط التقسيط المعتمدة</span>
+                                    </h3>
+                                </div>
+                                <div class="warehouse-models-grid" id="inst-plans-grid" style="display:grid; grid-template-columns: 1fr; gap: 14px;">
                                     <!-- Rendered dynamically -->
                                 </div>
                             </div>
-                        </div>
 
-                        <!-- Gov Distribution Breakdown Card -->
-                        <div>
-                            <div style="margin-bottom:12px;">
-                                <h3 style="font-size:16px; font-weight:800; margin:0; display:flex; align-items:center; gap:8px;">
-                                    <i data-lucide="map-pin" style="color:#f59e0b;"></i>
-                                    <span>توزيع المحفظة حسب الإدارات التموينية</span>
-                                </h3>
+                            <!-- Financial Structure Card -->
+                            <div>
+                                <div style="margin-bottom:12px;">
+                                    <h3 style="font-size:16px; font-weight:800; margin:0; display:flex; align-items:center; gap:8px;">
+                                        <i data-lucide="pie-chart" style="color:#10b981;"></i>
+                                        <span>الهيكل المالي ونسب التحصيل</span>
+                                    </h3>
+                                </div>
+                                <div class="card" id="inst-finance-card" style="padding:16px; border-radius:16px; height:calc(100% - 32px); display:flex; flex-direction:column; justify-content:space-between;">
+                                    <div id="inst-finance-breakdown" style="display:flex; flex-direction:column; gap:12px;">
+                                        <!-- Rendered dynamically -->
+                                    </div>
+                                </div>
                             </div>
-                            <div class="card" id="inst-gov-breakdown-card" style="padding:16px; border-radius:16px; height:calc(100% - 32px); overflow-y:auto; max-height:280px;">
-                                <div id="inst-gov-breakdown-list" style="display:flex; flex-direction:column; gap:10px;">
-                                    <!-- Rendered dynamically -->
+
+                            <!-- Gov Distribution Breakdown Card -->
+                            <div>
+                                <div style="margin-bottom:12px;">
+                                    <h3 style="font-size:16px; font-weight:800; margin:0; display:flex; align-items:center; gap:8px;">
+                                        <i data-lucide="map-pin" style="color:#f59e0b;"></i>
+                                        <span>توزيع المحفظة حسب الإدارات التموينية</span>
+                                    </h3>
+                                </div>
+                                <div class="card" id="inst-gov-breakdown-card" style="padding:16px; border-radius:16px; height:calc(100% - 32px); overflow-y:auto; max-height:280px;">
+                                    <div id="inst-gov-breakdown-list" style="display:flex; flex-direction:column; gap:10px;">
+                                        <!-- Rendered dynamically -->
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </details>
 
                     <!-- Interactive Installments Table Card -->
                     <div class="card" style="border-radius: 16px; padding: 20px; box-shadow: var(--md-elevation-1);">
@@ -1342,40 +1291,40 @@
                             </div>
                         </div>
 
-                        <div class="table-responsive">
+                        <div class="table-responsive ui-table-scroll" tabindex="0" role="region" aria-label="جدول عقود الأقساط">
                             <table class="data-table" id="inst-contracts-table">
                                 <thead>
                                     <tr>
-                                        <th>#</th>
-                                        <th style="cursor:pointer; user-select:none;" onclick="sortInstallmentsTable('pos')">
-                                            <span>سيريال الماكينة (POS)</span> <span id="inst-sort-pos" style="font-size:10px; color:var(--md-sys-color-primary);">⇕</span>
+                                        <th style="width:40px;">#</th>
+                                        <th class="sortable col-sticky-start" style="cursor:pointer; user-select:none;" onclick="sortInstallmentsTable('pos')">
+                                            <span>سيريال الماكينة (POS)</span> <span id="inst-sort-pos" class="sort-icon"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
-                                        <th style="cursor:pointer; user-select:none;" onclick="sortInstallmentsTable('merchant_name')">
-                                            <span>اسم العميل / المخبز</span> <span id="inst-sort-merchant_name" style="font-size:10px; color:var(--md-sys-color-primary);">⇕</span>
+                                        <th class="sortable" style="cursor:pointer; user-select:none;" onclick="sortInstallmentsTable('merchant_name')">
+                                            <span>اسم العميل / المخبز</span> <span id="inst-sort-merchant_name" class="sort-icon"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
-                                        <th style="cursor:pointer; user-select:none;" onclick="sortInstallmentsTable('government')">
-                                            <span>الإدارة التموينية</span> <span id="inst-sort-government" style="font-size:10px; color:var(--md-sys-color-primary);">⇕</span>
+                                        <th class="sortable" style="cursor:pointer; user-select:none;" onclick="sortInstallmentsTable('government')">
+                                            <span>الإدارة التموينية</span> <span id="inst-sort-government" class="sort-icon"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
-                                        <th style="cursor:pointer; user-select:none;" onclick="sortInstallmentsTable('duration')">
-                                            <span>مدة القسط</span> <span id="inst-sort-duration" style="font-size:10px; color:var(--md-sys-color-primary);">⇕</span>
+                                        <th class="sortable" style="cursor:pointer; user-select:none;" onclick="sortInstallmentsTable('duration')">
+                                            <span>مدة القسط</span> <span id="inst-sort-duration" class="sort-icon"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
                                         <th>المقدم</th>
                                         <th>القسط الشهري</th>
-                                        <th style="cursor:pointer; user-select:none;" onclick="sortInstallmentsTable('final_price')">
-                                            <span>القيمة بعد الفوائد</span> <span id="inst-sort-final_price" style="font-size:10px; color:var(--md-sys-color-primary);">⇕</span>
+                                        <th class="sortable" style="cursor:pointer; user-select:none;" onclick="sortInstallmentsTable('final_price')">
+                                            <span>القيمة بعد الفوائد</span> <span id="inst-sort-final_price" class="sort-icon"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
                                         <th>الأقساط المسددة</th>
-                                        <th style="cursor:pointer; user-select:none;" onclick="sortInstallmentsTable('total_paid')">
-                                            <span>إجمالي المسدد</span> <span id="inst-sort-total_paid" style="font-size:10px; color:var(--md-sys-color-primary);">⇕</span>
+                                        <th class="sortable" style="cursor:pointer; user-select:none;" onclick="sortInstallmentsTable('total_paid')">
+                                            <span>إجمالي المسدد</span> <span id="inst-sort-total_paid" class="sort-icon"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
                                         <th>الأقساط المتبقية</th>
-                                        <th style="cursor:pointer; user-select:none;" onclick="sortInstallmentsTable('remaining_amount')">
-                                            <span>المبلغ المتبقي والمتأخر</span> <span id="inst-sort-remaining_amount" style="font-size:10px; color:var(--md-sys-color-primary);">⇕</span>
+                                        <th class="sortable" style="cursor:pointer; user-select:none;" onclick="sortInstallmentsTable('remaining_amount')">
+                                            <span>المبلغ المتبقي والمتأخر</span> <span id="inst-sort-remaining_amount" class="sort-icon"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
-                                        <th style="cursor:pointer; user-select:none;" onclick="sortInstallmentsTable('status')">
-                                            <span>موقف السداد</span> <span id="inst-sort-status" style="font-size:10px; color:var(--md-sys-color-primary);">⇕</span>
+                                        <th class="sortable" style="cursor:pointer; user-select:none;" onclick="sortInstallmentsTable('status')">
+                                            <span>موقف السداد</span> <span id="inst-sort-status" class="sort-icon"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
-                                        <th>الإجراءات</th>
+                                        <th class="col-sticky-end">الإجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody id="inst-contracts-table-body">
@@ -1432,32 +1381,7 @@
                     </div>
 
                     <!-- Warehouse Sub-tab Switcher -->
-                    <div class="warehouse-tab-switcher">
-                        <button type="button" class="wh-switch-btn" id="switch-to-customers-5">
-                            <i data-lucide="users" style="width:16px;height:16px;"></i>
-                            <span>إدارة وبيانات العملاء</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-pos-5">
-                            <i data-lucide="boxes" style="width:16px;height:16px;"></i>
-                            <span>ماكينات الـ POS بالمخزن</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-sims-5">
-                            <i data-lucide="signal" style="width:16px;height:16px;"></i>
-                            <span>شرائح الاتصال بالمخزن</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-maint-5">
-                            <i data-lucide="wrench" style="width:16px;height:16px;"></i>
-                            <span>الماكينات بالصيانة المركزية (HQ)</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-inst-5">
-                            <i data-lucide="calculator" style="width:16px;height:16px;"></i>
-                            <span>عقود وأقساط الماكينات</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn active" id="switch-to-sp-5">
-                            <i data-lucide="layers" style="width:16px;height:16px;"></i>
-                            <span>مخزن وحركات قطع الغيار</span>
-                        </button>
-                    </div>
+                    
 
                     <!-- Precision Filter Bar -->
                     <div class="filter-panel" style="background:var(--md-sys-color-surface-container); border:1px solid var(--md-sys-color-outline-variant); border-radius:16px; padding:18px; margin-bottom:24px; box-shadow:var(--md-elevation-1);">
@@ -1613,50 +1537,64 @@
                         </div>
                     </div>
 
-                    <!-- 3-Column Aggregation Breakdown Section (Responsive Grid) -->
-                    <div class="sp-aggregation-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:20px; margin-bottom:28px;">
-                        <!-- Column 1: Parts Aggregation Breakdown -->
-                        <div class="card" style="background:var(--md-sys-color-surface-container); border:1px solid var(--md-sys-color-outline); border-radius:16px; padding:20px; box-shadow:var(--md-elevation-1);">
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--md-sys-color-outline-variant); padding-bottom:12px;">
-                                <h3 style="font-size:15px; font-weight:800; margin:0; display:flex; align-items:center; gap:8px;">
-                                    <i data-lucide="layers" style="color:var(--md-sys-color-primary); width:18px; height:18px;"></i>
-                                    تجميع رصيد واستهلاك قطع الغيار (الأنواع)
-                                </h3>
-                                <span class="badge inmerchant" id="sp-parts-count-badge" style="font-family:var(--font-en); font-weight:800;">28 نوع</span>
-                            </div>
-                            <div id="sp-parts-breakdown-list" style="display:flex; flex-direction:column; gap:10px; max-height:420px; overflow-y:auto; padding-left:4px;">
-                                <div style="text-align:center; padding:30px; color:var(--md-sys-color-on-surface-variant);">جاري تحميل تصنيف قطع الغيار...</div>
-                            </div>
-                        </div>
+                    <!-- Collapsible 3-Column Aggregation Breakdown Section -->
+                    <details class="ui-analytics-drawer" open style="margin-bottom:24px;">
+                        <summary style="cursor:pointer; display:flex; align-items:center; justify-content:space-between; padding:12px 18px; border-radius:12px; background:var(--surface-2); border:1px solid var(--border-subtle); font-weight:700; user-select:none;">
+                            <span style="display:flex; align-items:center; gap:8px;">
+                                <i data-lucide="pie-chart" style="width:16px; height:16px; color:var(--accent-primary);"></i>
+                                <span>تحليلات وتجميع رصيد واستهلاك قطع الغيار والتحصيل المالي</span>
+                            </span>
+                            <span style="font-size:11px; color:var(--text-muted); display:flex; align-items:center; gap:6px;">
+                                <span>إظهار/طي التحليلات</span>
+                                <i data-lucide="chevron-down" class="drawer-chevron" style="width:14px; height:14px;"></i>
+                            </span>
+                        </summary>
+                        <div class="drawer-content" style="padding-top:16px;">
+                            <div class="sp-aggregation-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:16px; margin-bottom:12px;">
+                                <!-- Column 1: Parts Aggregation Breakdown -->
+                                <div class="card" style="background:var(--surface-2); border:1px solid var(--border-subtle); border-radius:14px; padding:18px;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid var(--border-subtle); padding-bottom:10px;">
+                                        <h3 style="font-size:14px; font-weight:800; margin:0; display:flex; align-items:center; gap:8px;">
+                                            <i data-lucide="layers" style="color:var(--accent-primary); width:16px; height:16px;"></i>
+                                            <span>تجميع رصيد واستهلاك قطع الغيار</span>
+                                        </h3>
+                                        <span class="badge inmerchant" id="sp-parts-count-badge" style="font-family:var(--font-mono); font-weight:800;">28 نوع</span>
+                                    </div>
+                                    <div id="sp-parts-breakdown-list" style="display:flex; flex-direction:column; gap:8px; max-height:360px; overflow-y:auto; padding-left:4px;">
+                                        <div style="text-align:center; padding:30px; color:var(--text-muted);">جاري تحميل تصنيف قطع الغيار...</div>
+                                    </div>
+                                </div>
 
-                        <!-- Column 2: Financial & Payment Status Breakdown -->
-                        <div class="card" style="background:var(--md-sys-color-surface-container); border:1px solid var(--md-sys-color-outline); border-radius:16px; padding:20px; box-shadow:var(--md-elevation-1);">
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--md-sys-color-outline-variant); padding-bottom:12px;">
-                                <h3 style="font-size:15px; font-weight:800; margin:0; display:flex; align-items:center; gap:8px;">
-                                    <i data-lucide="receipt" style="color:#10b981; width:18px; height:18px;"></i>
-                                    التجميع المالي ومقابل الصيانة
-                                </h3>
-                                <span class="badge" style="background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); font-weight:700;">تحصيل وسداد</span>
-                            </div>
-                            <div id="sp-financial-breakdown-list" style="display:flex; flex-direction:column; gap:12px;">
-                                <div style="text-align:center; padding:30px; color:var(--md-sys-color-on-surface-variant);">جاري تجهيز التحليلات المالية...</div>
-                            </div>
-                        </div>
+                                <!-- Column 2: Financial & Payment Status Breakdown -->
+                                <div class="card" style="background:var(--surface-2); border:1px solid var(--border-subtle); border-radius:14px; padding:18px;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid var(--border-subtle); padding-bottom:10px;">
+                                        <h3 style="font-size:14px; font-weight:800; margin:0; display:flex; align-items:center; gap:8px;">
+                                            <i data-lucide="receipt" style="color:#10b981; width:16px; height:16px;"></i>
+                                            <span>التجميع المالي ومقابل الصيانة</span>
+                                        </h3>
+                                        <span class="badge" style="background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.3); font-weight:700;">تحصيل وسداد</span>
+                                    </div>
+                                    <div id="sp-financial-breakdown-list" style="display:flex; flex-direction:column; gap:10px;">
+                                        <div style="text-align:center; padding:30px; color:var(--text-muted);">جاري تجهيز التحليلات المالية...</div>
+                                    </div>
+                                </div>
 
-                        <!-- Column 3: Government / Administration Breakdown -->
-                        <div class="card" style="background:var(--md-sys-color-surface-container); border:1px solid var(--md-sys-color-outline); border-radius:16px; padding:20px; box-shadow:var(--md-elevation-1);">
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid var(--md-sys-color-outline-variant); padding-bottom:12px;">
-                                <h3 style="font-size:15px; font-weight:800; margin:0; display:flex; align-items:center; gap:8px;">
-                                    <i data-lucide="map-pin" style="color:#f59e0b; width:18px; height:18px;"></i>
-                                    توزيع الصرف حسب الإدارات التموينية
-                                </h3>
-                                <span class="badge" style="background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3); font-weight:700;">الإدارات</span>
-                            </div>
-                            <div id="sp-tech-breakdown-list" style="display:flex; flex-direction:column; gap:10px; max-height:420px; overflow-y:auto; padding-left:4px;">
-                                <div style="text-align:center; padding:30px; color:var(--md-sys-color-on-surface-variant);">جاري تحليل توزيع الإدارات التموينية...</div>
+                                <!-- Column 3: Government / Administration Breakdown -->
+                                <div class="card" style="background:var(--surface-2); border:1px solid var(--border-subtle); border-radius:14px; padding:18px;">
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; border-bottom:1px solid var(--border-subtle); padding-bottom:10px;">
+                                        <h3 style="font-size:14px; font-weight:800; margin:0; display:flex; align-items:center; gap:8px;">
+                                            <i data-lucide="map-pin" style="color:#f59e0b; width:16px; height:16px;"></i>
+                                            <span>توزيع الصرف حسب الإدارات</span>
+                                        </h3>
+                                        <span class="badge" style="background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid rgba(245,158,11,0.3); font-weight:700;">الإدارات</span>
+                                    </div>
+                                    <div id="sp-tech-breakdown-list" style="display:flex; flex-direction:column; gap:8px; max-height:360px; overflow-y:auto; padding-left:4px;">
+                                        <div style="text-align:center; padding:30px; color:var(--text-muted);">جاري تحليل توزيع الإدارات التموينية...</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    </details>
 
                     <!-- Detailed Movements Table Card -->
                     <div class="card" style="background:var(--md-sys-color-surface-container); border:1px solid var(--md-sys-color-outline); border-radius:16px; padding:20px; box-shadow:var(--md-elevation-1);">
@@ -1674,39 +1612,39 @@
                         </div>
 
                         <!-- Table with Interactive Sorting -->
-                        <div class="table-responsive">
+                        <div class="table-responsive ui-table-scroll" tabindex="0" role="region" aria-label="جدول حركات قطع الغيار">
                             <table class="data-table" id="sp-movements-table">
                                 <thead>
                                     <tr>
                                         <th style="width:45px;">#</th>
-                                        <th class="sortable-th" onclick="sortSparePartsTable('timestamp')" style="cursor:pointer; user-select:none;">
-                                            <span>تاريخ ووقت الحركة</span> <span class="sort-icon" id="sp-sort-timestamp">⬍</span>
+                                        <th class="sortable-th col-sticky-start" onclick="sortSparePartsTable('timestamp')" style="cursor:pointer; user-select:none;">
+                                            <span>تاريخ ووقت الحركة</span> <span class="sort-icon" id="sp-sort-timestamp"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
                                         <th class="sortable-th" onclick="sortSparePartsTable('part_name')" style="cursor:pointer; user-select:none;">
-                                            <span>نوع قطعة الغيار</span> <span class="sort-icon" id="sp-sort-part_name">⬍</span>
+                                            <span>نوع قطعة الغيار</span> <span class="sort-icon" id="sp-sort-part_name"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
                                         <th class="sortable-th" onclick="sortSparePartsTable('quantity')" style="cursor:pointer; user-select:none;">
-                                            <span>نوع الحركة والكمية</span> <span class="sort-icon" id="sp-sort-quantity">⬍</span>
+                                            <span>نوع الحركة والكمية</span> <span class="sort-icon" id="sp-sort-quantity"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
                                         <th class="sortable-th" onclick="sortSparePartsTable('pos_serial')" style="cursor:pointer; user-select:none;">
-                                            <span>سيريال الماكينة (POS)</span> <span class="sort-icon" id="sp-sort-pos_serial">⬍</span>
+                                            <span>سيريال الماكينة (POS)</span> <span class="sort-icon" id="sp-sort-pos_serial"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
                                         <th class="sortable-th" onclick="sortSparePartsTable('merchant_name')" style="cursor:pointer; user-select:none;">
-                                            <span>اسم المخبز والعميل</span> <span class="sort-icon" id="sp-sort-merchant_name">⬍</span>
+                                            <span>اسم المخبز والعميل</span> <span class="sort-icon" id="sp-sort-merchant_name"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
                                         <th class="sortable-th" onclick="sortSparePartsTable('government')" style="cursor:pointer; user-select:none;">
-                                            <span>الإدارة التموينية</span> <span class="sort-icon" id="sp-sort-government">⬍</span>
+                                            <span>الإدارة التموينية</span> <span class="sort-icon" id="sp-sort-government"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
                                         <th class="sortable-th" onclick="sortSparePartsTable('payment_status_label')" style="cursor:pointer; user-select:none;">
-                                            <span>حالة السداد والمقابل</span> <span class="sort-icon" id="sp-sort-payment_status_label">⬍</span>
+                                            <span>حالة السداد والمقابل</span> <span class="sort-icon" id="sp-sort-payment_status_label"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
                                         <th class="sortable-th" onclick="sortSparePartsTable('payment_channel')" style="cursor:pointer; user-select:none;">
-                                            <span>رقم الإيصال وجهة الدفع</span> <span class="sort-icon" id="sp-sort-payment_channel">⬍</span>
+                                            <span>رقم الإيصال وجهة الدفع</span> <span class="sort-icon" id="sp-sort-payment_channel"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
                                         <th class="sortable-th" onclick="sortSparePartsTable('total_amount')" style="cursor:pointer; user-select:none;">
-                                            <span>القيمة المالية</span> <span class="sort-icon" id="sp-sort-total_amount">⬍</span>
+                                            <span>القيمة المالية</span> <span class="sort-icon" id="sp-sort-total_amount"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
-                                        <th style="width:75px;">الإجراءات</th>
+                                        <th class="col-sticky-end" style="width:75px;">الإجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody id="sp-movements-table-body">
@@ -1752,32 +1690,7 @@
                     </div>
 
                     <!-- Warehouse & Operations Sub-tab Switcher -->
-                    <div class="warehouse-tab-switcher">
-                        <button type="button" class="wh-switch-btn active" id="switch-to-customers-6">
-                            <i data-lucide="users" style="width:16px;height:16px;"></i>
-                            <span>إدارة وبيانات العملاء</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-pos-6">
-                            <i data-lucide="boxes" style="width:16px;height:16px;"></i>
-                            <span>ماكينات الـ POS بالمخزن</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-sims-6">
-                            <i data-lucide="signal" style="width:16px;height:16px;"></i>
-                            <span>شرائح الاتصال بالمخزن</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-maint-6">
-                            <i data-lucide="wrench" style="width:16px;height:16px;"></i>
-                            <span>الماكينات بالصيانة المركزية (HQ)</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-inst-6">
-                            <i data-lucide="calculator" style="width:16px;height:16px;"></i>
-                            <span>عقود وأقساط الماكينات</span>
-                        </button>
-                        <button type="button" class="wh-switch-btn" id="switch-to-sp-6">
-                            <i data-lucide="layers" style="width:16px;height:16px;"></i>
-                            <span>مخزن وحركات قطع الغيار</span>
-                        </button>
-                    </div>
+                    
 
                     <!-- Smart Search Card with Live Instant Auto-complete -->
                     <div class="card" style="background:var(--md-sys-color-surface-container); border:1px solid var(--md-sys-color-outline); border-radius:16px; padding:20px; box-shadow:var(--md-elevation-1); margin-bottom:24px; position:relative;">
@@ -1803,17 +1716,68 @@
                         </div>
                     </div>
 
-                    <!-- Empty / Initial Search Prompt -->
-                    <div id="cust-empty-prompt" style="text-align:center; padding:60px 20px; background:var(--md-sys-color-surface-container-low); border:1px dashed var(--md-sys-color-outline-variant); border-radius:16px;">
-                        <div style="width:64px; height:64px; border-radius:20px; background:rgba(56,189,248,0.15); color:var(--md-sys-color-primary); display:inline-flex; align-items:center; justify-content:center; margin-bottom:16px;">
-                            <i data-lucide="users" style="width:32px; height:32px;"></i>
+                    <!-- Customer Directory Section (Default Interactive View) -->
+                    <div id="cust-directory-section">
+                        <div class="card" style="padding: 20px; border-radius: 16px; margin-bottom: 24px; background:var(--surface-1); border:1px solid var(--border-subtle);">
+                            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+                                <div>
+                                    <h3 style="font-size:16px; font-weight:800; margin:0 0 4px 0; display:flex; align-items:center; gap:8px;">
+                                        <i data-lucide="book-open" style="color:var(--accent-primary);"></i>
+                                        <span>دليل المخابز والعملاء</span>
+                                    </h3>
+                                    <p style="font-size:12px; color:var(--text-secondary); margin:0;">استعراض فوري لكافة المخابز والعملاء المسجلين، كود المخبز، الإدارة التموينية، وأرقام التواصل</p>
+                                </div>
+                                <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                                    <span class="badge inmerchant" id="cust-dir-count-badge" style="font-weight:800; font-family:var(--font-mono);">0 مخبز</span>
+                                    <select id="cust-dir-gov-filter" style="padding:8px 14px; font-size:12px; border-radius:var(--md-shape-corner-full); border:1px solid var(--border-subtle); background:var(--surface-2); color:var(--text-primary);">
+                                        <option value="all">كل الإدارات والمناطق</option>
+                                    </select>
+                                    <button type="button" class="btn btn-secondary btn-sm" id="btn-export-cust-directory" onclick="exportCustomerDirectoryToExcel()" style="display:inline-flex; align-items:center; gap:6px; padding:6px 14px; font-size:12px; border-radius:var(--md-shape-corner-full);">
+                                        <i data-lucide="download" style="width:14px; height:14px;"></i>
+                                        <span>تصدير Excel</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="table-responsive ui-table-scroll" tabindex="0" role="region" aria-label="دليل المخابز والعملاء">
+                                <table class="data-table" id="cust-directory-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:40px;">#</th>
+                                            <th class="col-sticky-start" style="width:110px;">كود المخبز</th>
+                                            <th>اسم المخبز / العميل</th>
+                                            <th>الإدارة التموينية / المنطقة</th>
+                                            <th>أرقام الهاتف</th>
+                                            <th>العنوان</th>
+                                            <th style="width:90px;">الحالة</th>
+                                            <th class="col-sticky-end" style="width:130px;">الإجراءات</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="cust-directory-table-body">
+                                        <tr><td colspan="8" style="text-align:center; padding:30px; color:var(--text-muted);"><i data-lucide="loader-2" class="spin-animation" style="width:16px;height:16px;vertical-align:middle;"></i> جاري تحميل دليل المخابز...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Directory Pagination Bar -->
+                            <div class="pagination-bar" id="cust-dir-pagination-bar" style="margin-top: 14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                                <span id="cust-dir-page-info" style="font-weight:700; font-size:12px; color:var(--text-secondary);">الصفحة 1 من 1</span>
+                                <div class="pagination-actions" id="cust-dir-pagination-controls" style="display:flex; align-items:center; gap:4px;">
+                                    <!-- Injected dynamically -->
+                                </div>
+                            </div>
                         </div>
-                        <h3 style="margin:0 0 8px; font-size:18px; font-weight:800;">ابحث عن أي عميل أو ماكينة</h3>
-                        <p style="margin:0; color:var(--md-sys-color-on-surface-variant); font-size:13px; max-width:480px; margin:0 auto;">اكتب في صندوق البحث أعلاه اسم المخبز، كود العميل، سيريال الماكينة، أو الشريحة لعرض ملف العميل الشامل وسجل الماكينات والعمليات</p>
                     </div>
 
                     <!-- Customer 360 Profile Container (Loaded on selection) -->
                     <div id="cust-profile-container" style="display:none;">
+                        <!-- Return to Directory Action -->
+                        <div style="margin-bottom: 14px;">
+                            <button type="button" class="btn btn-secondary btn-sm" id="btn-back-to-cust-directory" onclick="returnToCustomerDirectory()" style="display:inline-flex; align-items:center; gap:8px; padding:6px 14px; border-radius:var(--md-shape-corner-full); font-weight:700;">
+                                <i data-lucide="arrow-right" class="icon-rtl-flip" style="width:14px; height:14px;"></i>
+                                <span>العودة لدليل المخابز والعملاء</span>
+                            </button>
+                        </div>
                         <!-- Profile Header Card -->
                         <div class="card" style="background:var(--md-sys-color-surface-container); border:1px solid var(--md-sys-color-outline); border-radius:16px; padding:22px; box-shadow:var(--md-elevation-1); margin-bottom:20px;">
                             <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px; border-bottom:1px solid var(--md-sys-color-outline-variant); padding-bottom:18px; margin-bottom:18px;">
@@ -2025,6 +1989,45 @@
                         </div>
                     </div>
 
+                    <!-- Cloud Outbox & Dead-Letter Queue (DLQ) Telemetry Strip -->
+                    <div class="card" id="sync-outbox-dlq-strip" style="margin-bottom: 20px; padding: 14px 20px; border-inline-start: 4px solid var(--accent-primary); background: var(--surface-1);">
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+                            <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <i data-lucide="cloud-cog" style="color:var(--accent-primary); width:20px; height:20px;"></i>
+                                    <span style="font-weight:700; font-size:13px; color:var(--text-primary);">طابور المزامنة السحابية (Cloud Outbox):</span>
+                                </div>
+                                
+                                <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                                    <!-- Outbox Pending Queue -->
+                                    <div style="display:flex; align-items:center; gap:6px; background:var(--surface-2); padding:5px 12px; border-radius:var(--radius-md); border:1px solid var(--border-subtle);">
+                                        <span style="font-size:12px; color:var(--text-secondary);">قيد الإرسال (Pending):</span>
+                                        <span id="sync-telemetry-outbox-count" class="mono-ltr" style="font-weight:800; font-size:13px; color:var(--accent-primary);">0</span>
+                                        <span style="font-size:11px; color:var(--text-muted);">دفعة</span>
+                                    </div>
+
+                                    <!-- DLQ Dead Letter Queue -->
+                                    <div style="display:flex; align-items:center; gap:6px; background:var(--surface-2); padding:5px 12px; border-radius:var(--radius-md); border:1px solid var(--border-subtle);">
+                                        <span style="font-size:12px; color:var(--text-secondary);">طابور التعثر (DLQ):</span>
+                                        <span id="sync-telemetry-dlq-count" class="mono-ltr" style="font-weight:800; font-size:13px; color:var(--status-success);">0</span>
+                                        <span id="sync-telemetry-dlq-badge" class="badge" style="display:none; font-size:10px; background:var(--status-danger-subtle); color:var(--status-danger);">معطل</span>
+                                    </div>
+
+                                    <!-- SSE Realtime Pulse -->
+                                    <div style="display:flex; align-items:center; gap:6px; font-size:12px; color:var(--text-secondary);">
+                                        <span class="live-pulse" style="width:8px; height:8px; border-radius:50%; background:var(--status-success); display:inline-block;"></span>
+                                        <span id="sync-telemetry-sse-status">قناة SSE نشطة</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button type="button" class="btn btn-secondary" id="btn-retry-sync-dlq" onclick="retrySyncDlqQueue()" style="display:inline-flex; align-items:center; gap:6px; padding:6px 14px; font-size:12px; border-radius:var(--radius-full);">
+                                <i data-lucide="rotate-ccw" id="icon-retry-dlq-spinner" style="width:14px; height:14px;"></i>
+                                <span>إعادة محاولة دفع طابور السحابة</span>
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Change Type Stats Grid (Responsive Auto-fit) -->
                     <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 20px;">
                         <div class="stat-card" style="border-right: 3px solid #10b981;">
@@ -2082,29 +2085,29 @@
                                 </div>
                             </div>
                         </div>
-                        <div style="overflow-x:auto;">
+                        <div class="table-responsive ui-table-scroll" tabindex="0" role="region" aria-label="جدول سجلات التدقيق">
                             <table class="data-table" id="audit-logs-table" style="width:100%;">
                                 <thead>
                                     <tr>
-                                        <th class="sortable" onclick="sortAuditLogsTable('id')" style="cursor:pointer; width:50px;">
-                                            <span>#</span> <span class="sort-icon" id="audit-sort-id">⬍</span>
+                                        <th class="sortable col-sticky-start" onclick="sortAuditLogsTable('id')" style="cursor:pointer; width:50px;">
+                                            <span>#</span> <span class="sort-icon" id="audit-sort-id"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
                                         <th class="sortable" onclick="sortAuditLogsTable('timestamp')" style="cursor:pointer; white-space:nowrap;">
-                                            <span>التاريخ والوقت</span> <span class="sort-icon" id="audit-sort-timestamp">⬍</span>
+                                            <span>التاريخ والوقت</span> <span class="sort-icon" id="audit-sort-timestamp"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
                                         <th class="sortable" onclick="sortAuditLogsTable('table_name')" style="cursor:pointer;">
-                                            <span>الجدول</span> <span class="sort-icon" id="audit-sort-table_name">⬍</span>
+                                            <span>الجدول</span> <span class="sort-icon" id="audit-sort-table_name"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
                                         <th class="sortable" onclick="sortAuditLogsTable('change_type')" style="cursor:pointer;">
-                                            <span>نوع العملية</span> <span class="sort-icon" id="audit-sort-change_type">⬍</span>
+                                            <span>نوع العملية</span> <span class="sort-icon" id="audit-sort-change_type"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
                                         <th class="sortable" onclick="sortAuditLogsTable('record_id')" style="cursor:pointer;">
-                                            <span>معرف السجل</span> <span class="sort-icon" id="audit-sort-record_id">⬍</span>
+                                            <span>معرف السجل</span> <span class="sort-icon" id="audit-sort-record_id"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
                                         <th class="sortable" onclick="sortAuditLogsTable('summary')" style="cursor:pointer;">
-                                            <span>ملخص التغيير</span> <span class="sort-icon" id="audit-sort-summary">⬍</span>
+                                            <span>ملخص التغيير</span> <span class="sort-icon" id="audit-sort-summary"><i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i></span>
                                         </th>
-                                        <th style="width:100px;">الإجراء</th>
+                                        <th class="col-sticky-end" style="width:100px;">الإجراء</th>
                                     </tr>
                                 </thead>
                                 <tbody id="audit-logs-body">
@@ -2143,6 +2146,10 @@
                             <h1>مستكشف بيانات الجداول</h1>
                             <p>استعراض وبحث مباشر في كافة جداول قاعدة البيانات المستوردة من الآكسيس</p>
                         </div>
+                        <button type="button" class="btn btn-primary" id="btn-export-explorer-excel" onclick="exportExplorerTableToExcel()" style="display:inline-flex; align-items:center; gap:8px; padding:8px 16px; border-radius:var(--md-shape-corner-full); font-weight:700;">
+                            <i data-lucide="file-spreadsheet" style="width:16px; height:16px;"></i>
+                            <span>تصدير Excel (xlsx)</span>
+                        </button>
                     </div>
 
                     <div class="report-filter-panel" style="margin-bottom: 20px;">
@@ -2168,7 +2175,7 @@
                         </div>
                     </div>
 
-                    <div class="table-container">
+                    <div class="table-container ui-table-scroll" tabindex="0" role="region" aria-label="مستكشف بيانات الجداول">
                         <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center;">
                             <h3 id="explorer-table-title">بيانات الجدول</h3>
                             <span id="explorer-record-count" style="font-size:13px; color:var(--md-sys-color-primary); font-weight:800; font-family:var(--font-en);">0 سجل</span>
@@ -2464,163 +2471,151 @@
                     </div>
 
                     <!-- ======================================================== -->
-                    <!-- SUBTAB 4: SYSTEM DIAGNOSTICS & CYBER TELEMETRY HUD MATRIX  -->
+                    <!-- SUBTAB 4: SYSTEM DIAGNOSTICS & VPS RECONCILIATION         -->
                     <!-- ======================================================== -->
-                    <div class="settings-subtab-pane cyber-terminal-root" id="pane-settings-diagnostics" style="display:none;">
+                    <div class="settings-subtab-pane" id="pane-settings-diagnostics" style="display:none;">
                         
-                        <!-- 🛸 Top Cyber Command Terminal Header -->
-                        <div class="cyber-hud-header">
-                            <div>
-                                <div class="cyber-terminal-prompt">
-                                    <span style="color:var(--cyber-neon-cyan);">root@smartcs-core:~$</span>
-                                    <span>sys_diagnostic_auditor --live-stream --realtime</span>
-                                    <span class="cyber-blink-cursor"></span>
+                        <!-- Top Enterprise Diagnostics Header -->
+                        <div class="card" style="padding:18px 24px; margin-bottom:20px; border-radius:var(--radius-lg); background:var(--surface-1); border:1px solid var(--border-subtle);">
+                            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;">
+                                <div>
+                                    <h2 style="margin:0 0 4px 0; font-size:18px; font-weight:800; display:flex; align-items:center; gap:10px;">
+                                        <i data-lucide="stethoscope" style="width:22px; height:22px; color:var(--status-danger);"></i>
+                                        <span>مركز التشخيص وتدقيق مطابقة البيانات (Enterprise Diagnostics)</span>
+                                    </h2>
+                                    <p style="margin:0; font-size:12px; color:var(--text-secondary);">
+                                        مراقبة سلامة واستقرار المنظومة، وتدقيق تطابق السجلات بين السيرفر المحلي وقاعدة بيانات الـ VPS السحابية
+                                    </p>
                                 </div>
-                                <h2 class="cyber-hud-title">
-                                    <i data-lucide="terminal" style="width:24px; height:24px; color:var(--cyber-neon-cyan);"></i>
-                                    <span>مركز التشخيص السيبراني وتدقيق التطابق اللحظي</span>
-                                </h2>
-                            </div>
-                            
-                            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                                <div class="cyber-node-badge">
-                                    <span class="cyber-node-dot"></span>
-                                    <span>LOCAL NODE: 127.0.0.1:8970</span>
-                                </div>
-                                <div class="cyber-node-badge" style="border-color:rgba(0, 255, 157, 0.4); color:var(--cyber-neon-green);">
-                                    <i data-lucide="radio" style="width:13px; height:13px;"></i>
-                                    <span>VPS CLOUD: smartcs.m-kamel.workers.dev [LIVE]</span>
+                                
+                                <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                                    <div class="badge" style="background:var(--surface-2); border:1px solid var(--border-subtle); color:var(--text-secondary); font-size:11px; padding:6px 12px; display:inline-flex; align-items:center; gap:6px;">
+                                        <span class="live-pulse" style="width:7px; height:7px; border-radius:50%; background:var(--status-success); display:inline-block;"></span>
+                                        <span class="mono-ltr">LOCAL: 127.0.0.1:8970</span>
+                                    </div>
+                                    <div class="badge" style="background:var(--surface-2); border:1px solid var(--border-subtle); color:var(--accent-primary); font-size:11px; padding:6px 12px; display:inline-flex; align-items:center; gap:6px;">
+                                        <i data-lucide="cloud" style="width:13px; height:13px;"></i>
+                                        <span class="mono-ltr">VPS: smartcs.m-kamel.workers.dev</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- 🛸 4 Futuristic Holographic KPI Gauges -->
-                        <div class="cyber-kpi-grid">
+                        <!-- 4 Enterprise KPI Gauges -->
+                        <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom: 24px;">
                             <!-- Gauge 1: Anomalies -->
-                            <div class="cyber-kpi-card">
-                                <div class="cyber-kpi-label">
-                                    <span>[ANOMALIES_24H]</span>
-                                    <i data-lucide="shield-alert" style="width:16px; height:16px; color:var(--cyber-neon-red);"></i>
-                                </div>
-                                <div class="cyber-kpi-val" id="diag-kpi-errors-24h" style="color:var(--cyber-neon-red);">0</div>
-                                <div class="cyber-kpi-sub" id="diag-kpi-errors-total">
-                                    <i data-lucide="activity" style="width:12px; height:12px;"></i>
-                                    <span>إجمالي الأخطاء المسجلة: 0</span>
+                            <div class="stat-card" style="border-right: 3px solid var(--status-danger);">
+                                <div class="stat-icon critical"><i data-lucide="shield-alert"></i></div>
+                                <div class="stat-details">
+                                    <span class="stat-label">أخطاء الـ 24 ساعة الماضية</span>
+                                    <h3 id="diag-kpi-errors-24h" class="mono-ltr" style="color: var(--status-danger);">0</h3>
+                                    <span class="stat-sub" id="diag-kpi-errors-total" style="font-size:11px; color:var(--text-muted);">إجمالي الأخطاء: 0</span>
                                 </div>
                             </div>
 
                             <!-- Gauge 2: Database Drift & Sync Integrity -->
-                            <div class="cyber-kpi-card">
-                                <div class="cyber-kpi-label">
-                                    <span>[DB_SYNC_INTEGRITY]</span>
-                                    <i data-lucide="check-check" style="width:16px; height:16px; color:var(--cyber-neon-green);"></i>
-                                </div>
-                                <div class="cyber-kpi-val" id="diag-kpi-match-status" style="color:var(--cyber-neon-green); font-size:22px;">100% MATCHED</div>
-                                <div class="cyber-kpi-sub" id="diag-kpi-mismatch-count" style="color:var(--cyber-neon-green);">
-                                    <i data-lucide="cpu" style="width:12px; height:12px;"></i>
-                                    <span>تطابق تام بين اللوكال والـ VPS</span>
+                            <div class="stat-card" style="border-right: 3px solid var(--status-success);">
+                                <div class="stat-icon success"><i data-lucide="check-check"></i></div>
+                                <div class="stat-details">
+                                    <span class="stat-label">تكامل السحابة (VPS Integrity)</span>
+                                    <h3 id="diag-kpi-match-status" style="color: var(--status-success); font-size:18px;">100% متطابق</h3>
+                                    <span class="stat-sub" id="diag-kpi-mismatch-count" style="font-size:11px; color:var(--text-muted);">تطابق تام بين اللوكال والـ VPS</span>
                                 </div>
                             </div>
 
                             <!-- Gauge 3: Audited Telemetry Entities -->
-                            <div class="cyber-kpi-card">
-                                <div class="cyber-kpi-label">
-                                    <span>[TOTAL_TELEMETRY_ROWS]</span>
-                                    <i data-lucide="database" style="width:16px; height:16px; color:var(--cyber-neon-cyan);"></i>
-                                </div>
-                                <div class="cyber-kpi-val" id="diag-kpi-total-records" style="color:var(--cyber-neon-cyan);">-</div>
-                                <div class="cyber-kpi-sub">
-                                    <i data-lucide="layers" style="width:12px; height:12px;"></i>
-                                    <span>13 جدول بيانات رئيسي</span>
+                            <div class="stat-card" style="border-right: 3px solid var(--accent-primary);">
+                                <div class="stat-icon info"><i data-lucide="database"></i></div>
+                                <div class="stat-details">
+                                    <span class="stat-label">إجمالي السجلات المفحوصة</span>
+                                    <h3 id="diag-kpi-total-records" class="mono-ltr" style="color: var(--accent-primary);">-</h3>
+                                    <span class="stat-sub" style="font-size:11px; color:var(--text-muted);">عبر 13 جدول بيانات رئيسي</span>
                                 </div>
                             </div>
 
                             <!-- Gauge 4: Quantum Watchdog Engine -->
-                            <div class="cyber-kpi-card">
-                                <div class="cyber-kpi-label">
-                                    <span>[QUANTUM_WATCHDOG]</span>
-                                    <i data-lucide="zap" style="width:16px; height:16px; color:var(--cyber-neon-purple);"></i>
-                                </div>
-                                <div class="cyber-kpi-val" style="color:var(--cyber-neon-purple); font-size:22px;">ONLINE 24/7</div>
-                                <div class="cyber-kpi-sub">
-                                    <i data-lucide="radar" style="width:12px; height:12px;"></i>
-                                    <span>المراقبة الحية والاعتراض الفوري</span>
+                            <div class="stat-card" style="border-right: 3px solid var(--status-warning);">
+                                <div class="stat-icon warning"><i data-lucide="zap"></i></div>
+                                <div class="stat-details">
+                                    <span class="stat-label">محرك المراقبة والاعتراض</span>
+                                    <h3 class="mono-ltr" style="color: var(--status-warning); font-size:18px;">ONLINE 24/7</h3>
+                                    <span class="stat-sub" style="font-size:11px; color:var(--text-muted);">اعتراض ومراقبة لحظية فورية</span>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- 🛸 Panel 1: Matrix Reconciliation Terminal (Local vs VPS) -->
-                        <div class="cyber-panel">
-                            <div class="cyber-panel-header">
+                        <!-- Panel 1: Matrix Reconciliation Terminal (Local vs VPS) -->
+                        <div class="card" style="padding:20px; border-radius:var(--radius-lg); background:var(--surface-1); border:1px solid var(--border-subtle); margin-bottom:24px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
                                 <div>
-                                    <h3 class="cyber-panel-title">
-                                        <i data-lucide="binary" style="width:18px; height:18px;"></i>
-                                        <span>مصفوفة التطابق والمقارنة الحية [LOCAL_SQLITE ⟷ CLOUD_VPS]</span>
+                                    <h3 style="margin:0 0 4px 0; font-size:15px; font-weight:800; display:flex; align-items:center; gap:8px;">
+                                        <i data-lucide="git-compare" style="width:18px; height:18px; color:var(--accent-primary);"></i>
+                                        <span>مصفوفة التطابق والمقارنة الحية (Local SQLite ⟷ Cloud VPS)</span>
                                     </h3>
-                                    <p style="font-size:11px; color:#64748b; margin:4px 0 0 0; font-family:var(--cyber-font-mono);">
-                                        STATUS: ACTIVE AUDITING PROTOCOL // AUTOMATIC ROW HASH & COUNT RECONCILIATION
+                                    <p style="font-size:12px; color:var(--text-secondary); margin:0;">
+                                        فحص ومطابقة أعداد السجلات بين قاعدة بيانات الفرع المحلية وسيرفر الـ VPS السحابي
                                     </p>
                                 </div>
                                 <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                                    <button type="button" class="cyber-btn-secondary" onclick="loadReconciliationMatrix()">
+                                    <button type="button" class="btn btn-secondary" onclick="loadReconciliationMatrix()" style="padding:6px 14px; font-size:12px; display:inline-flex; align-items:center; gap:6px;">
                                         <i data-lucide="refresh-cw" id="icon-reconciliation-refresh"></i>
                                         <span>فحص التطابق الآن</span>
                                     </button>
-                                    <button type="button" class="cyber-btn-primary" id="btn-reseed-vps-action" onclick="triggerFullCloudReseed()">
+                                    <button type="button" class="btn btn-primary" id="btn-reseed-vps-action" onclick="triggerFullCloudReseed()" style="padding:6px 16px; font-size:12px; display:inline-flex; align-items:center; gap:6px; background:linear-gradient(135deg, #0284c7, #0284c7);">
                                         <i data-lucide="zap" id="icon-reseed-vps"></i>
                                         <span>إعادة مزامنة وتأسيس شامل للـ VPS ⚡</span>
                                     </button>
                                 </div>
                             </div>
-                            <div style="overflow-x: auto; max-height: 400px;">
-                                <table class="cyber-table" id="table-reconciliation-matrix">
+                            <div class="table-responsive ui-table-scroll" style="max-height: 400px;" tabindex="0" role="region" aria-label="مصفوفة تطابق البيانات">
+                                <table class="data-table" id="table-reconciliation-matrix">
                                     <thead>
                                         <tr>
-                                            <th style="width:50px;">HEX_ID</th>
+                                            <th style="width:50px;">#</th>
                                             <th>بيان واسم الجدول (Entity Name)</th>
                                             <th>السجلات محلياً (Local Node)</th>
                                             <th>السجلات سحابياً (Cloud VPS)</th>
                                             <th>الفارق (Delta)</th>
                                             <th>حالة التطابق والتدقيق</th>
-                                            <th style="width:140px; text-align:center;">إجراء الحل الفوري (Quick Fix)</th>
+                                            <th style="width:140px; text-align:center;">إجراء الحل الفوري</th>
                                         </tr>
                                     </thead>
                                     <tbody id="reconciliation-matrix-tbody">
-                                        <tr><td colspan="7" style="text-align:center; padding:30px; color:#64748b;"><i data-lucide="loader-2" class="spin-animation"></i> جاري فحص ومقارنة التطابق...</td></tr>
+                                        <tr><td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted);"><i data-lucide="loader-2" class="spin-animation"></i> جاري فحص ومقارنة التطابق...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
                         </div>
 
-                        <!-- 🛸 Panel 2: Live System Error Trace Blackbox (Logs Terminal) -->
-                        <div class="cyber-panel">
-                            <div class="cyber-panel-header">
+                        <!-- Panel 2: Live System Error Trace Blackbox (Logs Terminal) -->
+                        <div class="card" style="padding:20px; border-radius:var(--radius-lg); background:var(--surface-1); border:1px solid var(--border-subtle);">
+                            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
                                 <div>
-                                    <h3 class="cyber-panel-title" style="color:var(--cyber-neon-purple);">
-                                        <i data-lucide="file-code" style="width:18px; height:18px;"></i>
+                                    <h3 style="margin:0 0 4px 0; font-size:15px; font-weight:800; display:flex; align-items:center; gap:8px;">
+                                        <i data-lucide="file-code" style="width:18px; height:18px; color:var(--status-danger);"></i>
                                         <span>سجل تتبع أخطاء النظام والصندوق الأسود (System Blackbox & Error Stream)</span>
                                     </h3>
-                                    <p style="font-size:11px; color:#64748b; margin:4px 0 0 0; font-family:var(--cyber-font-mono);">
-                                        ZERO SILENT FAILURES // SQL, API, & CLIENT-SIDE EXCEPTION INTERCEPTOR
+                                    <p style="font-size:12px; color:var(--text-secondary); margin:0;">
+                                        رصد استثناءات الـ SQL وواجهات الـ API وأخطاء المتصفح دون أي إخفاء للأعطال
                                     </p>
                                 </div>
                                 <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-                                    <select id="diag-error-filter-severity" style="background:#0a0f1d; border:1px solid rgba(0,240,255,0.3); color:#38bdf8; font-family:var(--cyber-font-mono); font-size:11px; padding:6px 12px; border-radius:6px;" onchange="loadDiagnosticsErrorLogs()">
-                                        <option value="ALL">>_ كافة درجات الخطورة</option>
-                                        <option value="CRITICAL">>_ أخطاء حرجة (CRITICAL)</option>
-                                        <option value="ERROR">>_ أخطاء عادية (ERROR)</option>
-                                        <option value="CLIENT_UI">>_ أخطاء المتصفح والواجهة (CLIENT_UI)</option>
+                                    <select id="diag-error-filter-severity" style="padding:6px 12px; font-size:12px; border-radius:var(--radius-full); border:1px solid var(--border-subtle); background:var(--surface-2); color:var(--text-primary);" onchange="loadDiagnosticsErrorLogs()">
+                                        <option value="ALL">كافة درجات الخطورة</option>
+                                        <option value="CRITICAL">أخطاء حرجة (CRITICAL)</option>
+                                        <option value="ERROR">أخطاء عادية (ERROR)</option>
+                                        <option value="CLIENT_UI">أخطاء المتصفح والواجهة (CLIENT_UI)</option>
                                     </select>
-                                    <button type="button" class="cyber-btn-secondary" onclick="loadDiagnosticsErrorLogs()">
+                                    <button type="button" class="btn btn-secondary" onclick="loadDiagnosticsErrorLogs()" style="padding:6px 14px; font-size:12px; display:inline-flex; align-items:center; gap:6px;">
                                         <i data-lucide="refresh-cw" id="icon-diag-refresh"></i> تحديث
                                     </button>
-                                    <button type="button" class="cyber-btn-secondary" onclick="clearAllDiagnosticsErrors()" style="border-color:rgba(255,0,85,0.4); color:#ff0055;">
+                                    <button type="button" class="btn btn-secondary" onclick="clearAllDiagnosticsErrors()" style="padding:6px 14px; font-size:12px; display:inline-flex; align-items:center; gap:6px; color:var(--status-danger);">
                                         <i data-lucide="trash-2"></i> مسح السجل
                                     </button>
                                 </div>
                             </div>
-                            <div style="overflow-x: auto; max-height: 500px;">
-                                <table class="cyber-table" id="table-system-errors">
+                            <div class="table-responsive ui-table-scroll" style="max-height: 500px;" tabindex="0" role="region" aria-label="سجل أخطاء النظام">
+                                <table class="data-table" id="table-system-errors">
                                     <thead>
                                         <tr>
                                             <th style="width:50px;">#</th>
@@ -2633,7 +2628,7 @@
                                         </tr>
                                     </thead>
                                     <tbody id="system-errors-tbody">
-                                        <tr><td colspan="7" style="text-align:center; padding:30px; color:#64748b;"><i data-lucide="loader-2" class="spin-animation"></i> جاري جلب سجل الأخطاء...</td></tr>
+                                        <tr><td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted);"><i data-lucide="loader-2" class="spin-animation"></i> جاري جلب سجل الأخطاء...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -2757,7 +2752,7 @@
                                 <i data-lucide="key" style="width:18px; height:18px;"></i>
                                 إعدادات مزودي الذكاء الاصطناعي وموديلات التحليل (Groq / DeepSeek / OpenRouter)
                             </h3>
-                            <button type="button" class="btn btn-sm btn-secondary" onclick="toggleAiSettingsPanel(false)" style="padding:4px 10px; font-size:12px;">إغلاق ✕</button>
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="toggleAiSettingsPanel(false)" style="padding:4px 10px; font-size:12px; display:inline-flex; align-items:center; gap:6px;"><span>إغلاق</span><i data-lucide="x" style="width:14px; height:14px;"></i></button>
                         </div>
                         <p style="margin:0 0 14px 0; font-size:12px; color:var(--text-secondary); line-height:1.5;">
                             يمكنك إدخال مفتاح API مخصص لكل مزود بشكل مستقل تماماً لمنع أي تضارب بين المفاتيح، وسيتم توجيه الاستعلامات تلقائياً للمزود المختار:
@@ -2972,7 +2967,7 @@
     <!-- ======================================================== -->
     <!-- MODAL: DIFF & CHANGE VIEWER (معاينة الفروقات)             -->
     <!-- ======================================================== -->
-    <div class="modal-overlay" id="modal-diff-viewer">
+    <div class="modal-overlay ui-drawer" id="modal-diff-viewer">
         <div class="modal-card" style="max-width: 850px; width: 95%;">
             <div class="modal-header">
                 <h3><i data-lucide="git-compare"></i> تفاصيل ومعاينة التغيير (Change Diff Viewer)</h3>
@@ -3003,6 +2998,19 @@
                     <span id="diff-modal-summary-text">-</span>
                 </div>
 
+                <!-- Field Comparison Filter Bar -->
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding:8px 14px; background:var(--surface-2); border-radius:var(--radius-md); border:1px solid var(--border-subtle); flex-wrap:wrap; gap:8px;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <i data-lucide="filter" style="width:14px; height:14px; color:var(--accent-primary);"></i>
+                        <span style="font-size:12px; font-weight:700; color:var(--text-secondary);">مقارنة الحقول:</span>
+                        <span id="diff-fields-count-badge" class="badge" style="font-size:11px; font-weight:700; background:var(--accent-primary-subtle); color:var(--accent-primary);">-</span>
+                    </div>
+                    <label class="ui-toggle-label" style="display:inline-flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; font-weight:700; user-select:none;">
+                        <input type="checkbox" id="diff-filter-changed-only" checked onchange="toggleDiffChangedOnly(this.checked)">
+                        <span style="color:var(--accent-primary);">إظهار الحقول المعدلة فقط (Changed Fields Only)</span>
+                    </label>
+                </div>
+
                 <div class="diff-container">
                     <div class="diff-box">
                         <h4 style="color: #f87171;"><i data-lucide="minus-circle" style="width:14px; height:14px;"></i> البيانات السابقة (Old State)</h4>
@@ -3020,6 +3028,138 @@
 
                 <div style="display:flex; justify-content:flex-end; margin-top:20px;">
                     <button type="button" class="btn btn-secondary" id="btn-dismiss-diff-modal">إغلاق</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- GLOBAL SLIDE-OVER DRAWER: AI COPILOT (درج المساعد الذكي)    -->
+    <!-- ======================================================== -->
+    <div class="modal-overlay ui-drawer" id="drawer-ai-copilot" role="dialog" aria-modal="true" aria-labelledby="ai-drawer-title">
+        <div class="modal-card" style="max-width: 680px; width: 95%;">
+            <div class="modal-header" style="background: linear-gradient(135deg, rgba(168,85,247,0.1), rgba(59,130,246,0.06)); border-bottom: 1px solid rgba(168,85,247,0.25);">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <div style="width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg, #9333ea, #6366f1); display:flex; align-items:center; justify-content:center; color:#fff; box-shadow:0 4px 12px rgba(147,51,234,0.35);">
+                        <i data-lucide="sparkles" style="width:18px; height:18px;"></i>
+                    </div>
+                    <div>
+                        <h3 id="ai-drawer-title" style="margin:0; font-size:16px; font-weight:800; display:flex; align-items:center; gap:8px;">
+                            <span>المساعد الذكي (Smart AI Copilot)</span>
+                            <span class="badge" style="background:rgba(168,85,247,0.15); color:#c084fc; font-size:10px; border:1px solid rgba(168,85,247,0.3);">Enterprise</span>
+                        </h3>
+                        <span style="font-size:11px; color:var(--text-muted);">تحليل البيانات واستخراج التقارير بلغة طبيعية (Text-to-SQL)</span>
+                    </div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <select id="ai-drawer-model-select" style="padding:4px 10px; font-size:11px; border-radius:var(--radius-full); border:1px solid rgba(168,85,247,0.4); background:var(--surface-2); color:var(--text-primary); font-weight:700;">
+                        <option value="openai/gpt-oss-120b">Groq: GPT-OSS 120B ⚡</option>
+                        <option value="deepseek/deepseek-chat">DeepSeek Chat 🧠</option>
+                        <option value="qwen/qwen-2.5-coder-32b-instruct">Qwen 2.5 Coder 32B 🚀</option>
+                    </select>
+                    <button class="close-modal-btn" id="btn-close-ai-drawer" aria-label="إغلاق الدرج"><i data-lucide="x"></i></button>
+                </div>
+            </div>
+
+            <div class="modal-body" style="padding: 20px; display:flex; flex-direction:column; gap:16px;">
+                <!-- Contextual Prompt Chips Section -->
+                <div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <span style="font-size:12px; font-weight:700; color:var(--text-secondary); display:flex; align-items:center; gap:6px;">
+                            <i data-lucide="lightbulb" style="width:14px; height:14px; color:var(--status-warning);"></i>
+                            <span>أسئلة واقتراحات سياقية للشاشة الحالية:</span>
+                        </span>
+                        <span id="ai-drawer-current-tab-badge" class="badge" style="font-size:10px; background:var(--surface-3); color:var(--text-muted);">-</span>
+                    </div>
+                    <div class="ai-chips-grid" id="ai-drawer-chips-container" style="display:flex; flex-wrap:wrap; gap:8px;">
+                        <!-- Injected dynamically based on AppState.currentTab -->
+                    </div>
+                </div>
+
+                <!-- Input Box -->
+                <div style="background:var(--surface-2); padding:14px; border-radius:var(--radius-lg); border:1px solid var(--border-subtle);">
+                    <div style="position:relative;">
+                        <textarea id="ai-drawer-question-input" rows="3" placeholder="اسأل الذكاء الاصطناعي أي سؤال عن البيانات باللغة العربية (مثلاً: أظهر لي إجمالي مبيعات وأقساط شهر سبتمبر)..." style="width:100%; border:none; background:transparent; outline:none; resize:none; font-size:13px; font-family:var(--font-sans); color:var(--text-primary); line-height:1.6;"></textarea>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; border-top:1px solid var(--border-subtle); padding-top:8px;">
+                        <span style="font-size:11px; color:var(--text-muted); display:flex; align-items:center; gap:4px;">
+                            <kbd style="padding:2px 6px; border-radius:4px; background:var(--surface-3); border:1px solid var(--border-subtle); font-family:var(--font-mono); font-size:10px;">Ctrl</kbd> + <kbd style="padding:2px 6px; border-radius:4px; background:var(--surface-3); border:1px solid var(--border-subtle); font-family:var(--font-mono); font-size:10px;">Enter</kbd> للإرسال
+                        </span>
+                        <button type="button" class="btn btn-primary" id="btn-submit-ai-drawer" onclick="submitAiDrawerQuery()" style="background:linear-gradient(135deg, #9333ea, #6366f1); border-radius:var(--radius-full); padding:6px 16px; font-size:12px; display:inline-flex; align-items:center; gap:6px;">
+                            <i data-lucide="send" id="icon-ai-drawer-send" style="width:14px; height:14px;"></i>
+                            <span>اسأل الذكاء</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- AI Response / Result State Container -->
+                <div id="ai-drawer-result-area" style="display:none;">
+                    <!-- Loading state -->
+                    <div id="ai-drawer-loading" style="text-align:center; padding:30px 15px; display:none;">
+                        <div style="display:inline-flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:50%; background:rgba(168,85,247,0.15); margin-bottom:12px;">
+                            <i data-lucide="loader-2" class="spin-animation" style="width:22px; height:22px; color:#c084fc;"></i>
+                        </div>
+                        <h4 style="margin:0 0 4px 0; font-size:14px; font-weight:700;">جاري تحليل السؤال والبحث في قاعدة البيانات...</h4>
+                        <p style="margin:0; font-size:12px; color:var(--text-muted);">تحويل السؤال إلى استعلام SQL وتحليله في وضع القراءة الآمنة</p>
+                    </div>
+
+                    <!-- Structured Result Card -->
+                    <div id="ai-drawer-result-card" class="card" style="padding:16px; border-radius:var(--radius-lg); background:var(--surface-1); border:1px solid var(--border-subtle); display:none;">
+                        <!-- Top Meta Header -->
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px; border-bottom:1px solid var(--border-subtle); padding-bottom:10px;">
+                            <div>
+                                <h4 id="ai-drawer-result-title" style="margin:0 0 4px 0; font-size:14px; font-weight:800; color:var(--text-primary);">-</h4>
+                                <span id="ai-drawer-result-explanation" style="font-size:12px; color:var(--text-secondary);">-</span>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                <span id="ai-drawer-latency-badge" class="badge mono-ltr" style="font-size:11px; background:var(--status-info-subtle); color:var(--status-info); font-weight:700;">0 ms</span>
+                                <span id="ai-drawer-rows-badge" class="badge mono-ltr" style="font-size:11px; background:var(--status-success-subtle); color:var(--status-success); font-weight:700;">0 سجل</span>
+                            </div>
+                        </div>
+
+                        <!-- Collapsible SQL Viewer -->
+                        <details class="ui-analytics-drawer" style="margin-bottom:14px;">
+                            <summary style="font-size:12px; font-weight:700; color:var(--accent-primary);">
+                                <span style="display:flex; align-items:center; gap:6px;">
+                                    <i data-lucide="code-2" style="width:14px; height:14px;"></i>
+                                    <span>استعلام SQL المولد (Generated SQL)</span>
+                                </span>
+                                <span class="drawer-badge">SQLite Read-Only</span>
+                            </summary>
+                            <div style="padding:10px 0;">
+                                <pre id="ai-drawer-sql-code" class="mono-ltr" style="margin:0; padding:10px; border-radius:var(--radius-md); background:var(--surface-3); font-size:11px; color:var(--text-primary); overflow-x:auto; white-space:pre-wrap; border:1px solid var(--border-subtle);"></pre>
+                            </div>
+                        </details>
+
+                        <!-- Mini Result Table Container -->
+                        <div class="table-responsive ui-table-scroll" style="max-height:260px; margin-bottom:14px;">
+                            <table class="data-table" id="ai-drawer-result-table" style="font-size:12px;">
+                                <thead id="ai-drawer-table-head"></thead>
+                                <tbody id="ai-drawer-table-body"></tbody>
+                            </table>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; border-top:1px solid var(--border-subtle); padding-top:10px;">
+                            <button type="button" class="btn btn-secondary" id="btn-copy-ai-sql" onclick="copyAiDrawerSql()" style="font-size:11px; padding:6px 12px; border-radius:var(--radius-full); display:inline-flex; align-items:center; gap:6px;">
+                                <i data-lucide="copy" style="width:12px; height:12px;"></i>
+                                <span>نسخ SQL</span>
+                            </button>
+                            <button type="button" class="btn btn-primary" id="btn-export-ai-drawer-excel" onclick="exportAiDrawerToExcel()" style="font-size:11px; padding:6px 14px; border-radius:var(--radius-full); display:inline-flex; align-items:center; gap:6px; background:linear-gradient(135deg, #10b981, #059669);">
+                                <i data-lucide="file-spreadsheet" style="width:14px; height:14px;"></i>
+                                <span>تصدير النتيجة Excel (xlsx)</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Error state -->
+                    <div id="ai-drawer-error" class="card" style="padding:16px; border-radius:var(--radius-lg); background:var(--status-danger-subtle); border:1px solid rgba(239,68,68,0.3); display:none;">
+                        <div style="display:flex; align-items:center; gap:8px; color:var(--status-danger); margin-bottom:6px;">
+                            <i data-lucide="alert-circle" style="width:18px; height:18px;"></i>
+                            <strong style="font-size:13px;">تعذر معالجة الاستعلام:</strong>
+                        </div>
+                        <p id="ai-drawer-error-text" style="font-size:12px; color:var(--text-primary); margin:0; line-height:1.6;"></p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -3123,7 +3263,7 @@
     <!-- ======================================================== -->
     <!-- UNIVERSAL ASSET TIMELINE MODAL (نافذة التتبع الشامل)     -->
     <!-- ======================================================== -->
-    <div class="modal-overlay" id="modal-asset-timeline" style="backdrop-filter: blur(6px); background: rgba(0,0,0,0.75);">
+    <div class="modal-overlay ui-drawer" id="modal-asset-timeline" style="backdrop-filter: blur(6px); background: rgba(0,0,0,0.75);">
         <div class="modal-card" style="max-width: 750px; width: 94%; border-radius: 14px;">
             <div class="modal-header">
                 <div style="display:flex; align-items:center; gap:10px;">
@@ -3491,7 +3631,7 @@
     <!-- ======================================================== -->
     <!-- MODAL: DEVICE 360 DEEP-DIVE (فحص سجل وتاريخ الماكينة)     -->
     <!-- ======================================================== -->
-    <div class="modal-overlay" id="modal-device-360-deepdive">
+    <div class="modal-overlay ui-drawer" id="modal-device-360-deepdive">
         <div class="modal-card" style="max-width: 980px; width: 95%; max-height: 90vh; max-height: 90dvh; display: flex; flex-direction: column; overflow: hidden;">
             <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center; flex-shrink: 0;">
                 <div style="display:flex; align-items:center; gap:12px;">
@@ -3647,7 +3787,7 @@
                         <p style="margin:2px 0 0; font-size:12px; color:#94a3b8;" id="reseed-modal-subtitle">نقل وتأسيس الجداول الـ 13 بدقة وتزامن مباشر</p>
                     </div>
                 </div>
-                <button type="button" id="btn-reseed-modal-close" style="display:none; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); color:#94a3b8; font-size:16px; cursor:pointer; padding:6px 12px; border-radius:8px;" onclick="closeReseedProgressModal()">✕</button>
+                <button type="button" id="btn-reseed-modal-close" style="display:none; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); color:#94a3b8; cursor:pointer; padding:6px 10px; border-radius:8px; align-items:center; justify-content:center;" onclick="closeReseedProgressModal()"><i data-lucide="x" style="width:16px; height:16px;"></i></button>
             </div>
 
             <!-- Modal Body -->
@@ -3710,7 +3850,7 @@
                         <span style="font-size:11px; color:#38bdf8; font-family:var(--cyber-font-mono);" id="diag-modal-subtitle">AI & HEURISTIC ROOT-CAUSE ANALYZER</span>
                     </div>
                 </div>
-                <button type="button" style="background:none; border:none; color:#64748b; font-size:22px; cursor:pointer; padding:4px;" onclick="closeDiagResolutionModal()">&times;</button>
+                <button type="button" style="background:none; border:none; color:#64748b; cursor:pointer; padding:4px; display:inline-flex; align-items:center; justify-content:center;" onclick="closeDiagResolutionModal()"><i data-lucide="x" style="width:20px; height:20px;"></i></button>
             </div>
 
             <!-- Modal Body -->

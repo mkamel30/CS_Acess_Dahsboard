@@ -901,6 +901,8 @@ app.get('/api/sync/status', async (req, res) => {
         try { totalLogsCount = (await getQuery("SELECT COUNT(*) as count FROM audit_change_logs"))?.count || 0; } catch(e){}
         let outboxPending = 0;
         try { outboxPending = (await getQuery("SELECT COUNT(*) as count FROM delta_outbox"))?.count || 0; } catch (e) {}
+        let dlqPending = 0;
+        try { dlqPending = (await getQuery("SELECT COUNT(*) as count FROM delta_outbox_dlq"))?.count || 0; } catch (e) {}
         
         res.json({
             success: true,
@@ -915,7 +917,8 @@ app.get('/api/sync/status', async (req, res) => {
             totalRecords: lastHistory ? lastHistory.records_count : (status.totalRecords || 0),
             durationMs: lastHistory ? lastHistory.duration_ms : (status.durationMs || 0),
             totalAuditLogs: totalLogsCount,
-            outboxPendingCount: outboxPending
+            outboxPendingCount: outboxPending,
+            dlqPendingCount: dlqPending
         });
     } catch (err) {
         res.json({
@@ -923,8 +926,38 @@ app.get('/api/sync/status', async (req, res) => {
             status: 'idle',
             isSyncInProgress: false,
             message: err.message,
-            outboxPendingCount: 0
+            outboxPendingCount: 0,
+            dlqPendingCount: 0
         });
+    }
+});
+
+// Retry / Flush Cloud Outbox and dead-letter queue (DLQ)
+app.post('/api/sync/retry-dlq', requireAdmin, async (req, res) => {
+    try {
+        const dlqItems = await allQuery("SELECT * FROM delta_outbox_dlq").catch(() => []);
+        if (dlqItems && dlqItems.length > 0) {
+            for (const item of dlqItems) {
+                await runQuery(
+                    "INSERT INTO delta_outbox (payload, changes_count, attempts, last_error) VALUES (?, ?, 0, ?)",
+                    [item.payload, item.changes_count, 'Re-queued from DLQ via Operator Action']
+                ).catch(() => {});
+            }
+            await runQuery("DELETE FROM delta_outbox_dlq").catch(() => {});
+        }
+        if (typeof syncEngine.flushDeltaOutbox === 'function') {
+            await syncEngine.flushDeltaOutbox(db).catch(e => console.error('[FLUSH OUTBOX ERROR]', e));
+        }
+        const outboxPending = (await getQuery("SELECT COUNT(*) as count FROM delta_outbox"))?.count || 0;
+        const dlqPending = (await getQuery("SELECT COUNT(*) as count FROM delta_outbox_dlq"))?.count || 0;
+        res.json({
+            success: true,
+            message: 'تمت جدولة ومحاولة دفع طابور المزامنة السحابية بنجاح ⚡',
+            outboxPendingCount: outboxPending,
+            dlqPendingCount: dlqPending
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -5197,7 +5230,9 @@ const CORE_RECONCILIATION_TABLES = [
     { table: 'tblfaults_raw', name_ar: 'قائمة الأعطال (tblFaults)' },
     { table: 'tblstaff_raw', name_ar: 'طاقم العمل والفنيين (AuthorizedUsers)' },
     { table: 'tblfixes_raw', name_ar: 'أنواع الإصلاحات (tblFixes)' },
-    { table: 'failure_points_raw', name_ar: 'نقاط الأعطال والأسعار الرسمية (failure_points)' }
+    { table: 'failure_points_raw', name_ar: 'نقاط الأعطال والأسعار الرسمية (failure_points)' },
+    { table: 'trade_raw', name_ar: 'حركات اللوجستيات والمخازن (Trade)' },
+    { table: 'temp_transfer_raw', name_ar: 'استبدال ونقل الماكينات والشرائح (temp_transfer)' }
 ];
 
 // 1. Get System Error Logs
@@ -5676,7 +5711,7 @@ app.post('/api/diagnostics/reseed-vps', requireAdmin, async (req, res) => {
             totalChunks: 0,
             recordsProcessed: 0,
             totalRecords: 0,
-            detail: 'حساب إجمالي السجلات في الجداول الـ 13 محلياً...',
+            detail: `حساب إجمالي السجلات في الجداول الـ ${CORE_RECONCILIATION_TABLES.length} محلياً...`,
             startedAt: new Date().toISOString(),
             durationMs: 0,
             error: null,
@@ -5703,7 +5738,7 @@ app.post('/api/diagnostics/reseed-vps', requireAdmin, async (req, res) => {
         cloudReseedState.stage = 'transferring';
         cloudReseedState.percent = 5;
         broadcastReseedProgress({
-            detail: `تم إحصاء ${overallTotalRecords.toLocaleString('ar-EG')} سجل عبر 13 جدولاً. بدء الإرسال السحابي...`
+            detail: `تم إحصاء ${overallTotalRecords.toLocaleString('ar-EG')} سجل عبر ${CORE_RECONCILIATION_TABLES.length} جدولاً. بدء الإرسال السحابي...`
         });
 
         let totalCount = 0;

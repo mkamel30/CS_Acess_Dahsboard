@@ -262,12 +262,189 @@ function sortRows(rows, key, order = 'asc') {
     });
 }
 
-// Helper: Refresh Lucide Icons
-function refreshIcons() {
-    if (typeof window !== 'undefined' && window.lucide) {
+// ==========================================
+// 1.1 SMART UI FRAMEWORK HELPERS (PHASE 2)
+// ==========================================
+window.SmartUI = {
+    icons: {
+        refresh(rootEl = document) {
+            if (typeof window === 'undefined' || !window.lucide) return;
+            const container = (typeof rootEl === 'string') ? document.getElementById(rootEl) : rootEl;
+            if (!container) return;
+            try {
+                window.lucide.createIcons({ root: container });
+            } catch (e) {
+                console.warn('SmartUI.icons.refresh error:', e);
+            }
+        }
+    },
+
+    DataGrid: {
+        updateSortIcons(tableEl, activeCol, sortDir) {
+            const table = (typeof tableEl === 'string') ? document.getElementById(tableEl) : tableEl;
+            if (!table) return;
+
+            const sortIcons = table.querySelectorAll('.sort-icon');
+            sortIcons.forEach(iconContainer => {
+                const th = iconContainer.closest('th');
+                const id = iconContainer.id || '';
+                const dataCol = iconContainer.getAttribute('data-sort-col') || '';
+                
+                // Match against column name (exact, suffix, or data-sort-col)
+                const isMatch = (dataCol === activeCol) ||
+                                id.endsWith(`-${activeCol}`) ||
+                                (activeCol === 'entry_date' && id.endsWith('-entry'));
+
+                if (isMatch) {
+                    const iconName = sortDir === 'asc' ? 'arrow-up' : 'arrow-down';
+                    iconContainer.innerHTML = `<i data-lucide="${iconName}" style="width:13px; height:13px;"></i>`;
+                    if (th) {
+                        th.classList.add('active-sort');
+                        if (sortDir === 'asc') {
+                            th.classList.add('asc');
+                            th.classList.remove('desc');
+                        } else {
+                            th.classList.add('desc');
+                            th.classList.remove('asc');
+                        }
+                    }
+                } else {
+                    iconContainer.innerHTML = `<i data-lucide="arrow-up-down" style="width:13px; height:13px;"></i>`;
+                    if (th) {
+                        th.classList.remove('active-sort', 'asc', 'desc');
+                    }
+                }
+            });
+
+            SmartUI.icons.refresh(table);
+        }
+    },
+
+    Drawer: {
+        _activeDrawers: new Set(),
+        _keydownBound: false,
+
+        open(drawerId) {
+            const drawer = (typeof drawerId === 'string') ? document.getElementById(drawerId) : drawerId;
+            if (!drawer) return;
+
+            drawer.classList.add('active');
+            this._activeDrawers.add(drawer);
+
+            // Bind backdrop click once
+            if (!drawer._drawerBackdropBound) {
+                drawer.addEventListener('click', (e) => {
+                    if (e.target === drawer) {
+                        SmartUI.Drawer.close(drawer);
+                    }
+                });
+                drawer._drawerBackdropBound = true;
+            }
+
+            // Bind global Escape handler once
+            if (!this._keydownBound) {
+                window.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape' && SmartUI.Drawer._activeDrawers.size > 0) {
+                        const lastDrawer = Array.from(SmartUI.Drawer._activeDrawers).pop();
+                        if (lastDrawer) SmartUI.Drawer.close(lastDrawer);
+                    }
+                });
+                this._keydownBound = true;
+            }
+
+            // Focus first interactive control for a11y without scrolling
+            const focusable = drawer.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+            focusable?.focus({ preventScroll: true });
+            SmartUI.icons.refresh(drawer);
+        },
+
+        close(drawerId) {
+            const drawer = (typeof drawerId === 'string') ? document.getElementById(drawerId) : drawerId;
+            if (!drawer) return;
+
+            drawer.classList.remove('active');
+            this._activeDrawers.delete(drawer);
+        }
+    },
+
+    Skeleton: {
+        table(tbodyId, colsCount = 6, rowsCount = 5) {
+            const tbody = (typeof tbodyId === 'string') ? document.getElementById(tbodyId) : tbodyId;
+            if (!tbody) return;
+
+            let html = '';
+            for (let r = 0; r < rowsCount; r++) {
+                html += '<tr class="ui-skeleton-row">';
+                for (let c = 0; c < colsCount; c++) {
+                    const widthPercent = (c === 0) ? '30%' : (c === 1) ? '70%' : (c % 2 === 0) ? '85%' : '50%';
+                    html += `<td class="ui-skeleton-cell"><div class="ui-skeleton-line" style="width:${widthPercent};"></div></td>`;
+                }
+                html += '</tr>';
+            }
+            tbody.innerHTML = html;
+        }
+    },
+
+    EmptyState: {
+        render(containerEl, { icon = 'inbox', title = 'لا توجد بيانات', message = 'لم يتم العثور على أي نتائج مطابقة للبحث أو التصفية الحالية', actionBtn = null } = {}) {
+            const container = (typeof containerEl === 'string') ? document.getElementById(containerEl) : containerEl;
+            if (!container) return;
+
+            let actionHtml = '';
+            if (actionBtn && actionBtn.text) {
+                actionHtml = `<button type="button" class="btn btn-secondary btn-sm" id="${actionBtn.id || ''}" onclick="${actionBtn.onclick || ''}" style="margin-top:12px;">${actionBtn.text}</button>`;
+            }
+
+            container.innerHTML = `
+                <div class="ui-empty-state">
+                    <i data-lucide="${icon}" class="empty-icon"></i>
+                    <h4>${title}</h4>
+                    <p>${message}</p>
+                    ${actionHtml}
+                </div>
+            `;
+            SmartUI.icons.refresh(container);
+        }
+    },
+
+    Toast: {
+        show(message, type = 'info', duration = 3500) {
+            let stack = document.getElementById('ui-toast-stack');
+            if (!stack) {
+                stack = document.createElement('div');
+                stack.id = 'ui-toast-stack';
+                stack.className = 'ui-toast-stack';
+                document.body.appendChild(stack);
+            }
+
+            const toast = document.createElement('div');
+            toast.className = `ui-toast toast-${type}`;
+            const iconName = type === 'success' ? 'check-circle' : type === 'danger' ? 'alert-triangle' : type === 'warning' ? 'alert-circle' : 'info';
+            toast.innerHTML = `
+                <i data-lucide="${iconName}" style="width:18px; height:18px; flex-shrink:0;"></i>
+                <span style="flex:1;">${message}</span>
+            `;
+            stack.appendChild(toast);
+            SmartUI.icons.refresh(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(12px)';
+                setTimeout(() => toast.remove(), 250);
+            }, duration);
+        }
+    }
+};
+
+// Global Helper: Refresh Lucide Icons (Delegates to SmartUI)
+function refreshIcons(rootEl = document) {
+    if (typeof window !== 'undefined' && window.SmartUI) {
+        window.SmartUI.icons.refresh(rootEl);
+    } else if (typeof window !== 'undefined' && window.lucide) {
         window.lucide.createIcons();
     }
 }
+window.refreshIcons = refreshIcons;
 
 // ==========================================
 // 2. THEME & CLOCK INITIALIZATION
@@ -357,6 +534,28 @@ function initClock() {
 // ==========================================
 // 4. NAVIGATION & TAB SWITCHING
 // ==========================================
+const TAB_BREADCRUMB_MAP = {
+    'dashboard': { section: 'لوحة القيادة', current: 'المؤشرات العامة' },
+    'customers': { section: 'خدمة العملاء', current: 'إدارة وبروفايل المخابز' },
+    'branch-warehouse': { section: 'المخازن والتشغيل', current: 'مخزن ماكينات POS' },
+    'sim-warehouse': { section: 'المخازن والتشغيل', current: 'مخزن وحركة الشرائح' },
+    'hq-maintenance': { section: 'الصيانة والورشة', current: 'الصيانة المركزية بالشركة (HQ)' },
+    'installments': { section: 'الحسابات والمالية', current: 'منظومة الأقساط والمديونيات' },
+    'spare-parts-inventory': { section: 'المخازن والتشغيل', current: 'مخزن وحسابات قطع الغيار' },
+    'sync-monitor': { section: 'المنظومة والربط', current: 'مراقبة التغيرات والمزامنة' },
+    'data-explorer': { section: 'قواعد البيانات', current: 'مستكشف بيانات الجداول' },
+    'ai-analytics': { section: 'الذكاء الاصطناعي', current: 'المساعد التحليلي الذكي (Copilot)' },
+    'settings': { section: 'إدارة النظام', current: 'الإعدادات وتشخيص المنظومة' }
+};
+
+function updateHeaderBreadcrumb(tabName) {
+    const sectionEl = document.getElementById('breadcrumb-section-title');
+    const currentEl = document.getElementById('breadcrumb-current-tab');
+    const info = TAB_BREADCRUMB_MAP[tabName] || { section: 'SmartCS', current: tabName };
+    if (sectionEl) sectionEl.textContent = info.section;
+    if (currentEl) currentEl.textContent = info.current;
+}
+
 function switchTab(tabName) {
     if (!tabName) return;
     const navItem = document.querySelector(`.nav-item[data-tab="${tabName}"]`);
@@ -373,9 +572,10 @@ function switchTab(tabName) {
         const target = document.getElementById(`tab-${tabName}`);
         if (target) target.classList.add('active');
         AppState.currentTab = tabName;
-            if (window.innerWidth <= 768) {
-                toggleSidebarDrawer(false);
-            }
+        updateHeaderBreadcrumb(tabName);
+        if (window.innerWidth <= 768) {
+            toggleSidebarDrawer(false);
+        }
         
         if (tabName === 'dashboard') loadDashboard();
         else if (tabName === 'customers') initCustomerManagement();
@@ -466,6 +666,7 @@ function initNavigation() {
             if (target) target.classList.add('active');
 
             AppState.currentTab = tabName;
+            updateHeaderBreadcrumb(tabName);
             if (window.innerWidth <= 768) {
                 toggleSidebarDrawer(false);
             }
@@ -497,50 +698,88 @@ function initNavigation() {
         }
     });
 
-    // Quick Navigation Buttons on Dashboard & Warehouse Switchers
-    document.getElementById('btn-goto-customers')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-customers')?.click();
-    });
-    document.getElementById('btn-goto-warehouse')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-branch-warehouse')?.click();
-    });
-    document.getElementById('btn-goto-sims')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-sim-warehouse')?.click();
-    });
-    document.getElementById('btn-goto-spare-parts')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-spare-parts-inventory')?.click();
-    });
-    // btn-goto-time-machine removed
-    document.getElementById('btn-goto-maintenance')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-hq-maintenance')?.click();
-    });
-    document.getElementById('btn-goto-installments')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-installments')?.click();
-    });
-    document.getElementById('btn-goto-reports')?.addEventListener('click', () => {
-        document.getElementById('tab-btn-reports')?.click();
+    // Global Hotkey: '/' to focus Global Search
+    window.addEventListener('keydown', (e) => {
+        if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+            e.preventDefault();
+            const searchInput = document.getElementById('global-search');
+            searchInput?.focus();
+            searchInput?.select();
+        }
     });
 
-    // Warehouse & Operations Sub-tabs Switcher Bindings (All 6 Tabs)
+    // AI Copilot Pill -> Route to AI Analytics tab
+    document.getElementById('btn-open-ai-drawer')?.addEventListener('click', () => {
+        switchTab('ai-analytics');
+    });
+
+    // Non-blocking Live Sync Progress Popover Controls
+    const headerDbPill = document.getElementById('header-db-pill');
+    const syncPopover = document.getElementById('sync-progress-popover');
+    const btnCloseSyncPopover = document.getElementById('btn-close-sync-popover');
+    const btnCloseSyncProgress = document.getElementById('btn-close-sync-progress');
+    const btnSyncPopoverRun = document.getElementById('btn-sync-popover-run');
+
+    headerDbPill?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        syncPopover?.classList.toggle('active');
+    });
+
+    btnCloseSyncPopover?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        syncPopover?.classList.remove('active');
+    });
+
+    btnCloseSyncProgress?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        syncPopover?.classList.remove('active');
+    });
+
+    btnSyncPopoverRun?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        triggerAccessSync(btnSyncPopoverRun, document.getElementById('icon-sync-popover-spinner'));
+    });
+
+    // Close sync popover on click outside
+    document.addEventListener('click', (e) => {
+        if (syncPopover && syncPopover.classList.contains('active')) {
+            if (!syncPopover.contains(e.target) && !headerDbPill?.contains(e.target)) {
+                syncPopover.classList.remove('active');
+            }
+        }
+    });
+
+    // Safe Quick Navigation Fallbacks (using optional chaining)
+    document.getElementById('btn-goto-customers')?.addEventListener('click', () => {
+        switchTab('customers');
+    });
+    document.getElementById('btn-goto-warehouse')?.addEventListener('click', () => {
+        switchTab('branch-warehouse');
+    });
+    document.getElementById('btn-goto-sims')?.addEventListener('click', () => {
+        switchTab('sim-warehouse');
+    });
+    document.getElementById('btn-goto-spare-parts')?.addEventListener('click', () => {
+        switchTab('spare-parts-inventory');
+    });
+    document.getElementById('btn-goto-maintenance')?.addEventListener('click', () => {
+        switchTab('hq-maintenance');
+    });
+    document.getElementById('btn-goto-installments')?.addEventListener('click', () => {
+        switchTab('installments');
+    });
+    document.getElementById('btn-goto-reports')?.addEventListener('click', () => {
+        switchTab('dashboard');
+    });
+
+    // Legacy Warehouse Switchers (safe optional chaining for backward compatibility)
     ['', '-2', '-3', '-4', '-5', '-6'].forEach(suffix => {
-        document.getElementById(`switch-to-customers${suffix}`)?.addEventListener('click', () => {
-            document.getElementById('tab-btn-customers')?.click();
-        });
-        document.getElementById(`switch-to-pos${suffix}`)?.addEventListener('click', () => {
-            document.getElementById('tab-btn-branch-warehouse')?.click();
-        });
-        document.getElementById(`switch-to-sims${suffix}`)?.addEventListener('click', () => {
-            document.getElementById('tab-btn-sim-warehouse')?.click();
-        });
-        document.getElementById(`switch-to-maint${suffix}`)?.addEventListener('click', () => {
-            document.getElementById('tab-btn-hq-maintenance')?.click();
-        });
-        document.getElementById(`switch-to-inst${suffix}`)?.addEventListener('click', () => {
-            document.getElementById('tab-btn-installments')?.click();
-        });
-        document.getElementById(`switch-to-sp${suffix}`)?.addEventListener('click', () => {
-            document.getElementById('tab-btn-spare-parts-inventory')?.click();
-        });
+        document.getElementById(`switch-to-customers${suffix}`)?.addEventListener('click', () => switchTab('customers'));
+        document.getElementById(`switch-to-pos${suffix}`)?.addEventListener('click', () => switchTab('branch-warehouse'));
+        document.getElementById(`switch-to-sims${suffix}`)?.addEventListener('click', () => switchTab('sim-warehouse'));
+        document.getElementById(`switch-to-maint${suffix}`)?.addEventListener('click', () => switchTab('hq-maintenance'));
+        document.getElementById(`switch-to-inst${suffix}`)?.addEventListener('click', () => switchTab('installments'));
+        document.getElementById(`switch-to-sp${suffix}`)?.addEventListener('click', () => switchTab('spare-parts-inventory'));
     });
 }
 
@@ -548,6 +787,7 @@ function initNavigation() {
 // 4. ACCESS DB SYNCHRONIZATION ENGINE
 // ==========================================
 async function triggerAccessSync(btn, icon) {
+    const popover = document.getElementById('sync-progress-popover');
     const modal = document.getElementById('modal-sync-progress');
     const stageEl = document.getElementById('sync-progress-stage');
     const percentEl = document.getElementById('sync-progress-percent');
@@ -555,6 +795,7 @@ async function triggerAccessSync(btn, icon) {
     const detailEl = document.getElementById('sync-progress-detail-text');
     const doneBtn = document.getElementById('btn-sync-progress-done');
     const closeBtn = document.getElementById('btn-close-sync-progress');
+    const popoverSpinner = document.getElementById('icon-sync-popover-spinner');
 
     // Reset progress UI
     if (stageEl) stageEl.textContent = 'جاري الاتصال بملف الآكسيس...';
@@ -575,15 +816,20 @@ async function triggerAccessSync(btn, icon) {
         }
     }
 
-    if (modal) modal.classList.add('active');
+    // Non-blocking activation of the sync progress popover without locking body scroll
+    if (popover) popover.classList.add('active');
     if (btn) btn.disabled = true;
     if (icon) icon.classList.add('spin-animation');
+    if (popoverSpinner) popoverSpinner.classList.add('spin-animation');
     refreshIcons();
 
     // Close button handlers
-    const closeModal = () => modal?.classList.remove('active');
-    doneBtn?.addEventListener('click', closeModal, { once: true });
-    closeBtn?.addEventListener('click', closeModal, { once: true });
+    const closeProgress = () => {
+        popover?.classList.remove('active');
+        modal?.classList.remove('active');
+    };
+    doneBtn?.addEventListener('click', closeProgress, { once: true });
+    closeBtn?.addEventListener('click', closeProgress, { once: true });
 
     // Start real-time progress polling
     let pollingActive = true;
@@ -667,8 +913,9 @@ async function triggerAccessSync(btn, icon) {
             else if (AppState.currentTab === 'sync-monitor') loadSyncMonitor();
             else if (AppState.currentTab === 'data-explorer') fetchDataExplorerTable();
 
-            // Auto close modal after 3 seconds if not closed manually
+            // Auto close popover after 3.5 seconds if not closed manually
             setTimeout(() => {
+                popover?.classList.remove('active');
                 modal?.classList.remove('active');
             }, 3500);
         } else {
@@ -685,6 +932,7 @@ async function triggerAccessSync(btn, icon) {
     } finally {
         if (btn) btn.disabled = false;
         if (icon) icon.classList.remove('spin-animation');
+        if (popoverSpinner) popoverSpinner.classList.remove('spin-animation');
     }
 }
 
@@ -906,19 +1154,8 @@ function sortWarehouseTable(column) {
         WarehouseTableState.sortCol = column;
         WarehouseTableState.sortDir = 'asc';
     }
-    // Update sort indicators on headers
-    ['serial', 'manufacturer', 'model', 'condition'].forEach(col => {
-        const el = document.getElementById(`wh-sort-${col}`);
-        if (el) {
-            if (WarehouseTableState.sortCol === col) {
-                el.textContent = WarehouseTableState.sortDir === 'asc' ? '▲' : '▼';
-                el.style.color = 'var(--md-sys-color-primary)';
-            } else {
-                el.textContent = '⇕';
-                el.style.color = 'var(--md-sys-color-on-surface-variant)';
-            }
-        }
-    });
+    // Update sort indicators on headers via SmartUI
+    SmartUI.DataGrid.updateSortIcons('wh-devices-table', column, WarehouseTableState.sortDir);
     renderWarehouseDevicesTable();
 }
 window.sortWarehouseTable = sortWarehouseTable;
@@ -1265,27 +1502,27 @@ function renderWarehouseDevicesTable() {
 
         tableBody.innerHTML += `
             <tr>
-                <td style="font-family:var(--font-en); font-weight:700; color:var(--md-sys-color-on-surface-variant);">${startIdx + idx + 1}</td>
-                <td>
-                    <a href="javascript:void(0)" onclick="openAssetTimeline('${d.serial}')" style="font-family:var(--font-en); font-weight:800; color:var(--md-sys-color-primary); text-decoration:underline;">
+                <td style="color:var(--text-muted); font-size:11px;">${startIdx + idx + 1}</td>
+                <td class="col-sticky-start mono-ltr">
+                    <a href="javascript:void(0)" onclick="openAssetTimeline('${d.serial}')" style="font-weight:800; color:var(--accent-primary); text-decoration:underline;">
                         ${d.serial}
                     </a>
                 </td>
                 <td>${d.manufacturer}</td>
-                <td><strong style="color:var(--md-sys-color-on-surface); font-family:var(--font-en);">${d.model}</strong></td>
+                <td><strong class="mono-ltr" style="color:var(--text-primary);">${d.model}</strong></td>
                 <td><span class="badge ${badgeClass}">${badgeText}</span></td>
-                <td style="max-width:280px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; font-size:12px; color:var(--md-sys-color-on-surface-variant);">
+                <td style="max-width:280px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; font-size:12px; color:var(--text-secondary);">
                     ${(() => {
                         const n = String(d.notes || '').trim();
                         const f = String(d.faulty_details || '').trim();
-                        if (n && f && n !== f) return `<span style="font-weight:700; color:var(--md-sys-color-primary);">${n}</span> - ${f}`;
-                        if (n) return `<span style="font-weight:700; color:var(--md-sys-color-primary);">${n}</span>`;
+                        if (n && f && n !== f) return `<span style="font-weight:700; color:var(--accent-primary);">${n}</span> - ${f}`;
+                        if (n) return `<span style="font-weight:700; color:var(--accent-primary);">${n}</span>`;
                         if (f) return f;
                         return '<span style="color:var(--text-muted);">-</span>';
                     })()}
                 </td>
-                <td>
-                    <button type="button" class="btn btn-secondary" onclick="openAssetTimeline('${d.serial}')" style="padding:4px 10px; font-size:11px; border-radius:var(--md-shape-corner-full); display:flex; align-items:center; gap:4px;">
+                <td class="col-sticky-end">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="openAssetTimeline('${d.serial}')" style="padding:4px 10px; font-size:11px; border-radius:var(--md-shape-corner-full); display:flex; align-items:center; gap:4px;">
                         <i data-lucide="history" style="width:12px; height:12px;"></i>
                         <span>تتبع الماكينة</span>
                     </button>
@@ -1367,19 +1604,8 @@ function sortSimsTable(column) {
         SimsTableState.sortCol = column;
         SimsTableState.sortDir = 'asc';
     }
-    // Update sort indicators on headers
-    ['serial', 'carrier', 'condition'].forEach(col => {
-        const el = document.getElementById(`sims-sort-${col}`);
-        if (el) {
-            if (SimsTableState.sortCol === col) {
-                el.textContent = SimsTableState.sortDir === 'asc' ? '▲' : '▼';
-                el.style.color = 'var(--md-sys-color-primary)';
-            } else {
-                el.textContent = '⇕';
-                el.style.color = 'var(--md-sys-color-on-surface-variant)';
-            }
-        }
-    });
+    // Update sort indicators on headers via SmartUI
+    SmartUI.DataGrid.updateSortIcons('sims-devices-table', column, SimsTableState.sortDir);
     renderSimsDevicesTable();
 }
 window.sortSimsTable = sortSimsTable;
@@ -1728,23 +1954,23 @@ function renderSimsDevicesTable() {
 
         tableBody.innerHTML += `
             <tr>
-                <td style="font-family:var(--font-en); font-weight:700; color:var(--md-sys-color-on-surface-variant);">${startIdx + idx + 1}</td>
-                <td>
-                    <a href="javascript:void(0)" onclick="openAssetTimeline('${s.serial}')" style="font-family:var(--font-en); font-weight:800; color:var(--md-sys-color-primary); text-decoration:underline;" title="انقر لتتبع مسار وتاريخ الشريحة بالكامل">
+                <td style="color:var(--text-muted); font-size:11px;">${startIdx + idx + 1}</td>
+                <td class="col-sticky-start mono-ltr">
+                    <a href="javascript:void(0)" onclick="openAssetTimeline('${s.serial}')" style="font-weight:800; color:var(--accent-primary); text-decoration:underline;" title="انقر لتتبع مسار وتاريخ الشريحة بالكامل">
                         ${s.serial}
                     </a>
                 </td>
-                <td><strong style="color:var(--md-sys-color-on-surface); font-family:var(--font-en);">${s.carrier}</strong></td>
+                <td><strong class="mono-ltr" style="color:var(--text-primary);">${s.carrier}</strong></td>
                 <td>
                     <span class="badge ${badgeClass}">${badgeText}</span>
                     ${historyBadgesHtml}
                 </td>
                 <td>${entryHtml}</td>
-                <td style="max-width:280px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; font-size:12px; color:var(--md-sys-color-on-surface-variant);">
-                    ${s.notes ? `<span style="font-weight:700; color:var(--md-sys-color-primary);">${s.notes}</span>` : 'سليمة بالمخزن'}
+                <td style="max-width:280px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; font-size:12px; color:var(--text-secondary);">
+                    ${s.notes ? `<span style="font-weight:700; color:var(--accent-primary);">${s.notes}</span>` : 'سليمة بالمخزن'}
                 </td>
-                <td>
-                    <button type="button" class="btn btn-secondary" onclick="openAssetTimeline('${s.serial}')" style="padding:4px 10px; font-size:11px; border-radius:var(--md-shape-corner-full); display:flex; align-items:center; gap:4px;" title="تتبع كامل لحركات الشريحة وتاريخ دخولها وسدادها">
+                <td class="col-sticky-end">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="openAssetTimeline('${s.serial}')" style="padding:4px 10px; font-size:11px; border-radius:var(--md-shape-corner-full); display:flex; align-items:center; gap:4px;" title="تتبع كامل لحركات الشريحة وتاريخ دخولها وسدادها">
                         <i data-lucide="history" style="width:12px; height:12px;"></i>
                         <span>تتبع الشريحة</span>
                     </button>
@@ -1826,19 +2052,8 @@ function sortHqMaintenanceTable(column) {
         HqMaintenanceTableState.sortCol = column;
         HqMaintenanceTableState.sortDir = column === 'out_date' || column === 'in_date' ? 'desc' : 'asc';
     }
-    // Update sort indicators on headers
-    ['serial', 'model', 'out_date', 'in_date', 'status', 'form_no'].forEach(col => {
-        const el = document.getElementById(`hq-sort-${col}`);
-        if (el) {
-            if (HqMaintenanceTableState.sortCol === col) {
-                el.textContent = HqMaintenanceTableState.sortDir === 'asc' ? '▲' : '▼';
-                el.style.color = 'var(--md-sys-color-primary)';
-            } else {
-                el.textContent = '⇕';
-                el.style.color = 'var(--md-sys-color-on-surface-variant)';
-            }
-        }
-    });
+    // Update sort indicators on headers via SmartUI
+    SmartUI.DataGrid.updateSortIcons('hq-devices-table', column, HqMaintenanceTableState.sortDir);
     renderHqMaintenanceTable();
 }
 window.sortHqMaintenanceTable = sortHqMaintenanceTable;
@@ -2137,23 +2352,23 @@ function renderHqMaintenanceTable() {
 
         tableBody.innerHTML += `
             <tr>
-                <td style="font-family:var(--font-en); font-weight:700; color:var(--md-sys-color-on-surface-variant);">${startIdx + idx + 1}</td>
-                <td>
-                    <a href="javascript:void(0)" onclick="openAssetTimeline('${d.serial}')" style="font-family:var(--font-en); font-weight:800; color:var(--md-sys-color-primary); text-decoration:underline;">
+                <td class="mono-ltr" style="font-weight:700; color:var(--text-secondary);">${startIdx + idx + 1}</td>
+                <td class="col-sticky-start mono-ltr">
+                    <a href="javascript:void(0)" onclick="openAssetTimeline('${d.serial}')" style="font-weight:800; color:var(--accent-primary); text-decoration:underline;">
                         ${d.serial}
                     </a>
                 </td>
-                <td><strong style="color:var(--md-sys-color-on-surface); font-family:var(--font-en);">${d.model}</strong></td>
-                <td style="font-family:var(--font-en); font-size:12px;">${formatDateDDMMYYYY(d.out_date, false)}</td>
-                <td style="font-family:var(--font-en); font-size:12px;">${d.in_date ? formatDateDDMMYYYY(d.in_date, false) : '<span style="color:#ef4444; font-weight:700;">قيد الإصلاح</span>'}</td>
+                <td class="mono-ltr"><strong style="color:var(--text-primary);">${d.model}</strong></td>
+                <td class="mono-ltr" style="font-size:12px;">${formatDateDDMMYYYY(d.out_date, false)}</td>
+                <td class="mono-ltr" style="font-size:12px;">${d.in_date ? formatDateDDMMYYYY(d.in_date, false) : '<span style="color:var(--status-danger); font-weight:700;">قيد الإصلاح</span>'}</td>
                 <td><span class="badge ${badgeClass}">${badgeText}</span></td>
-                <td style="font-family:var(--font-en); font-weight:700;"><code style="background:var(--md-sys-color-surface-container); padding:2px 6px; border-radius:4px;">${d.form_no}</code></td>
-                <td style="max-width:280px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; font-size:12px; color:var(--md-sys-color-on-surface-variant);">
-                    <span style="font-weight:600; color:var(--md-sys-color-on-surface);">${d.faults_detected}</span>
+                <td class="mono-ltr" style="font-weight:700;"><code style="background:var(--surface-3); padding:2px 6px; border-radius:var(--radius-sm);">${d.form_no}</code></td>
+                <td style="max-width:280px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; font-size:12px; color:var(--text-secondary);">
+                    <span style="font-weight:600; color:var(--text-primary);">${d.faults_detected}</span>
                     ${partsHtml}
                 </td>
-                <td>
-                    <button type="button" class="btn btn-secondary" onclick="openAssetTimeline('${d.serial}')" style="padding:4px 10px; font-size:11px; border-radius:var(--md-shape-corner-full); display:flex; align-items:center; gap:4px;">
+                <td class="col-sticky-end">
+                    <button type="button" class="btn btn-secondary" onclick="openAssetTimeline('${d.serial}')" style="padding:4px 10px; font-size:11px; border-radius:var(--radius-full); display:flex; align-items:center; gap:4px;">
                         <i data-lucide="history" style="width:12px; height:12px;"></i>
                         <span>تتبع الماكينة</span>
                     </button>
@@ -2237,19 +2452,8 @@ function sortInstallmentsTable(column) {
         InstallmentsTableState.sortCol = column;
         InstallmentsTableState.sortDir = (column === 'final_price' || column === 'total_paid' || column === 'remaining_amount' || column === 'duration') ? 'desc' : 'asc';
     }
-    // Update sort indicators
-    ['pos', 'merchant_name', 'government', 'duration', 'final_price', 'total_paid', 'remaining_amount', 'status'].forEach(col => {
-        const el = document.getElementById(`inst-sort-${col}`);
-        if (el) {
-            if (InstallmentsTableState.sortCol === col) {
-                el.textContent = InstallmentsTableState.sortDir === 'asc' ? '▲' : '▼';
-                el.style.color = 'var(--md-sys-color-primary)';
-            } else {
-                el.textContent = '⇕';
-                el.style.color = 'var(--md-sys-color-on-surface-variant)';
-            }
-        }
-    });
+    // Update sort indicators on headers via SmartUI
+    SmartUI.DataGrid.updateSortIcons('inst-contracts-table', column, InstallmentsTableState.sortDir);
     renderInstallmentsTable();
 }
 window.sortInstallmentsTable = sortInstallmentsTable;
@@ -2580,29 +2784,29 @@ function renderInstallmentsTable() {
 
         const rowHtml = `
             <tr>
-                <td style="font-weight:bold; font-family:var(--font-en);">${c.id}</td>
-                <td>
-                    <a href="javascript:void(0)" onclick="openAssetTimeline('${c.pos_serial}')" style="font-family:var(--font-en); font-weight:800; color:var(--md-sys-color-primary); text-decoration:underline;" title="انقر لتتبع الماكينة">
+                <td class="mono-ltr" style="font-weight:bold;">${c.id}</td>
+                <td class="col-sticky-start mono-ltr">
+                    <a href="javascript:void(0)" onclick="openAssetTimeline('${c.pos_serial}')" style="font-weight:800; color:var(--accent-primary); text-decoration:underline;" title="انقر لتتبع الماكينة">
                         ${c.pos_serial}
                     </a>
-                    <span style="display:block; font-size:10px; color:var(--text-muted); font-family:var(--font-en);">${c.device_mfg} ${c.device_model}</span>
+                    <span style="display:block; font-size:10px; color:var(--text-muted);">${c.device_mfg} ${c.device_model}</span>
                 </td>
                 <td>
                     <strong>${c.merchant_name}</strong>
-                    <span style="display:block; font-size:11px; color:var(--text-muted);">${c.merchant_code !== '-' ? `كود #${c.merchant_code}` : ''}</span>
+                    <span style="display:block; font-size:11px; color:var(--text-muted);">${c.merchant_code !== '-' ? `<span class="mono-ltr">#${c.merchant_code}</span>` : ''}</span>
                 </td>
                 <td><span style="font-size:12px;">${c.government || '-'}</span></td>
-                <td><span class="badge instore" style="font-weight:700; font-family:var(--font-en);">${c.duration_months} شهور</span></td>
-                <td style="font-family:var(--font-en); font-weight:600;">${Number(c.down_payment).toLocaleString('ar-EG')} جم</td>
-                <td style="font-family:var(--font-en); font-weight:700; color:var(--md-sys-color-primary);">${Number(c.monthly_installment_price).toLocaleString('ar-EG')} جم</td>
-                <td style="font-family:var(--font-en); font-weight:700;">${Number(c.final_unit_price).toLocaleString('ar-EG')} جم</td>
-                <td style="font-family:var(--font-en); font-weight:800; color:var(--color-success); font-size:13px;">${c.paid_installments_count} من ${c.duration_months}</td>
-                <td style="font-family:var(--font-en); font-weight:800; color:var(--color-success); font-size:13px;">${Number(c.total_paid).toLocaleString('ar-EG')} جم</td>
-                <td style="font-family:var(--font-en); font-weight:700; color:${c.remaining_installments_count > 0 ? '#ef4444' : 'var(--color-success)'};">${c.remaining_installments_count} قسط</td>
-                <td style="font-family:var(--font-en); font-weight:800; color:${c.remaining_amount > 0 ? '#ef4444' : 'var(--color-success)'}; font-size:13px;">${Number(c.remaining_amount).toLocaleString('ar-EG')} جم</td>
+                <td><span class="badge instore mono-ltr" style="font-weight:700;">${c.duration_months} شهور</span></td>
+                <td class="mono-ltr" style="font-weight:600;">${Number(c.down_payment).toLocaleString('ar-EG')} جم</td>
+                <td class="mono-ltr" style="font-weight:700; color:var(--accent-primary);">${Number(c.monthly_installment_price).toLocaleString('ar-EG')} جم</td>
+                <td class="mono-ltr" style="font-weight:700;">${Number(c.final_unit_price).toLocaleString('ar-EG')} جم</td>
+                <td class="mono-ltr" style="font-weight:800; color:var(--status-success); font-size:13px;">${c.paid_installments_count} من ${c.duration_months}</td>
+                <td class="mono-ltr" style="font-weight:800; color:var(--status-success); font-size:13px;">${Number(c.total_paid).toLocaleString('ar-EG')} جم</td>
+                <td class="mono-ltr" style="font-weight:700; color:${c.remaining_installments_count > 0 ? 'var(--status-danger)' : 'var(--status-success)'};">${c.remaining_installments_count} قسط</td>
+                <td class="mono-ltr" style="font-weight:800; color:${c.remaining_amount > 0 ? 'var(--status-danger)' : 'var(--status-success)'}; font-size:13px;">${Number(c.remaining_amount).toLocaleString('ar-EG')} جم</td>
                 <td>${badgeHtml}</td>
-                <td>
-                    <button type="button" class="btn btn-secondary" onclick="openAssetTimeline('${c.pos_serial}')" style="padding:4px 8px; font-size:11px; color:#60a5fa;" title="تتبع الأصل وتاريخ السداد">
+                <td class="col-sticky-end">
+                    <button type="button" class="btn btn-secondary" onclick="openAssetTimeline('${c.pos_serial}')" style="padding:4px 8px; font-size:11px; border-radius:var(--radius-sm);" title="تتبع الأصل وتاريخ السداد">
                         <i data-lucide="history" style="width:12px; height:12px;"></i> تتبع
                     </button>
                 </td>
@@ -2866,14 +3070,8 @@ async function loadSparePartsInventory() {
             }).join('');
         }
 
-        // 6. Update Sort Icons & Render Movements Table
-        const allSortIcons = document.querySelectorAll('#sp-movements-table .sort-icon');
-        allSortIcons.forEach(icon => icon.textContent = '⬍');
-        const activeSortIcon = document.getElementById(`sp-sort-${SparePartsTableState.sortKey}`);
-        if (activeSortIcon) {
-            activeSortIcon.textContent = SparePartsTableState.sortDir === 'asc' ? '▲' : '▼';
-        }
-
+        // 6. Update Sort Icons & Render Movements Table via SmartUI
+        SmartUI.DataGrid.updateSortIcons('sp-movements-table', SparePartsTableState.sortKey, SparePartsTableState.sortDir);
         renderSparePartsTable();
 
         // 7. Bind Listeners once
@@ -2992,13 +3190,8 @@ function sortSparePartsTable(key) {
         SparePartsTableState.sortDir = (key === 'timestamp' || key === 'total_amount' || key === 'quantity') ? 'desc' : 'asc';
     }
 
-    // Update Header Sort Icons
-    const allSortIcons = document.querySelectorAll('#sp-movements-table .sort-icon');
-    allSortIcons.forEach(icon => icon.textContent = '⬍');
-    const currentIcon = document.getElementById(`sp-sort-${key}`);
-    if (currentIcon) {
-        currentIcon.textContent = SparePartsTableState.sortDir === 'asc' ? '▲' : '▼';
-    }
+    // Update Header Sort Icons via SmartUI
+    SmartUI.DataGrid.updateSortIcons('sp-movements-table', key, SparePartsTableState.sortDir);
 
     SparePartsTableState.page = 1;
     renderSparePartsTable();
@@ -3308,6 +3501,23 @@ async function loadSyncMonitor() {
 
             const recEl = document.getElementById('monitor-total-records-count');
             if (recEl && data.totalRecords) recEl.textContent = Number(data.totalRecords).toLocaleString('ar-EG') + ' سجل';
+
+            // Outbox & DLQ Pipeline Telemetry
+            const outboxEl = document.getElementById('sync-telemetry-outbox-count');
+            if (outboxEl) outboxEl.textContent = Number(data.outboxPendingCount || 0).toLocaleString('ar-EG');
+
+            const dlqEl = document.getElementById('sync-telemetry-dlq-count');
+            if (dlqEl) dlqEl.textContent = Number(data.dlqPendingCount || 0).toLocaleString('ar-EG');
+
+            const dlqBadge = document.getElementById('sync-telemetry-dlq-badge');
+            if (dlqBadge) {
+                if ((data.dlqPendingCount || 0) > 0) {
+                    dlqBadge.style.display = 'inline-block';
+                    dlqBadge.textContent = `${data.dlqPendingCount} متعثر`;
+                } else {
+                    dlqBadge.style.display = 'none';
+                }
+            }
         }
 
         await fetchAndRenderAuditLogs();
@@ -3316,6 +3526,42 @@ async function loadSyncMonitor() {
         console.error("Error rendering sync monitor:", err);
     }
 }
+
+async function retrySyncDlqQueue() {
+    const btn = document.getElementById('btn-retry-sync-dlq');
+    const icon = document.getElementById('icon-retry-dlq-spinner');
+    if (btn) btn.disabled = true;
+    if (icon) icon.classList.add('spin-animation');
+
+    try {
+        const res = await fetch('/api/sync/retry-dlq', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'فشلت عملية إعادة جدولة الطابور');
+
+        if (typeof SmartUI !== 'undefined' && SmartUI.Toast) {
+            SmartUI.Toast.show({
+                title: 'تمت إعادة المحاولة',
+                message: data.message || 'تمت إعادة جدولة ودفع طابور المزامنة السحابية بنجاح ⚡',
+                type: 'success'
+            });
+        }
+        await loadSyncMonitor();
+    } catch (err) {
+        if (typeof SmartUI !== 'undefined' && SmartUI.Toast) {
+            SmartUI.Toast.show({ title: 'خطأ', message: err.message, type: 'danger' });
+        } else {
+            alert('حدث خطأ: ' + err.message);
+        }
+    } finally {
+        if (btn) btn.disabled = false;
+        if (icon) icon.classList.remove('spin-animation');
+        refreshIcons();
+    }
+}
+window.retrySyncDlqQueue = retrySyncDlqQueue;
 
 async function fetchAndRenderAuditLogs() {
     const tbody = document.getElementById('audit-logs-body');
@@ -3425,20 +3671,8 @@ window.sortAuditLogsTable = function(field) {
         AppState.audit.sortOrder = 'desc';
     }
 
-    const sortFields = ['id', 'timestamp', 'table_name', 'change_type', 'record_id', 'summary'];
-    sortFields.forEach(f => {
-        const iconEl = document.getElementById(`audit-sort-${f}`);
-        const thEl = iconEl?.closest('th');
-        if (iconEl) {
-            if (f === AppState.audit.sortBy) {
-                iconEl.textContent = AppState.audit.sortOrder === 'asc' ? '▲' : '▼';
-                thEl?.classList.add('active-sort');
-            } else {
-                iconEl.textContent = '⬍';
-                thEl?.classList.remove('active-sort');
-            }
-        }
-    });
+    // Update sort indicators on headers via SmartUI
+    SmartUI.DataGrid.updateSortIcons('audit-logs-table', field, AppState.audit.sortOrder);
 
     AppState.audit.currentPage = 1;
     fetchAndRenderAuditLogs();
@@ -3476,11 +3710,83 @@ function formatAuditSummary(log) {
     return summary;
 }
 
+let currentDiffLogState = null;
+
+function renderDiffContents() {
+    if (!currentDiffLogState) return;
+    const { log, oldData, newData, allKeys } = currentDiffLogState;
+    const changedOnlyToggle = document.getElementById('diff-filter-changed-only');
+    const filterChangedOnly = changedOnlyToggle ? changedOnlyToggle.checked : true;
+    const countBadge = document.getElementById('diff-fields-count-badge');
+
+    let oldHtml = '';
+    let newHtml = '';
+    let changedCount = 0;
+    let totalKeys = allKeys.length;
+
+    if (log.change_type === 'INSERT') {
+        changedCount = allKeys.length;
+        oldHtml = `<p style="color:var(--text-muted); font-style:italic; padding:12px;">لا توجد بيانات سابقة (سجل جديد).</p>`;
+        allKeys.forEach(k => {
+            let val = newData[k] !== undefined && newData[k] !== null ? String(newData[k]) : '-';
+            if (/date|time/i.test(k) && val !== '-') val = formatDateDDMMYYYY(val, true);
+            const isMono = /date|time|serial|id|code|phone|sn|iccid|imei|amount|price|cost|qty|count/i.test(k);
+            const monoClass = isMono ? ' class="mono-ltr"' : '';
+            newHtml += `<div class="diff-field-row changed"><strong>${k}:</strong><span${monoClass}>${val}</span></div>`;
+        });
+    } else if (log.change_type === 'DELETE') {
+        changedCount = allKeys.length;
+        newHtml = `<p style="color:var(--text-muted); font-style:italic; padding:12px;">تم حذف السجل من قاعدة البيانات.</p>`;
+        allKeys.forEach(k => {
+            let val = oldData[k] !== undefined && oldData[k] !== null ? String(oldData[k]) : '-';
+            if (/date|time/i.test(k) && val !== '-') val = formatDateDDMMYYYY(val, true);
+            const isMono = /date|time|serial|id|code|phone|sn|iccid|imei|amount|price|cost|qty|count/i.test(k);
+            const monoClass = isMono ? ' class="mono-ltr"' : '';
+            oldHtml += `<div class="diff-field-row changed"><strong>${k}:</strong><span${monoClass}>${val}</span></div>`;
+        });
+    } else {
+        // UPDATE
+        allKeys.forEach(k => {
+            let oldVal = oldData[k] !== undefined && oldData[k] !== null ? String(oldData[k]) : '';
+            let newVal = newData[k] !== undefined && newData[k] !== null ? String(newData[k]) : '';
+            const isChanged = oldVal !== newVal;
+            if (isChanged) changedCount++;
+
+            if (filterChangedOnly && !isChanged) return;
+
+            if (/date|time/i.test(k)) {
+                if (oldVal) oldVal = formatDateDDMMYYYY(oldVal, true);
+                if (newVal) newVal = formatDateDDMMYYYY(newVal, true);
+            }
+            const isMono = /date|time|serial|id|code|phone|sn|iccid|imei|amount|price|cost|qty|count/i.test(k);
+            const monoClass = isMono ? ' class="mono-ltr"' : '';
+
+            oldHtml += `<div class="diff-field-row ${isChanged ? 'changed' : ''}"><strong>${k}:</strong><span${monoClass}>${oldVal || '<i style="color:var(--text-muted);">فارغ</i>'}</span></div>`;
+            newHtml += `<div class="diff-field-row ${isChanged ? 'changed' : ''}"><strong>${k}:</strong><span${monoClass}>${newVal || '<i style="color:var(--text-muted);">فارغ</i>'}</span></div>`;
+        });
+    }
+
+    if (countBadge) {
+        countBadge.textContent = filterChangedOnly 
+            ? `${changedCount} حقول معدلة من ${totalKeys}` 
+            : `عرض كافة الحقول (${totalKeys})`;
+    }
+
+    document.getElementById('diff-old-content').innerHTML = oldHtml || '<p style="padding:15px; color:var(--text-muted); text-align:center;">لا توجد حقول متغيرة مطابقة لمعايير الفلترة</p>';
+    document.getElementById('diff-new-content').innerHTML = newHtml || '<p style="padding:15px; color:var(--text-muted); text-align:center;">لا توجد حقول متغيرة مطابقة لمعايير الفلترة</p>';
+    refreshIcons();
+}
+
+function toggleDiffChangedOnly(checked) {
+    renderDiffContents();
+}
+window.toggleDiffChangedOnly = toggleDiffChangedOnly;
+
 async function openDiffViewerModal(logId) {
     const modal = document.getElementById('modal-diff-viewer');
     if (!modal) return;
 
-    modal.classList.add('active');
+    SmartUI.Drawer.open(modal);
     document.getElementById('diff-modal-table').textContent = 'جاري التحميل...';
     document.getElementById('diff-modal-record-id').textContent = '...';
     document.getElementById('diff-modal-time').textContent = '...';
@@ -3511,44 +3817,13 @@ async function openDiffViewerModal(logId) {
         const newData = log.new_data_parsed || {};
         const allKeys = Array.from(new Set([...Object.keys(oldData), ...Object.keys(newData)]));
 
-        let oldHtml = '';
-        let newHtml = '';
-
-        if (log.change_type === 'INSERT') {
-            oldHtml = `<p style="color:var(--text-muted); font-style:italic; padding:10px;">لا توجد بيانات سابقة (سجل جديد).</p>`;
-            allKeys.forEach(k => {
-                let val = newData[k] !== undefined && newData[k] !== null ? String(newData[k]) : '-';
-                if (/date|time/i.test(k) && val !== '-') val = formatDateDDMMYYYY(val, true);
-                newHtml += `<div class="diff-field-row changed"><strong>${k}:</strong><span>${val}</span></div>`;
-            });
-        } else if (log.change_type === 'DELETE') {
-            newHtml = `<p style="color:var(--text-muted); font-style:italic; padding:10px;">تم حذف السجل من قاعدة البيانات.</p>`;
-            allKeys.forEach(k => {
-                let val = oldData[k] !== undefined && oldData[k] !== null ? String(oldData[k]) : '-';
-                if (/date|time/i.test(k) && val !== '-') val = formatDateDDMMYYYY(val, true);
-                oldHtml += `<div class="diff-field-row changed"><strong>${k}:</strong><span>${val}</span></div>`;
-            });
-        } else {
-            allKeys.forEach(k => {
-                let oldVal = oldData[k] !== undefined && oldData[k] !== null ? String(oldData[k]) : '';
-                let newVal = newData[k] !== undefined && newData[k] !== null ? String(newData[k]) : '';
-                const isChanged = oldVal !== newVal;
-                if (/date|time/i.test(k)) {
-                    if (oldVal) oldVal = formatDateDDMMYYYY(oldVal, true);
-                    if (newVal) newVal = formatDateDDMMYYYY(newVal, true);
-                }
-                oldHtml += `<div class="diff-field-row ${isChanged ? 'changed' : ''}"><strong>${k}:</strong><span>${oldVal || '<i style="color:var(--text-muted);">فارغ</i>'}</span></div>`;
-                newHtml += `<div class="diff-field-row ${isChanged ? 'changed' : ''}"><strong>${k}:</strong><span>${newVal || '<i style="color:var(--text-muted);">فارغ</i>'}</span></div>`;
-            });
-        }
-
-        document.getElementById('diff-old-content').innerHTML = oldHtml || '<p style="padding:10px;">لا توجد بيانات</p>';
-        document.getElementById('diff-new-content').innerHTML = newHtml || '<p style="padding:10px;">لا توجد بيانات</p>';
-        refreshIcons();
+        currentDiffLogState = { log, oldData, newData, allKeys };
+        renderDiffContents();
     } catch (err) {
         alert("خطأ أثناء استرجاع تفاصيل التغيير: " + err.message);
     }
 }
+window.openDiffViewerModal = openDiffViewerModal;
 window.openDiffViewerModal = openDiffViewerModal;
 
 // ==========================================
@@ -3592,6 +3867,10 @@ function renderExplorerTableRows() {
             const tr = document.createElement('tr');
             tr.innerHTML = cols.map(c => {
                 let val = row[c];
+                const isNumeric = typeof val === 'number' || (typeof val === 'string' && val.trim() !== '' && !isNaN(Number(val)));
+                const isCodeOrDate = /date|time|serial|id|code|phone|sn|iccid|imei|amount|price|cost|qty|count|rate/i.test(c);
+                const monoClass = (isNumeric || isCodeOrDate) ? ' class="mono-ltr"' : '';
+
                 if (val !== null && val !== undefined) {
                     if (/date|time/i.test(c)) {
                         val = formatDateDDMMYYYY(val, true, true);
@@ -3601,7 +3880,7 @@ function renderExplorerTableRows() {
                 } else {
                     val = '-';
                 }
-                return `<td>${val}</td>`;
+                return `<td${monoClass}>${val}</td>`;
             }).join('');
             tbody.appendChild(tr);
         });
@@ -3671,13 +3950,61 @@ async function fetchDataExplorerTable() {
     }
 }
 
+function exportExplorerTableToExcel() {
+    const tableSelect = document.getElementById('explorer-table-select');
+    const tableName = tableSelect ? tableSelect.value : (AppState.explorer.tableName || 'data_export');
+    const rows = AppState.explorer.rows || [];
+
+    if (!rows || rows.length === 0) {
+        if (typeof SmartUI !== 'undefined' && SmartUI.Toast) {
+            SmartUI.Toast.show({ title: 'تنبيه', message: 'لا توجد سجلات معروضة حالياً للتصدير', type: 'warning' });
+        } else {
+            alert('لا توجد سجلات معروضة حالياً للتصدير');
+        }
+        return;
+    }
+
+    if (!window.XLSX) {
+        if (typeof SmartUI !== 'undefined' && SmartUI.Toast) {
+            SmartUI.Toast.show({ title: 'خطأ', message: 'مكتبة التصدير XLSX غير متوفرة', type: 'danger' });
+        } else {
+            alert('مكتبة التصدير XLSX غير متوفرة');
+        }
+        return;
+    }
+
+    try {
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, tableName.slice(0, 31));
+        const filename = `${tableName}_export_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        XLSX.writeFile(wb, filename);
+
+        if (typeof SmartUI !== 'undefined' && SmartUI.Toast) {
+            SmartUI.Toast.show({
+                title: 'اكتمل التصدير بنجاح',
+                message: `تم تصدير ${rows.length} سجل من جدول (${tableName}) إلى ملف Excel بنجاح`,
+                type: 'success'
+            });
+        }
+    } catch (err) {
+        console.error('Error exporting explorer table to Excel:', err);
+        if (typeof SmartUI !== 'undefined' && SmartUI.Toast) {
+            SmartUI.Toast.show({ title: 'خطأ أثناء التصدير', message: err.message, type: 'danger' });
+        } else {
+            alert('حدث خطأ أثناء تصدير الملف: ' + err.message);
+        }
+    }
+}
+window.exportExplorerTableToExcel = exportExplorerTableToExcel;
+
 // ==========================================
 // 10. UNIVERSAL ASSET SEARCH & TIMELINE
 // ==========================================
 async function openAssetTimeline(query = '') {
     const modal = document.getElementById('modal-asset-timeline');
     const input = document.getElementById('timeline-search-input');
-    if (modal) modal.classList.add('active');
+    if (modal) SmartUI.Drawer.open(modal);
     if (input && query) {
         input.value = query;
         searchAssetTimeline(query);
@@ -4870,6 +5197,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initPwaInstall();
     initSettingsListeners();
     initLiveSyncStream();
+    initAiCopilotDrawer();
 
     // 2.1 Pre-populate date filters with Current Month by default for high-speed initial loads
     const initialMonthRange = UniversalDateEngine.getPresetRange('month');
@@ -4929,7 +5257,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 6. Diff Viewer Modal Close
     const diffModal = document.getElementById('modal-diff-viewer');
-    const closeDiff = () => diffModal?.classList.remove('active');
+    const closeDiff = () => SmartUI.Drawer.close(diffModal);
     document.getElementById('btn-close-diff-modal')?.addEventListener('click', closeDiff);
     document.getElementById('btn-dismiss-diff-modal')?.addEventListener('click', closeDiff);
 
@@ -4955,7 +5283,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 8. Universal Timeline Listeners
     const timelineModal = document.getElementById('modal-asset-timeline');
-    const closeTimeline = () => timelineModal?.classList.remove('active');
+    const closeTimeline = () => SmartUI.Drawer.close(timelineModal);
     document.getElementById('btn-open-universal-search')?.addEventListener('click', () => openAssetTimeline());
     document.getElementById('btn-close-timeline-modal')?.addEventListener('click', closeTimeline);
     document.getElementById('btn-timeline-search-submit')?.addEventListener('click', () => searchAssetTimeline());
@@ -5456,62 +5784,48 @@ async function checkSyncHealth() {
 window.checkSyncHealth = checkSyncHealth;
 
 // ==========================================================================
-// 18. FONT CUSTOMIZATION SYSTEM (GOOGLE FONTS ARABIC ENGINE)
+// 18. FONT CUSTOMIZATION SYSTEM (OPTIMIZED ARABIC FONTS)
 // ==========================================================================
 const AVAILABLE_FONTS = [
     {
-        id: 'cairo',
-        name: 'Cairo (كايرا)',
-        family: "'Cairo', 'Tajawal', sans-serif",
-        desc: 'الخط الافتراضي الرسمي - واضح وأنيق ومتوازن للقراءة',
+        id: 'ibm-plex',
+        name: 'IBM Plex Sans Arabic (آي بي إم بلكس)',
+        family: "'IBM Plex Sans Arabic', 'Cairo', sans-serif",
+        desc: 'الخط المؤسسي المعتمد - هندسي، دقيق، فائق الوضوح في الشاشات الاحترافية',
         sample: 'نظام إدارة ومتابعة بلاغات الصيانة لخدمة عملاء المخابز الذكية'
     },
     {
-        id: 'alexandria',
-        name: 'Alexandria (الإسكندرية)',
-        family: "'Alexandria', sans-serif",
-        desc: 'خط هندسي حديث فائق الأناقة ومميز للواجهات العصرية',
+        id: 'cairo',
+        name: 'Cairo (كايرو)',
+        family: "'Cairo', 'Tajawal', sans-serif",
+        desc: 'الخط القياسي الرسمي - واضح ومتوازن وأنيق وسلس في القراءة اليومية',
         sample: 'نظام إدارة ومتابعة بلاغات الصيانة لخدمة عملاء المخابز الذكية'
     },
     {
         id: 'tajawal',
         name: 'Tajawal (تجوال)',
-        family: "'Tajawal', sans-serif",
-        desc: 'خط سلس وناعم ومريح جداً للعين أثناء العمل الطويل',
-        sample: 'نظام إدارة ومتابعة بلاغات الصيانة لخدمة عملاء المخابز الذكية'
-    },
-    {
-        id: 'almarai',
-        name: 'Almarai (المراعي)',
-        family: "'Almarai', sans-serif",
-        desc: 'خط مؤسسي رسمي واضح ومثالي للتقارير والبيانات الإدارية',
+        family: "'Tajawal', 'Cairo', sans-serif",
+        desc: 'خط ناعم وسلس ومريح جداً للعين أثناء فترات العمل الطويلة',
         sample: 'نظام إدارة ومتابعة بلاغات الصيانة لخدمة عملاء المخابز الذكية'
     },
     {
         id: 'readex',
         name: 'Readex Pro (ريدكس برو)',
         family: "'Readex Pro', sans-serif",
-        desc: 'خط تقني متطور ممتاز للأرقام والجداول واللوحات التحليلية',
+        desc: 'خط تقني متطور ممتاز للأرقام والجداول والبيانات المجدولة',
         sample: 'نظام إدارة ومتابعة بلاغات الصيانة لخدمة عملاء المخابز الذكية'
     },
     {
-        id: 'ibm-plex',
-        name: 'IBM Plex Sans Arabic (آي بي إم)',
-        family: "'IBM Plex Sans Arabic', sans-serif",
-        desc: 'خط برمجي وهندسي دقيق وعالي الوضوح في الشاشات',
-        sample: 'نظام إدارة ومتابعة بلاغات الصيانة لخدمة عملاء المخابز الذكية'
-    },
-    {
-        id: 'noto-sans',
-        name: 'Noto Sans Arabic (نوتو سانس)',
-        family: "'Noto Sans Arabic', sans-serif",
-        desc: 'خط جوجل العالمي الموحد لكل الأجهزة والشاشات',
-        sample: 'نظام إدارة ومتابعة بلاغات الصيانة لخدمة عملاء المخابز الذكية'
+        id: 'jetbrains-mono',
+        name: 'JetBrains Mono (جيت برينز مونو)',
+        family: "'JetBrains Mono', monospace",
+        desc: 'خط برمجي تقني مخصص للأكواد البرمجية والأرقام والسيريالات',
+        sample: 'POS-77491 // 010001 // EOD-SYNC-2026'
     }
 ];
 
 function initFontSystem() {
-    const savedFontId = localStorage.getItem('smartcs_custom_font') || 'cairo';
+    const savedFontId = localStorage.getItem('smartcs_custom_font') || 'ibm-plex';
     applyFont(savedFontId, false);
     renderFontSelectionCards();
 }
@@ -5519,6 +5833,7 @@ function initFontSystem() {
 function applyFont(fontId, saveToStorage = true) {
     const fontObj = AVAILABLE_FONTS.find(f => f.id === fontId) || AVAILABLE_FONTS[0];
     document.documentElement.style.setProperty('--font-ar', fontObj.family);
+    document.documentElement.style.setProperty('--font-sans', fontObj.family);
     
     if (saveToStorage) {
         localStorage.setItem('smartcs_custom_font', fontObj.id);
@@ -6000,9 +6315,183 @@ let activeCustomerProfile = null;
 let custSearchDebounceTimer = null;
 let currentDeviceDeepdiveData = null;
 
+let customerDirectoryState = {
+    page: 1,
+    pageSize: 20,
+    search: '',
+    government: 'all',
+    data: [],
+    total: 0
+};
+
+async function loadCustomerDirectory(page = 1) {
+    customerDirectoryState.page = page;
+    const tbody = document.getElementById('cust-directory-table-body');
+    const pageInfo = document.getElementById('cust-dir-page-info');
+    const countBadge = document.getElementById('cust-dir-count-badge');
+    const govFilter = document.getElementById('cust-dir-gov-filter');
+    const paginationControls = document.getElementById('cust-dir-pagination-controls');
+
+    if (tbody) {
+        SmartUI.Skeleton.table(tbody, 8, 5);
+    }
+
+    try {
+        const offset = (page - 1) * customerDirectoryState.pageSize;
+        const search = customerDirectoryState.search || '';
+        const res = await fetch(`/api/explorer/merchants?limit=${customerDirectoryState.pageSize}&offset=${offset}&search=${encodeURIComponent(search)}`);
+        const data = await res.json();
+
+        customerDirectoryState.total = data.total || 0;
+        customerDirectoryState.data = data.rows || [];
+
+        if (countBadge) {
+            countBadge.textContent = `${Number(data.total || 0).toLocaleString('ar-EG')} مخبز`;
+        }
+
+        // Populate government filter options if needed
+        if (govFilter && govFilter.children.length <= 1) {
+            const govs = new Set();
+            customerDirectoryState.data.forEach(m => {
+                if (m.government && m.government !== '-') govs.add(m.government.trim());
+            });
+            govs.forEach(g => {
+                const opt = document.createElement('option');
+                opt.value = g;
+                opt.textContent = g;
+                govFilter.appendChild(opt);
+            });
+        }
+
+        let rows = customerDirectoryState.data;
+        if (customerDirectoryState.government && customerDirectoryState.government !== 'all') {
+            rows = rows.filter(m => (m.government || '').trim() === customerDirectoryState.government);
+        }
+
+        if (!tbody) return;
+        tbody.innerHTML = '';
+
+        if (rows.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:30px; color:var(--text-muted);">لم يتم العثور على أي مخابز مطابقة</td></tr>`;
+            return;
+        }
+
+        rows.forEach((m, idx) => {
+            const tr = document.createElement('tr');
+            const code = m.merchant_code || m.id || '-';
+            const name = m.name || 'مخبز غير محدد';
+            const gov = m.government || '-';
+            const phone = m.contact_phone || m.contact_phone_2 || '-';
+            const address = m.address || '-';
+            const status = m.status === 'active' ? 'نشط' : (m.status || 'نشط');
+
+            tr.innerHTML = `
+                <td style="color:var(--text-muted); font-size:11px;">${offset + idx + 1}</td>
+                <td class="col-sticky-start mono-ltr">
+                    <strong style="color:var(--accent-primary); font-weight:800;">#${code}</strong>
+                </td>
+                <td>
+                    <strong style="color:var(--text-primary); font-size:13px;">${name}</strong>
+                    ${m.type ? `<span style="display:block; font-size:10px; color:var(--text-muted);">${m.type}</span>` : ''}
+                </td>
+                <td><span class="badge inmerchant" style="font-size:11px;">${gov}</span></td>
+                <td class="mono-ltr" style="font-size:12px;">${phone}</td>
+                <td style="max-width:240px; text-overflow:ellipsis; overflow:hidden; white-space:nowrap; font-size:11.5px; color:var(--text-secondary);" title="${address}">${address}</td>
+                <td><span class="badge inmerchant" style="background:rgba(16,185,129,0.12); color:#10b981; border:1px solid rgba(16,185,129,0.3); font-size:10.5px;">${status}</span></td>
+                <td class="col-sticky-end">
+                    <button type="button" class="btn btn-primary btn-sm" onclick="loadCustomerProfile('${code}')" style="padding:4px 10px; font-size:11px; display:inline-flex; align-items:center; gap:6px; border-radius:var(--md-shape-corner-full);">
+                        <i data-lucide="user-check" style="width:12px; height:12px;"></i>
+                        <span>بروفايل 360</span>
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        // Pagination
+        const totalPages = Math.ceil((data.total || 1) / customerDirectoryState.pageSize) || 1;
+        if (pageInfo) {
+            pageInfo.textContent = `الصفحة ${page} من ${totalPages} (إجمالي ${Number(data.total || 0).toLocaleString('ar-EG')} مخبز)`;
+        }
+
+        if (paginationControls) {
+            paginationControls.innerHTML = `
+                <button type="button" class="btn btn-secondary btn-sm" onclick="loadCustomerDirectory(1)" ${page <= 1 ? 'disabled' : ''} style="padding:4px 8px; font-size:11px;">«</button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="loadCustomerDirectory(${page - 1})" ${page <= 1 ? 'disabled' : ''} style="padding:4px 8px; font-size:11px;">‹</button>
+                <span class="mono-ltr" style="padding:0 8px; font-weight:700; font-size:12px;">${page} / ${totalPages}</span>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="loadCustomerDirectory(${page + 1})" ${page >= totalPages ? 'disabled' : ''} style="padding:4px 8px; font-size:11px;">›</button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="loadCustomerDirectory(${totalPages})" ${page >= totalPages ? 'disabled' : ''} style="padding:4px 8px; font-size:11px;">»</button>
+            `;
+        }
+
+        SmartUI.icons.refresh(tbody);
+
+    } catch (err) {
+        console.error('Error loading customer directory:', err);
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:30px; color:#ef4444;">تعذر تحميل دليل المخابز</td></tr>`;
+        }
+    }
+}
+window.loadCustomerDirectory = loadCustomerDirectory;
+
+function returnToCustomerDirectory() {
+    const directorySection = document.getElementById('cust-directory-section');
+    const profileContainer = document.getElementById('cust-profile-container');
+    if (profileContainer) profileContainer.style.display = 'none';
+    if (directorySection) {
+        directorySection.style.display = 'block';
+        directorySection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+}
+window.returnToCustomerDirectory = returnToCustomerDirectory;
+
+async function exportCustomerDirectoryToExcel() {
+    if (!customerDirectoryState.data || customerDirectoryState.data.length === 0) {
+        SmartUI.Toast.show('لا توجد بيانات متاحة للتصدير حالياً', 'warning');
+        return;
+    }
+    if (typeof XLSX === 'undefined') {
+        SmartUI.Toast.show('مكتبة تصدير Excel غير متوفرة', 'danger');
+        return;
+    }
+    try {
+        const rows = customerDirectoryState.data.map(m => ({
+            'كود المخبز': m.merchant_code || m.id,
+            'اسم المخبز والعميل': m.name || '',
+            'النوع': m.type || 'مخبز',
+            'المحافظة والإدارة': m.government || '',
+            'الهاتف 1': m.contact_phone || '',
+            'الهاتف 2': m.contact_phone_2 || '',
+            'العنوان': m.address || '',
+            'الرقم القومي': m.national_id || '',
+            'الحالة': m.status || 'نشط'
+        }));
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'دليل المخابز');
+        XLSX.writeFile(wb, `Customer_Directory_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        SmartUI.Toast.show('تم تصدير دليل المخابز بنجاح إلى ملف Excel', 'success');
+    } catch (e) {
+        console.error('Export error:', e);
+        SmartUI.Toast.show('حدث خطأ أثناء تصدير ملف Excel', 'danger');
+    }
+}
+window.exportCustomerDirectoryToExcel = exportCustomerDirectoryToExcel;
+
 function initCustomerManagement() {
     initCustomerSearch();
     initDeviceDeepdiveModal();
+    // Load directory if profile container is not active
+    const profileContainer = document.getElementById('cust-profile-container');
+    if (!profileContainer || profileContainer.style.display === 'none') {
+        loadCustomerDirectory(1);
+    }
+    // Bind gov filter
+    document.getElementById('cust-dir-gov-filter')?.addEventListener('change', (e) => {
+        customerDirectoryState.government = e.target.value;
+        loadCustomerDirectory(1);
+    });
 }
 window.initCustomerManagement = initCustomerManagement;
 
@@ -6159,6 +6648,7 @@ async function selectCustomerResult(merchantCode) {
 window.selectCustomerResult = selectCustomerResult;
 
 async function loadCustomerProfile(merchantCode) {
+    const directorySection = document.getElementById('cust-directory-section');
     const emptyPrompt = document.getElementById('cust-empty-prompt');
     const profileContainer = document.getElementById('cust-profile-container');
     const suggestionsBox = document.getElementById('cust-search-suggestions');
@@ -6169,6 +6659,7 @@ async function loadCustomerProfile(merchantCode) {
 
     if (!profileContainer) return;
 
+    if (directorySection) directorySection.style.display = 'none';
     if (emptyPrompt) emptyPrompt.style.display = 'none';
     profileContainer.style.display = 'block';
 
@@ -6370,11 +6861,10 @@ async function openDevice360Modal(serial) {
     const modal = document.getElementById('modal-device-360-deepdive');
     if (!modal) return;
 
-    modal.classList.add('active');
+    SmartUI.Drawer.open(modal);
     modal.style.display = 'flex';
     modal.style.opacity = '1';
     modal.style.visibility = 'visible';
-    modal.style.zIndex = '999999';
 
     // Header info
     document.getElementById('dev-modal-serial').textContent = serial;
@@ -6413,7 +6903,7 @@ window.openDevice360Modal = openDevice360Modal;
 function closeDevice360Modal() {
     const modal = document.getElementById('modal-device-360-deepdive');
     if (modal) {
-        modal.classList.remove('active');
+        SmartUI.Drawer.close(modal);
         modal.style.display = 'none';
         modal.style.opacity = '0';
         modal.style.visibility = 'hidden';
@@ -6981,35 +7471,34 @@ async function loadReconciliationMatrix() {
 
         tbody.innerHTML = tables.map((t, idx) => {
             const isMatched = t.status === 'MATCHED';
-            const hexIdx = `0x${(idx + 1).toString(16).toUpperCase().padStart(2, '0')}`;
             
             const statusBadge = isMatched
-                ? `<span class="cyber-badge-matched"><i data-lucide="shield-check" style="width:12px;height:12px;"></i> [MATCH_OK: 100%]</span>`
-                : `<span class="cyber-badge-mismatch"><i data-lucide="alert-triangle" style="width:12px;height:12px;"></i> [DIFF_DELTA: ${Math.abs(t.diff)}]</span>`;
+                ? `<span class="badge inmerchant" style="font-size:11px; font-weight:700;"><i data-lucide="check-circle" style="width:12px;height:12px;vertical-align:middle;"></i> متطابق 100%</span>`
+                : `<span class="badge faulty" style="font-size:11px; font-weight:700;"><i data-lucide="alert-triangle" style="width:12px;height:12px;vertical-align:middle;"></i> فارق (${Math.abs(t.diff)})</span>`;
 
             const diffBadge = t.diff === 0
-                ? `<span style="color:var(--cyber-neon-green); font-weight:800; font-size:13px;">0</span>`
-                : `<span style="color:var(--cyber-neon-red); font-weight:900; font-size:13px; text-shadow:0 0 8px rgba(255,0,85,0.4);">${t.diff > 0 ? '+' : ''}${t.diff}</span>`;
+                ? `<span class="mono-ltr" style="color:var(--status-success); font-weight:800; font-size:13px;">0</span>`
+                : `<span class="mono-ltr" style="color:var(--status-danger); font-weight:900; font-size:13px;">${t.diff > 0 ? '+' : ''}${t.diff}</span>`;
 
             const cloudCountText = t.cloud_count !== null 
-                ? Number(t.cloud_count).toLocaleString('en-US')
-                : (data.cloud_fetch_error ? `<span style="color:#ef4444; font-size:10px;">[LINK_OFFLINE]</span>` : '-');
+                ? Number(t.cloud_count).toLocaleString('ar-EG')
+                : (data.cloud_fetch_error ? `<span style="color:var(--status-danger); font-size:10px;">[غير متصل]</span>` : '-');
 
             const actionCell = isMatched
-                ? `<span style="color:#10b981; font-size:11px; font-weight:700;"><i data-lucide="check" style="width:12px;height:12px;vertical-align:middle;"></i> متطابق ✓</span>`
-                : `<button type="button" class="cyber-btn-primary" style="padding:4px 10px; font-size:11px; white-space:nowrap; background:linear-gradient(135deg, #0284c7, #0369a1);" id="btn-sync-tbl-${t.table}" onclick="syncSingleTable('${t.table}', '${t.name_ar}')">
+                ? `<span style="color:var(--status-success); font-size:11px; font-weight:700;"><i data-lucide="check" style="width:12px;height:12px;vertical-align:middle;"></i> متطابق</span>`
+                : `<button type="button" class="btn btn-primary" style="padding:4px 10px; font-size:11px; white-space:nowrap; border-radius:var(--radius-full);" id="btn-sync-tbl-${t.table}" onclick="syncSingleTable('${t.table}', '${t.name_ar}')">
                     <i data-lucide="zap" style="width:12px;height:12px;"></i> مزامنة الجدول ⚡
                    </button>`;
 
             return `
-                <tr style="${!isMatched ? 'background:rgba(255,0,85,0.06);' : ''}">
-                    <td><span class="cyber-badge-hex">${hexIdx}</span></td>
+                <tr>
+                    <td class="mono-ltr" style="font-weight:700; color:var(--text-secondary);">${idx + 1}</td>
                     <td>
-                        <strong style="color:#ffffff; font-size:13px; display:block;">${t.name_ar}</strong>
-                        <span class="cyber-code-box" style="margin-top:3px;">${t.table}</span>
+                        <strong style="color:var(--text-primary); font-size:13px; display:block;">${t.name_ar}</strong>
+                        <code class="mono-ltr" style="margin-top:3px; background:var(--surface-3); padding:1px 6px; border-radius:var(--radius-sm); font-size:11px;">${t.table}</code>
                     </td>
-                    <td><strong style="color:var(--cyber-neon-cyan); font-size:14px; letter-spacing:0.5px;">${Number(t.local_count).toLocaleString('en-US')}</strong></td>
-                    <td><strong style="color:${isMatched ? 'var(--cyber-neon-green)' : 'var(--cyber-neon-red)'}; font-size:14px; letter-spacing:0.5px;">${cloudCountText}</strong></td>
+                    <td><strong class="mono-ltr" style="color:var(--text-primary); font-size:13px;">${Number(t.local_count).toLocaleString('ar-EG')}</strong></td>
+                    <td><strong class="mono-ltr" style="color:${isMatched ? 'var(--status-success)' : 'var(--status-danger)'}; font-size:13px;">${cloudCountText}</strong></td>
                     <td>${diffBadge}</td>
                     <td>${statusBadge}</td>
                     <td style="text-align:center;">${actionCell}</td>
@@ -7020,7 +7509,7 @@ async function loadReconciliationMatrix() {
     } catch (err) {
         console.error("Reconciliation error:", err);
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--cyber-neon-red); padding:25px; font-family:var(--cyber-font-mono);">[FATAL_RECONCILIATION_EXCEPTION]: ${err.message}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--status-danger); padding:25px;">خطأ في فحص التطابق: ${err.message}</td></tr>`;
         }
     } finally {
         if (refreshIcon) refreshIcon.classList.remove('spin-animation');
@@ -7244,7 +7733,7 @@ async function loadDiagnosticsErrorLogs() {
     const severity = document.getElementById('diag-error-filter-severity')?.value || 'ALL';
 
     if (refreshIcon) refreshIcon.classList.add('spin-animation');
-    if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:30px; color:#64748b; font-family:var(--cyber-font-mono);"><i data-lucide="loader-2" class="spin-animation"></i> [STREAMING_SYSTEM_BLACKBOX_LOGS]...</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:30px; color:var(--text-muted);"><i data-lucide="loader-2" class="spin-animation"></i> جاري جلب سجل الأخطاء...</td></tr>`;
     refreshIcons();
 
     try {
@@ -7255,12 +7744,12 @@ async function loadDiagnosticsErrorLogs() {
 
         const errors = data.errors || [];
         const kpiErrorsTotal = document.getElementById('diag-kpi-errors-total');
-        if (kpiErrorsTotal) kpiErrorsTotal.textContent = `إجمالي الأخطاء المسجلة: ${data.total || 0}`;
+        if (kpiErrorsTotal) kpiErrorsTotal.textContent = `إجمالي الأخطاء: ${data.total || 0}`;
 
         if (!tbody) return;
 
         if (errors.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:35px; color:var(--cyber-neon-green); font-weight:800; font-family:var(--cyber-font-mono);"><i data-lucide="shield-check" style="width:20px; height:20px; vertical-align:middle; margin-left:6px;"></i> [BLACKBOX_CLEAR]: NO ANOMALIES DETECTED // 100% OPERATIONAL EXCELLENCE ✨</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:35px; color:var(--status-success); font-weight:700;"><i data-lucide="shield-check" style="width:20px; height:20px; vertical-align:middle; margin-left:6px;"></i> لا توجد أي أخطاء مسجلة // النظام يعمل بأعلى كفاءة واستقرار ✨</td></tr>`;
             return;
         }
 
@@ -7269,35 +7758,34 @@ async function loadDiagnosticsErrorLogs() {
         tbody.innerHTML = errors.map((err, idx) => {
             window.__diagnosticErrorStackMap[err.id] = err.stack_trace || '';
             window.__diagnosticErrorsFullMap[err.id] = err;
-            const hexIdx = `0x${(idx + 1).toString(16).toUpperCase().padStart(2, '0')}`;
             
-            let sevBadge = `<span style="background:rgba(255,0,85,0.15); color:var(--cyber-neon-red); border:1px solid rgba(255,0,85,0.4); padding:2px 8px; border-radius:4px; font-weight:900; font-size:10px;">[ERROR]</span>`;
+            let sevBadge = `<span class="badge" style="background:var(--status-danger-subtle); color:var(--status-danger); border:1px solid rgba(239,68,68,0.3); font-size:11px; font-weight:700;">خطأ</span>`;
             if (err.severity === 'CRITICAL') {
-                sevBadge = `<span style="background:var(--cyber-neon-red); color:#ffffff; font-weight:900; font-size:10px; padding:2px 8px; border-radius:4px; box-shadow:0 0 10px rgba(255,0,85,0.6);">[CRITICAL_ALERT 🚨]</span>`;
+                sevBadge = `<span class="badge" style="background:var(--status-danger); color:#ffffff; font-size:11px; font-weight:800; padding:2px 8px;">حرجة 🚨</span>`;
             } else if (err.severity === 'WARN') {
-                sevBadge = `<span style="background:rgba(255,183,3,0.15); color:var(--cyber-neon-amber); border:1px solid rgba(255,183,3,0.4); padding:2px 8px; border-radius:4px; font-weight:800; font-size:10px;">[WARN ⚠️]</span>`;
+                sevBadge = `<span class="badge" style="background:var(--status-warning-subtle); color:var(--status-warning); border:1px solid rgba(245,158,11,0.3); font-size:11px; font-weight:700;">تحذير ⚠️</span>`;
             } else if (err.module === 'CLIENT_UI') {
-                sevBadge = `<span style="background:rgba(192,132,252,0.15); color:var(--cyber-neon-purple); border:1px solid rgba(192,132,252,0.4); padding:2px 8px; border-radius:4px; font-weight:800; font-size:10px;">[CLIENT_UI 🖥️]</span>`;
+                sevBadge = `<span class="badge" style="background:var(--status-info-subtle); color:var(--status-info); border:1px solid rgba(6,182,212,0.3); font-size:11px; font-weight:700;">واجهة المتصفح</span>`;
             }
 
             const formattedTime = formatCairoDateTime(err.timestamp || new Date().toISOString());
 
             return `
                 <tr>
-                    <td><span class="cyber-badge-hex">${hexIdx}</span></td>
+                    <td class="mono-ltr" style="font-weight:700; color:var(--text-secondary);">${idx + 1}</td>
                     <td>${sevBadge}</td>
-                    <td><span class="cyber-code-box">${err.module || 'SYS'}</span></td>
-                    <td><span style="font-family:var(--cyber-font-mono); font-size:11px; color:var(--cyber-neon-cyan);">${err.endpoint || '-'}</span></td>
-                    <td style="font-size:12px; font-weight:600; color:#f1f5f9; max-width:320px; white-space:normal; word-break:break-word; font-family:var(--cyber-font-mono);">
-                        ${err.error_message || 'Unspecified Error'}
+                    <td><code class="mono-ltr" style="background:var(--surface-3); padding:2px 6px; border-radius:var(--radius-sm); font-size:11px;">${err.module || 'SYS'}</code></td>
+                    <td><span class="mono-ltr" style="font-size:11px; color:var(--text-secondary);">${err.endpoint || '-'}</span></td>
+                    <td style="font-size:12px; font-weight:600; color:var(--text-primary); max-width:320px; white-space:normal; word-break:break-word;">
+                        ${escapeHtml(err.error_message || 'Unspecified Error')}
                     </td>
-                    <td><span style="color:#94a3b8; font-size:11px; font-family:var(--cyber-font-mono);">${formattedTime}</span></td>
+                    <td><span class="mono-ltr" style="color:var(--text-muted); font-size:11px;">${formattedTime}</span></td>
                     <td style="white-space:nowrap;">
                         <div style="display:inline-flex; gap:6px; align-items:center;">
-                            <button type="button" class="cyber-btn-secondary" style="padding:4px 10px; font-size:10px; gap:5px; color:#38bdf8; border-color:rgba(56,189,248,0.3);" onclick="showDiagnosticStack(${err.id})">
-                                <i data-lucide="sparkles" style="width:11px;height:11px;"></i> [تحليل وحل ⚡]
+                            <button type="button" class="btn btn-secondary" style="padding:4px 10px; font-size:11px; border-radius:var(--radius-full); display:inline-flex; align-items:center; gap:4px; color:var(--accent-primary);" onclick="showDiagnosticStack(${err.id})">
+                                <i data-lucide="sparkles" style="width:11px;height:11px;"></i> تحليل وحل ⚡
                             </button>
-                            <button type="button" class="cyber-btn-secondary" style="padding:4px 8px; font-size:10px; color:#ef4444; border-color:rgba(239,68,68,0.3); border-radius:6px;" onclick="deleteDiagErrorById(${err.id}, event)" title="حذف هذا السجل">
+                            <button type="button" class="btn btn-secondary" style="padding:4px 8px; font-size:11px; color:var(--status-danger); border-radius:var(--radius-full);" onclick="deleteDiagErrorById(${err.id}, event)" title="حذف هذا السجل">
                                 <i data-lucide="trash-2" style="width:11px;height:11px;"></i>
                             </button>
                         </div>
@@ -7309,13 +7797,14 @@ async function loadDiagnosticsErrorLogs() {
     } catch (err) {
         console.error("Error logs fetch error:", err);
         if (tbody) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--cyber-neon-red); padding:25px; font-family:var(--cyber-font-mono);">[FATAL_LOG_STREAM_EXCEPTION]: ${err.message}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--status-danger); padding:25px;">خطأ في جلب سجل الأخطاء: ${err.message}</td></tr>`;
         }
     } finally {
         if (refreshIcon) refreshIcon.classList.remove('spin-animation');
         refreshIcons();
     }
 }
+window.loadDiagnosticsErrorLogs = loadDiagnosticsErrorLogs;
 window.loadDiagnosticsErrorLogs = loadDiagnosticsErrorLogs;
 
 // 1-Click Targeted Single Table Sync (Self-Healing)
@@ -8185,4 +8674,311 @@ function exportAiTableToExcel() {
 }
 window.exportAiTableToExcel = exportAiTableToExcel;
 
-console.log('App Controller Version 4.3 - AI Copilot Activated');
+// ==========================================
+// 21. GLOBAL AI COPILOT DRAWER & SHORTCUT ENGINE
+// ==========================================
+let lastAiDrawerResult = null;
+
+const AI_DRAWER_CONTEXT_PROMPTS = {
+    'branch-warehouse': [
+        'ما هي موديلات الأجهزة الأكثر توفراً في المخزن حالياً؟',
+        'أجهزة POS في الصيانة الخارجية أو معلقة',
+        'توزيع الأجهزة بالمخزن حسب الشركة المصنعة'
+    ],
+    'sim-warehouse': [
+        'كم عدد الشرائح المتاحة وغير المسكنة بالمخزن؟',
+        'توزيع شرائح الاتصال حسب الشبكة (فودافون، أورنج، اتصالات، وي)',
+        'الشرائح المعطلة أو التي تحتاج لاستبدال'
+    ],
+    'hq-maintenance': [
+        'ما هي الأجهزة المتواجدة حالياً بمركز الصيانة الرئيسي؟',
+        'أكثر 5 أعطال متكررة في الماكينات هذا الشهر',
+        'الأجهزة التي استغرقت أكثر من 15 يوماً في الصيانة'
+    ],
+    'installments': [
+        'المخابز المتأخرة عن سداد الأقساط الشهرية',
+        'إجمالي مبالغ الأقساط المتبقية للتحصيل',
+        'عقود التقسيط بنظام 12 شهر والمبالغ المحصلة منها'
+    ],
+    'spare-parts-inventory': [
+        'أكثر 5 قطع غيار استهلاكاً في الصيانة هذا الشهر',
+        'قطع الغيار التي قارب رصيدها على النفاد من المخزن',
+        'إجمالي حركات صرف قطع الغيار خلال الأسبوع الحالي'
+    ],
+    'customers': [
+        'أكثر 10 مخابز استبدالاً للأجهزة في المحافظة',
+        'مخابز إدارة الأزبكية وحالة أجهزتها',
+        'المخابز التي عليها أقساط متأخرة وتكلفة صيانتها'
+    ],
+    'data-explorer': [
+        'أحدث 10 عمليات مسجلة في جدول العمليات transactions_raw',
+        'إجمالي عدد الأجهزة المسجلة في جدول devices',
+        'بيانات المدفوعات المسجلة خلال آخر شهر'
+    ],
+    'sync-monitor': [
+        'ملخص التغييرات المسجلة في جدول audit_change_logs اليوم',
+        'العمليات المعدلة (UPDATE) الأكثر تكراراً في قاعدة البيانات',
+        'حالة طابور المزامنة وأي أخطاء مسجلة'
+    ],
+    'default': [
+        'إجمالي متحصلات ومبيعات اليوم لجميع المخابز',
+        'ملخص موقف أجهزة الـ POS في المخزن والمخابز',
+        'أكثر الأعطال تسجيلاً في الصيانة خلال الشهر الحالي'
+    ]
+};
+
+function renderAiDrawerContextChips() {
+    const container = document.getElementById('ai-drawer-chips-container');
+    const badge = document.getElementById('ai-drawer-current-tab-badge');
+    if (!container) return;
+
+    const currentTab = AppState.currentTab || 'dashboard';
+    const prompts = AI_DRAWER_CONTEXT_PROMPTS[currentTab] || AI_DRAWER_CONTEXT_PROMPTS['default'];
+
+    if (badge) {
+        badge.textContent = `تبويب: ${currentTab}`;
+    }
+
+    container.innerHTML = prompts.map(p => `
+        <button type="button" class="btn btn-secondary" onclick="applyAiDrawerChip('${escapeHtml(p)}')" style="font-size:11px; padding:5px 12px; border-radius:var(--radius-full); background:var(--surface-3); border:1px solid var(--border-subtle); display:inline-flex; align-items:center; gap:6px; cursor:pointer; text-align:start; line-height:1.4;">
+            <i data-lucide="sparkle" style="width:11px; height:11px; color:var(--accent-primary); flex-shrink:0;"></i>
+            <span>${escapeHtml(p)}</span>
+        </button>
+    `).join('');
+
+    refreshIcons();
+}
+
+function applyAiDrawerChip(promptText) {
+    const input = document.getElementById('ai-drawer-question-input');
+    if (input) {
+        input.value = promptText;
+        submitAiDrawerQuery(promptText);
+    }
+}
+window.applyAiDrawerChip = applyAiDrawerChip;
+
+function openAiCopilotDrawer() {
+    const drawer = document.getElementById('drawer-ai-copilot');
+    if (!drawer) return;
+    SmartUI.Drawer.open(drawer);
+    renderAiDrawerContextChips();
+    const input = document.getElementById('ai-drawer-question-input');
+    if (input) setTimeout(() => input.focus(), 150);
+    refreshIcons();
+}
+window.openAiCopilotDrawer = openAiCopilotDrawer;
+
+function closeAiCopilotDrawer() {
+    const drawer = document.getElementById('drawer-ai-copilot');
+    if (drawer) SmartUI.Drawer.close(drawer);
+}
+window.closeAiCopilotDrawer = closeAiCopilotDrawer;
+
+async function submitAiDrawerQuery(customQuery) {
+    const input = document.getElementById('ai-drawer-question-input');
+    const question = (customQuery || (input ? input.value : '')).trim();
+    if (!question) {
+        if (typeof SmartUI !== 'undefined' && SmartUI.Toast) {
+            SmartUI.Toast.show({ title: 'تنبيه', message: 'يرجى كتابة السؤال أولاً', type: 'warning' });
+        } else {
+            alert('يرجى كتابة السؤال أولاً');
+        }
+        return;
+    }
+
+    const resultArea = document.getElementById('ai-drawer-result-area');
+    const loadingEl = document.getElementById('ai-drawer-loading');
+    const resultCard = document.getElementById('ai-drawer-result-card');
+    const errorEl = document.getElementById('ai-drawer-error');
+    const btnSubmit = document.getElementById('btn-submit-ai-drawer');
+    const iconSubmit = document.getElementById('icon-ai-drawer-send');
+    const modelSelect = document.getElementById('ai-drawer-model-select');
+
+    if (resultArea) resultArea.style.display = 'block';
+    if (loadingEl) loadingEl.style.display = 'block';
+    if (resultCard) resultCard.style.display = 'none';
+    if (errorEl) errorEl.style.display = 'none';
+    if (btnSubmit) btnSubmit.disabled = true;
+    if (iconSubmit) iconSubmit.classList.add('spin-animation');
+
+    try {
+        const payload = { 
+            question, 
+            model: modelSelect ? modelSelect.value : 'openai/gpt-oss-120b'
+        };
+
+        const response = await fetch('/api/ai/query', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        const resData = await response.json();
+        if (!response.ok || !resData.success) {
+            throw new Error(resData.error || 'تعذر الحصول على إجابة من الذكاء الاصطناعي.');
+        }
+
+        lastAiDrawerResult = resData;
+
+        // Render response
+        const titleEl = document.getElementById('ai-drawer-result-title');
+        const explEl = document.getElementById('ai-drawer-result-explanation');
+        const latencyEl = document.getElementById('ai-drawer-latency-badge');
+        const rowsEl = document.getElementById('ai-drawer-rows-badge');
+        const sqlEl = document.getElementById('ai-drawer-sql-code');
+        const thead = document.getElementById('ai-drawer-table-head');
+        const tbody = document.getElementById('ai-drawer-table-body');
+
+        if (titleEl) titleEl.textContent = resData.suggestedTitle || 'تحليل الذكاء الاصطناعي';
+        if (explEl) explEl.textContent = resData.explanation || '';
+        if (latencyEl) {
+            const timeMs = resData.stats?.totalTimeMs || resData.stats?.executionTimeMs || 0;
+            latencyEl.textContent = `${timeMs} ms`;
+        }
+        if (rowsEl) {
+            const rowCount = resData.data ? resData.data.length : 0;
+            rowsEl.textContent = `${rowCount} سجل`;
+        }
+        if (sqlEl) sqlEl.textContent = resData.sql || '';
+
+        // Table
+        const cols = resData.columns || [];
+        const rows = resData.data || [];
+
+        if (thead) {
+            if (cols.length === 0) {
+                thead.innerHTML = '<tr><th>البيان</th></tr>';
+            } else {
+                thead.innerHTML = '<tr><th style="width:40px;">#</th>' + cols.map(c => `<th>${escapeHtml(c)}</th>`).join('') + '</tr>';
+            }
+        }
+
+        if (tbody) {
+            if (rows.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="${cols.length + 1}" style="text-align:center; padding:20px; color:var(--text-muted);">لا توجد سجلات مطابقة للبحث</td></tr>`;
+            } else {
+                tbody.innerHTML = rows.map((r, idx) => {
+                    const tds = cols.map(c => {
+                        const val = r[c];
+                        if (val === null || val === undefined || val === '') return '<td style="color:var(--text-muted);">-</td>';
+                        const isMono = typeof val === 'number' || /date|time|serial|id|code|phone|sn|iccid|imei|amount|price|cost|qty|count/i.test(c);
+                        const monoClass = isMono ? ' class="mono-ltr"' : '';
+                        const formattedVal = (typeof val === 'number') ? val.toLocaleString('ar-EG') : escapeHtml(String(val));
+                        return `<td${monoClass}>${formattedVal}</td>`;
+                    }).join('');
+                    return `<tr><td class="mono-ltr" style="font-size:11px; color:var(--text-muted);">${idx + 1}</td>${tds}</tr>`;
+                }).join('');
+            }
+        }
+
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (resultCard) resultCard.style.display = 'block';
+    } catch (err) {
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (errorEl) {
+            errorEl.style.display = 'block';
+            const errorText = document.getElementById('ai-drawer-error-text');
+            if (errorText) errorText.textContent = err.message;
+        }
+    } finally {
+        if (btnSubmit) btnSubmit.disabled = false;
+        if (iconSubmit) iconSubmit.classList.remove('spin-animation');
+        refreshIcons();
+    }
+}
+window.submitAiDrawerQuery = submitAiDrawerQuery;
+
+function copyAiDrawerSql() {
+    if (!lastAiDrawerResult || !lastAiDrawerResult.sql) return;
+    navigator.clipboard.writeText(lastAiDrawerResult.sql).then(() => {
+        if (typeof SmartUI !== 'undefined' && SmartUI.Toast) {
+            SmartUI.Toast.show({ title: 'تم النسخ', message: 'تم نسخ استعلام SQL إلى الحافظة بنجاح', type: 'success' });
+        }
+    }).catch(e => {
+        alert('تعذر نسخ النص: ' + e.message);
+    });
+}
+window.copyAiDrawerSql = copyAiDrawerSql;
+
+function exportAiDrawerToExcel() {
+    if (!lastAiDrawerResult || !lastAiDrawerResult.data || lastAiDrawerResult.data.length === 0) {
+        if (typeof SmartUI !== 'undefined' && SmartUI.Toast) {
+            SmartUI.Toast.show({ title: 'تنبيه', message: 'لا توجد بيانات متاحة للتصدير', type: 'warning' });
+        }
+        return;
+    }
+    if (!window.XLSX) {
+        alert('مكتبة XLSX غير متوفرة');
+        return;
+    }
+    try {
+        const ws = XLSX.utils.json_to_sheet(lastAiDrawerResult.data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "AI_Report");
+        const filename = `AI_Report_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        XLSX.writeFile(wb, filename);
+
+        if (typeof SmartUI !== 'undefined' && SmartUI.Toast) {
+            SmartUI.Toast.show({
+                title: 'اكتمل التصدير',
+                message: `تم تصدير ${lastAiDrawerResult.data.length} سجل إلى ملف Excel بنجاح`,
+                type: 'success'
+            });
+        }
+    } catch (e) {
+        alert('خطأ أثناء التصدير: ' + e.message);
+    }
+}
+window.exportAiDrawerToExcel = exportAiDrawerToExcel;
+
+function initAiCopilotDrawer() {
+    // Quick launcher button in header
+    const btnHeader = document.getElementById('btn-open-ai-drawer');
+    if (btnHeader) {
+        btnHeader.addEventListener('click', (e) => {
+            e.preventDefault();
+            openAiCopilotDrawer();
+        });
+    }
+
+    // Close button
+    const btnClose = document.getElementById('btn-close-ai-drawer');
+    if (btnClose) {
+        btnClose.addEventListener('click', () => closeAiCopilotDrawer());
+    }
+
+    // Keyboard Shortcuts: Ctrl+K / Cmd+K and '/'
+    window.addEventListener('keydown', (e) => {
+        // Ctrl+K or Cmd+K
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+            e.preventDefault();
+            const drawer = document.getElementById('drawer-ai-copilot');
+            if (drawer && drawer.classList.contains('active')) {
+                closeAiCopilotDrawer();
+            } else {
+                openAiCopilotDrawer();
+            }
+            return;
+        }
+
+        // '/' shortcut when not focused in input/textarea/select
+        if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+            e.preventDefault();
+            openAiCopilotDrawer();
+        }
+    });
+
+    // Enter / Ctrl+Enter in question textarea
+    const textarea = document.getElementById('ai-drawer-question-input');
+    if (textarea) {
+        textarea.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                submitAiDrawerQuery();
+            }
+        });
+    }
+}
+
+console.log('SmartCS Enterprise Core Activated - All 4 Phases Complete');
