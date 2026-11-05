@@ -1278,5 +1278,6 @@
   {"ID": "2027", "Item Serial": "3210940363", "Item Type": "pos", "Trade Type": "IN", "Trade Location": "المركز الرئسى", "Out Date": null, "In Date": null, "Quantity": "1", "Form Number": "15102026", "IN/OUT BY": null, "Comments": "new"},
   {"ID": "2028", "Item Serial": "3210940364", "Item Type": "pos", "Trade Type": "IN", "Trade Location": "المركز الرئسى", "Out Date": null, "In Date": null, "Quantity": "1", "Form Number": "15102026", "IN/OUT BY": null, "Comments": "new"},
   {"ID": "2029", "Item Serial": "3210940365", "Item Type": "pos", "Trade Type": "IN", "Trade Location": "المركز الرئسى", "Out Date": null, "In Date": null, "Quantity": "1", "Form Number": "15102026", "IN/OUT BY": null, "Comments": "new"},
-  {"ID": "2030", "Item Serial": "3210940366", "Item Type": "pos", "Trade Type": "IN", "Trade Location": "المركز الرئسى", "Out Date": null, "In Date": null, "Quantity": "1", "Form Number": "15102026", "IN/OUT BY": null, "Comments": "new"}
+  {"ID": "2030", "Item Serial": "3210940366", "Item Type": "pos", "Trade Type": "IN", "Trade Location": "المركز الرئسى", "Out Date": null, "In Date": null, "Quantity": "1", "Form Number": "15102026", "IN/OUT BY": null, "Comments": "new"},
+  {"ID": "2031", "Item Serial": "3H246273", "Item Type": "POS", "Trade Type": "Out", "Trade Location": "HQ", "Out Date": "05-Nov-26 12:19:52 PM", "In Date": null, "Quantity": "1", "Form Number": null, "IN/OUT BY": " محمد عصام محمود فرغلي", "Comments": "الماكينه مسروقه -  محمد عصام محمود فرغلي - وائل صلاح عمر-010915-الماكينه مسروقه"}
 ]

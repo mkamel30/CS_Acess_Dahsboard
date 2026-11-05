@@ -127,9 +127,9 @@ if (appCfg.isCloudServer) {
         database: appCfg.pgDatabase || process.env.PGDATABASE || 'smartcs_db',
         host: appCfg.pgHost || process.env.PGHOST || '127.0.0.1',
         port: appCfg.pgPort || process.env.PGPORT || 5432,
-        max: 20,
-        connectionTimeoutMillis: 5000,
-        idleTimeoutMillis: 30000,
+        max: 30,
+        connectionTimeoutMillis: 10000,
+        idleTimeoutMillis: 10000,
         statement_timeout: 60000,
     });
     pgPool.on('error', (err) => {
@@ -206,6 +206,11 @@ async function logSystemError(module, endpoint, err, req = null, severity = 'ERR
         const reqData = req ? JSON.stringify({ method: req.method, query: req.query, path: req.path }) : null;
         
         console.error(`[SYSTEM ERROR - ${module}] [${endpoint}]:`, errMsg);
+
+        // Guard against recursive connection pool exhaustion during database outages
+        if (errMsg.includes('timeout exceeded') || errMsg.includes('ECONNREFUSED') || errMsg.includes('Connection terminated')) {
+            return;
+        }
         
         if (appCfg.isCloudServer && pgPool) {
             await pgPool.query(`
@@ -5045,6 +5050,50 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
         'failure_points_raw', 'trade_raw', 'temp_transfer_raw', 'audit_change_logs', 'sync_history'
     ]);
 
+    // In-memory column cache to eliminate repetitive DDL queries and avoid PostgreSQL table lock contention
+    const syncedTableColumnsCache = new Map();
+
+    async function getOrFetchTableColumns(tableName) {
+        let existingCols = syncedTableColumnsCache.get(tableName);
+        if (!existingCols) {
+            existingCols = new Set();
+            try {
+                const info = await allQuery(`PRAGMA table_info("${tableName}");`);
+                if (info && Array.isArray(info)) {
+                    info.forEach(i => existingCols.add(i.name));
+                }
+            } catch(e) {}
+            syncedTableColumnsCache.set(tableName, existingCols);
+        }
+        return existingCols;
+    }
+
+    async function ensureTableAndColumnsForBatch(tableName, keys, tablePk) {
+        if (!tableName || !keys || keys.length === 0) return;
+        const existingCols = await getOrFetchTableColumns(tableName);
+
+        if (existingCols.size === 0) {
+            const createCols = keys.map(k => {
+                if (tablePk && k === tablePk) return `"${k}" TEXT PRIMARY KEY`;
+                return `"${k}" TEXT`;
+            }).join(', ');
+            await runQuery(`CREATE TABLE IF NOT EXISTS "${tableName}" (${createCols});`).catch(() => {});
+            keys.forEach(k => existingCols.add(k));
+            return;
+        }
+
+        for (const k of keys) {
+            if (!existingCols.has(k)) {
+                try {
+                    await runQuery(`ALTER TABLE "${tableName}" ADD COLUMN "${k}" TEXT;`);
+                    existingCols.add(k);
+                } catch(e) {
+                    existingCols.add(k);
+                }
+            }
+        }
+    }
+
     try {
         if (tablesData && typeof tablesData === 'object') {
             for (const [tbl, rows] of Object.entries(tablesData)) {
@@ -5056,11 +5105,7 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
                         const pkCandidates = ['ID', 'id', 'Serial', 'sim_serial', 'faultid', 'FixID'];
                         tablePk = pkCandidates.find(c => keys.includes(c)) || null;
                     }
-                    const createCols = keys.map(k => {
-                        if (tablePk && k === tablePk) return `"${k}" TEXT PRIMARY KEY`;
-                        return `"${k}" TEXT`;
-                    }).join(', ');
-                    await runQuery(`CREATE TABLE IF NOT EXISTS "${tbl}" (${createCols});`);
+                    await ensureTableAndColumnsForBatch(tbl, keys, tablePk);
                     for (const row of rows) {
                         const rowKeys = Object.keys(row);
                         const placeholders = rowKeys.map(() => '?').join(', ');
@@ -5096,18 +5141,7 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
                                 const pkCandidates = ['ID', 'id', 'Serial', 'sim_serial', 'faultid', 'FixID'];
                                 tablePk = pkCandidates.find(c => keys.includes(c)) || null;
                             }
-                            const createCols = keys.map(k => {
-                                if (tablePk && k === tablePk) return `"${k}" TEXT PRIMARY KEY`;
-                                return `"${k}" TEXT`;
-                            }).join(', ');
-                            await runQuery(`CREATE TABLE IF NOT EXISTS "${change.table_name}" (${createCols});`).catch(() => {});
-                            const existingInfo = await allQuery(`PRAGMA table_info("${change.table_name}");`).catch(() => []);
-                            const existingCols = new Set(existingInfo.map(i => i.name));
-                            for (const k of keys) {
-                                if (!existingCols.has(k)) {
-                                    await runQuery(`ALTER TABLE "${change.table_name}" ADD COLUMN "${k}" TEXT;`).catch(() => {});
-                                }
-                            }
+                            await ensureTableAndColumnsForBatch(change.table_name, keys, tablePk);
                             const placeholders = keys.map(() => '?').join(', ');
                             const quotedCols = keys.map(k => `"${k}"`).join(', ');
                             const values = Object.values(parsed).map(v => v === null || v === undefined ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v)));
@@ -5131,8 +5165,7 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
                     }
                 } else if (change.table_name && ALLOWED_SYNC_TABLES.has(change.table_name) && change.change_type === 'DELETE' && change.record_id) {
                     try {
-                        const existingInfo = await allQuery(`PRAGMA table_info("${change.table_name}");`).catch(() => []);
-                        const existingCols = new Set(existingInfo.map(i => i.name));
+                        const existingCols = await getOrFetchTableColumns(change.table_name);
                         let matchedPk = Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, change.table_name) ? RAW_TABLE_PK_MAP[change.table_name] : null;
                         if (matchedPk === undefined && !Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, change.table_name)) {
                             const pkCandidates = ['ID', 'id', 'Serial', 'sim_serial', 'faultid', 'FixID'];
@@ -5281,15 +5314,33 @@ app.get('/api/diagnostics/errors', async (req, res) => {
         query += ' ORDER BY id DESC LIMIT ?';
         params.push(parseInt(limit, 10));
 
-        const errors = await allQuery(query, params);
+        let errors = [];
+        try {
+            errors = await allQuery(query, params);
+        } catch(e) {
+            console.error('[/api/diagnostics/errors allQuery error]:', e.message);
+            errors = [];
+        }
         
         // Summary stats
-        const last24hCount = (await getQuery(`
-            SELECT COUNT(*) as count FROM system_error_logs 
-            WHERE timestamp >= datetime('now', '-24 hours', 'localtime')
-        `))?.count || 0;
+        let last24hCount = 0;
+        try {
+            const timeFilterSql = appCfg.isCloudServer
+                ? `SELECT COUNT(*) as count FROM system_error_logs WHERE timestamp::timestamptz >= (NOW() - INTERVAL '24 hours')`
+                : `SELECT COUNT(*) as count FROM system_error_logs WHERE timestamp >= datetime('now', '-24 hours', 'localtime')`;
+            const row = await getQuery(timeFilterSql);
+            last24hCount = row?.count || 0;
+        } catch(e) {
+            last24hCount = 0;
+        }
 
-        const totalErrors = (await getQuery(`SELECT COUNT(*) as count FROM system_error_logs`))?.count || 0;
+        let totalErrors = 0;
+        try {
+            const totRow = await getQuery(`SELECT COUNT(*) as count FROM system_error_logs`);
+            totalErrors = totRow?.count || 0;
+        } catch(e) {
+            totalErrors = errors.length;
+        }
 
         res.json({
             success: true,
@@ -5298,7 +5349,7 @@ app.get('/api/diagnostics/errors', async (req, res) => {
             errors
         });
     } catch (err) {
-        logSystemError('DIAGNOSTICS', '/api/diagnostics/errors', err, req);
+        console.error('[/api/diagnostics/errors error]:', err.message);
         res.status(500).json({ success: false, error: err.message });
     }
 });

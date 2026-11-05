@@ -135,6 +135,11 @@ function translateSqliteToPostgres(sql, params) {
     // Auto-convert ALTER TABLE ADD COLUMN to ADD COLUMN IF NOT EXISTS
     pgSql = pgSql.replace(/\bADD\s+COLUMN\s+(?!IF\s+NOT\s+EXISTS\b)/ig, 'ADD COLUMN IF NOT EXISTS ');
     
+    // Auto-convert SQLite datetime('now', ...) to PostgreSQL intervals
+    pgSql = pgSql.replace(/datetime\s*\(\s*'now'\s*,\s*'-(\d+)\s+hours?'\s*(?:,\s*'localtime'\s*)?\)/ig, "(NOW() - INTERVAL '$1 hours')");
+    pgSql = pgSql.replace(/datetime\s*\(\s*'now'\s*,\s*'-(\d+)\s+days?'\s*(?:,\s*'localtime'\s*)?\)/ig, "(NOW() - INTERVAL '$1 days')");
+    pgSql = pgSql.replace(/datetime\s*\(\s*'now'\s*(?:,\s*'localtime'\s*)?\)/ig, "NOW()");
+    
     return { pgSql, pgParams };
 }
 

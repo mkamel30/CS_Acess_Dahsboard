@@ -3534,9 +3534,13 @@ async function retrySyncDlqQueue() {
     if (icon) icon.classList.add('spin-animation');
 
     try {
+        const adminSecret = sessionStorage.getItem('cs_admin_secret') || 'TITI';
         const res = await fetch('/api/sync/retry-dlq', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 
+                'Content-Type': 'application/json',
+                'x-admin-secret': adminSecret
+            }
         });
         const data = await res.json();
         if (!res.ok || !data.success) throw new Error(data.error || 'فشلت عملية إعادة جدولة الطابور');
