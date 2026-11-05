@@ -3664,10 +3664,10 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
         const likeParams = searchTerms.flatMap(term => [`%${term}%`, `%${term}%`]);
 
         const transferRows = await allQuery(`
-            SELECT COALESCE(t.TransferID, t.rowid, 1) as id, t.*
+            SELECT t.*
             FROM temp_transfer_raw t
             WHERE t.OldPOS IN (${placeholders}) OR t.NewPOS IN (${placeholders}) OR ${likeClauses}
-            ORDER BY CAST(COALESCE(t.TransferID, t.rowid, 0) AS INTEGER) DESC
+            ORDER BY t.rowid DESC
         `, [...searchTerms, ...searchTerms, ...likeParams]).catch(() => []);
 
         const replacements = transferRows.map(r => {
@@ -3683,7 +3683,7 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
             }
 
             return {
-                id: r.id || r.TransferID || r.rowid,
+                id: r.TransferID || r.transfer_id || r.id || r.rowid || '-',
                 date: r.Transfer_Date || r.transfer_date || '-',
                 merchant_code: r.bkCode || r.bkcode || '-',
                 merchant_name: r.POSCode || r.poscode || r.bkCode || '-',

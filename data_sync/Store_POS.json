@@ -137,6 +137,7 @@
   {"Serial": "3210940364", "type": "PAX", "faulty": "False", "faulty_detils": null, "notes": null, "Model": "A8900", "reviewed": "False", "pos_status": "Branch", "status_note": "New", "store_ID": "230"},
   {"Serial": "3210940365", "type": "PAX", "faulty": "False", "faulty_detils": null, "notes": null, "Model": "A8900", "reviewed": "False", "pos_status": "Branch", "status_note": "New", "store_ID": "231"},
   {"Serial": "3210940366", "type": "PAX", "faulty": "False", "faulty_detils": null, "notes": null, "Model": "A8900", "reviewed": "False", "pos_status": "Branch", "status_note": "New", "store_ID": "232"},
+  {"Serial": "3C787820", "type": "PAX", "faulty": "True", "faulty_detils": "تاكيد بصمه وتحقق من السريال", "notes": null, "Model": "S90", "reviewed": "False", "pos_status": null, "status_note": null, "store_ID": "240"},
   {"Serial": "3H244875", "type": "PAX", "faulty": "True", "faulty_detils": "بورده رئيسيه", "notes": null, "Model": "S90", "reviewed": "False", "pos_status": null, "status_note": null, "store_ID": "154"},
   {"Serial": "5F272504", "type": "PAX", "faulty": "True", "faulty_detils": null, "notes": null, "Model": "D210", "reviewed": "False", "pos_status": "Branch", "status_note": null, "store_ID": "155"},
   {"Serial": "S3C786435", "type": "PAX", "faulty": "False", "faulty_detils": "قادمة من الصيانة و تم عمل تغيير ل بيت الكارت", "notes": null, "Model": "S90", "reviewed": "False", "pos_status": "Branch", "status_note": null, "store_ID": "156"},
