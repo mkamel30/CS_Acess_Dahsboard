@@ -315,8 +315,8 @@ const RAW_TABLE_PK_MAP = {
     'transactions_raw': 'ID',
     'maintenance_raw': 'ID',
     'payments_raw': 'ID',
-    'store_pos_raw': 'Serial',
-    'store_sim_raw': 'sim_serial',
+    'store_pos_raw': 'store_ID',
+    'store_sim_raw': 'id',
     'store_sp_raw': 'sync_key',
     'store_sp_maintenance_raw': 'sync_key',
     'installments_raw': 'id',
@@ -325,7 +325,7 @@ const RAW_TABLE_PK_MAP = {
     'tblfixes_raw': 'FixID',
     'failure_points_raw': 'sync_key',
     'trade_raw': 'ID',
-    'temp_transfer_raw': 'sync_key'
+    'temp_transfer_raw': 'TransferID'
 };
 
 let _pgConstraintCache = new Map();
@@ -3084,6 +3084,23 @@ app.get('/api/customers/profile/:code', async (req, res) => {
         const asset = allAssetRows.find(r => r.telephone_1 || r.Address || r.NationalD) || allAssetRows[0];
         const merchantCode = asset.clean_code || cleanCode || code;
 
+        // 3. Resolve all SIM cards (All possible SIMs linked to customer)
+        const simMap = new Map();
+        
+        function addSim(ser, slot, carrier, phone) {
+            if (!ser || ser === '-' || ser === 'null' || ser === 'undefined') return;
+            const cleanSer = String(ser).trim();
+            if (!cleanSer || cleanSer.length < 5) return;
+            if (!simMap.has(cleanSer)) {
+                simMap.set(cleanSer, {
+                    serial: cleanSer,
+                    slot: slot || `شريحة #${simMap.size + 1}`,
+                    carrier: carrier || 'غير محدد',
+                    phone: phone && phone !== '-' && phone !== 'null' ? phone : '-'
+                });
+            }
+        }
+
         // 2. Resolve ALL POS devices linked to this customer from all asset records
         const posSet = new Map();
 
@@ -3189,6 +3206,11 @@ app.get('/api/customers/profile/:code', async (req, res) => {
             transferDevices.forEach(td => {
                 const s = String(td.NewPOS || '').trim();
                 if (s && s !== '-' && !posSet.has(s)) {
+                    // If the transferred serial is a SIM ICCID, register it under SIM cards instead of POS devices
+                    if (s.startsWith('8920') || s.length >= 18 || /^\d{18,22}$/.test(s)) {
+                        addSim(s, 'شريحة بديلة منصرفة (استبدال)', td.NewType || 'Vodafone', null);
+                        return;
+                    }
                     const spec = resolveDeviceSpecs(s);
                     posSet.set(s, {
                         serial: s,
@@ -3230,22 +3252,7 @@ app.get('/api/customers/profile/:code', async (req, res) => {
             }
         });
 
-        // 3. Resolve all SIM cards (All possible SIMs linked to customer)
-        const simMap = new Map();
-        
-        function addSim(ser, slot, carrier, phone) {
-            if (!ser || ser === '-' || ser === 'null' || ser === 'undefined') return;
-            const cleanSer = String(ser).trim();
-            if (!cleanSer || cleanSer.length < 5) return;
-            if (!simMap.has(cleanSer)) {
-                simMap.set(cleanSer, {
-                    serial: cleanSer,
-                    slot: slot || `شريحة #${simMap.size + 1}`,
-                    carrier: carrier || 'غير محدد',
-                    phone: phone && phone !== '-' && phone !== 'null' ? phone : '-'
-                });
-            }
-        }
+        // Populate SIM cards from all asset records
 
         allAssetRows.forEach((r, idx) => {
             const prefix = allAssetRows.length > 1 ? ` (سجل #${idx + 1})` : '';
@@ -3537,10 +3544,14 @@ function resolveMaintenanceServiceDetails(t, allSp = [], allPayments = [], price
 
 // 3. Device Deep-Dive 360 (4 Tabs: Replacements from temp_transfer, Maintenance In/Out, Spare Parts, HQ Central Cycles)
 app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     try {
         const { serial } = req.params;
         const s = serial.trim();
         if (!s) return res.status(400).json({ success: false, error: "Serial is required" });
+
+        const cleanS = s.toUpperCase().replace(/^S/i, '').replace(/^M-/i, '');
+        const searchTerms = Array.from(new Set([s, cleanS, `S${cleanS}`, `M-${cleanS}`].filter(Boolean)));
 
         // 1. Basic Device Info from assets_raw / devices / maintenance_raw / temp_transfer_raw
         const rawAsset = await getQuery(`
@@ -3557,7 +3568,6 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
         let detectedManuf = '';
 
         if (rawAsset) {
-            const cleanS = s.toUpperCase().replace(/^S/i, '').replace(/^M-/i, '');
             const pos1 = String(rawAsset.POS || '').toUpperCase();
             const pos2 = String(rawAsset.POS_2 || '').toUpperCase();
             const pos3 = String(rawAsset.pos_3 || '').toUpperCase();
@@ -3579,9 +3589,9 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
             const transferModel = await getQuery(`
                 SELECT t.*
                 FROM temp_transfer_raw t
-                WHERE (t.NewPOS = ? OR t.OldPOS = ? OR t.NewPOS LIKE ? OR t.OldPOS LIKE ?)
+                WHERE (t.NewPOS = ? OR t.OldPOS = ? OR t.NewPOS LIKE ? OR t.OldPOS LIKE ? OR t.NewPOS LIKE ? OR t.OldPOS LIKE ?)
                 LIMIT 1
-            `, [s, s, `%${s}%`, `%${s}%`]).catch(() => null);
+            `, [s, s, `%${s}%`, `%${s}%`, `%${cleanS}%`, `%${cleanS}%`]).catch(() => null);
 
             if (transferModel) {
                 const rawModelType = transferModel.NewType || transferModel.new_type || transferModel.OldType || transferModel.old_type;
@@ -3614,7 +3624,6 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
 
         // Accurate heuristic fallback based on serial prefixes in Egypt
         if (!detectedModel) {
-            const cleanS = s.toUpperCase().replace(/^S/i, '').replace(/^M-/i, '');
             if (cleanS.startsWith('3C') || cleanS.startsWith('3H') || cleanS.startsWith('3D')) {
                 detectedManuf = 'PAX';
                 detectedModel = 'S90';
@@ -3650,28 +3659,34 @@ app.get('/api/customers/device-deepdive/:serial', async (req, res) => {
         };
 
         // 2. TAB 1: Replacements & Swaps History strictly from temp_transfer_raw (and temp_transfer)
+        const placeholders = searchTerms.map(() => '?').join(',');
+        const likeClauses = searchTerms.map(() => 't.OldPOS LIKE ? OR t.NewPOS LIKE ?').join(' OR ');
+        const likeParams = searchTerms.flatMap(term => [`%${term}%`, `%${term}%`]);
+
         const transferRows = await allQuery(`
-            SELECT t.rowid as id, t.*
+            SELECT COALESCE(t.TransferID, t.rowid, 1) as id, t.*
             FROM temp_transfer_raw t
-            WHERE t.OldPOS = ? OR t.NewPOS = ? OR t.OldPOS LIKE ? OR t.NewPOS LIKE ?
-            ORDER BY t.rowid DESC
-        `, [s, s, `%${s}%`, `%${s}%`]).catch(() => []);
+            WHERE t.OldPOS IN (${placeholders}) OR t.NewPOS IN (${placeholders}) OR ${likeClauses}
+            ORDER BY CAST(COALESCE(t.TransferID, t.rowid, 0) AS INTEGER) DESC
+        `, [...searchTerms, ...searchTerms, ...likeParams]).catch(() => []);
 
         const replacements = transferRows.map(r => {
             const oldSerial = r.OldPOS || r.old_serial || '-';
             const newSerial = r.NewPOS || r.new_serial || '-';
             let role = 'استبدال ماكينة';
-            if (String(oldSerial).toUpperCase() === s.toUpperCase()) {
+            const oldUpper = String(oldSerial).toUpperCase();
+            const newUpper = String(newSerial).toUpperCase();
+            if (oldUpper.includes(cleanS)) {
                 role = 'ماكينة قديمة مستبدلة (تم سحبها)';
-            } else if (String(newSerial).toUpperCase() === s.toUpperCase()) {
+            } else if (newUpper.includes(cleanS)) {
                 role = 'ماكينة بديلة منصرفة (تم تسليمها)';
             }
 
             return {
-                id: r.id || r.rowid,
+                id: r.id || r.TransferID || r.rowid,
                 date: r.Transfer_Date || r.transfer_date || '-',
-                merchant_code: r.bkCode || r.bkcode || r.POSCode || '-',
-                merchant_name: r.bkCode || r.bkcode || r.POSCode || '-',
+                merchant_code: r.bkCode || r.bkcode || '-',
+                merchant_name: r.POSCode || r.poscode || r.bkCode || '-',
                 old_serial: oldSerial,
                 new_serial: newSerial,
                 old_type: r.OldType || r.old_type || '-',

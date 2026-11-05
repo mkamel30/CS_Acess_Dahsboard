@@ -6882,7 +6882,7 @@ async function openDevice360Modal(serial) {
     switchDeviceSubtab('maintenance');
 
     try {
-        const res = await fetch(`/api/customers/device-deepdive/${encodeURIComponent(serial)}`);
+        const res = await fetch(`/api/customers/device-deepdive/${encodeURIComponent(serial)}?_t=${Date.now()}`, { cache: 'no-store' });
         const data = await res.json();
 
         if (!data.success) {
@@ -6967,17 +6967,23 @@ function renderDeviceDeepdiveContent(data) {
     // TAB 2: Replacements & Swaps (from temp_transfer)
     const repBody = document.getElementById('dev-table-replacements-body');
     if (replacements.length === 0) {
-        repBody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:35px; color:var(--text-muted);">لا توجد حركات استبدال مسجلة لهذه الماكينة في جدول الاستبدالات</td></tr>`;
+        repBody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:35px; color:var(--text-muted);">لا توجد حركات استبدال مسجلة لهذه الماكينة في جدول الاستبدالات</td></tr>`;
     } else {
         repBody.innerHTML = replacements.map((r, idx) => `
             <tr>
-                <td style="font-family:var(--font-en); font-weight:700; color:var(--text-muted);">${idx + 1}</td>
+                <td style="font-family:var(--font-mono); font-weight:700; color:var(--text-muted);">${idx + 1}</td>
                 <td>${formatDateTimeCell(r.date)}</td>
-                <td><strong style="font-family:var(--font-en); color:#ef4444; font-size:13px;">${r.old_serial}</strong></td>
-                <td><strong style="font-family:var(--font-en); color:#10b981; font-size:13px;">${r.new_serial}</strong></td>
+                <td>
+                    <div style="display:flex; flex-direction:column; gap:2px;">
+                        <strong style="font-size:12px; color:var(--text-primary);">${r.merchant_name && r.merchant_name !== '-' ? r.merchant_name : 'عميل'}</strong>
+                        ${r.merchant_code && r.merchant_code !== '-' ? `<span class="badge inmerchant" style="font-size:10px; width:fit-content; font-family:var(--font-mono);">${r.merchant_code}</span>` : ''}
+                    </div>
+                </td>
+                <td class="mono-ltr"><strong style="color:var(--status-danger); font-size:13px;">${r.old_serial}</strong></td>
+                <td class="mono-ltr"><strong style="color:var(--status-success); font-size:13px;">${r.new_serial}</strong></td>
                 <td><span class="badge inmerchant" style="font-size:11px; font-weight:700;">${(r.old_type && r.new_type && r.old_type !== r.new_type) ? `${r.old_type} ⬅️ ${r.new_type}` : (r.new_type || r.old_type || 'PAX - S90')}</span></td>
-                <td><strong style="font-size:12px; color:var(--md-sys-color-primary);">${r.technician || 'فني الصيانة'}</strong></td>
-                <td style="font-size:11px; color:var(--md-sys-color-on-surface); max-width:220px; word-break:break-word;">${r.notes || '-'}</td>
+                <td><strong style="font-size:12px; color:var(--accent-primary);">${r.technician || 'فني الصيانة'}</strong></td>
+                <td style="font-size:11px; color:var(--text-secondary); max-width:220px; word-break:break-word;">${r.notes || '-'}</td>
             </tr>
         `).join('');
     }

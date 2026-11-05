@@ -511,6 +511,7 @@ async function initSyncDatabase(db) {
     await dbRun(db, `
         CREATE TABLE IF NOT EXISTS temp_transfer_raw (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            TransferID TEXT,
             POSCode TEXT,
             bkCode TEXT,
             OldPOS TEXT,
@@ -520,9 +521,14 @@ async function initSyncDatabase(db) {
             OldType TEXT,
             NewType TEXT,
             new_type TEXT,
-            notes TEXT
+            notes TEXT,
+            sync_key TEXT
         );
     `);
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_temp_transfer_transferid ON temp_transfer_raw (TransferID);`).catch(() => {});
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_temp_transfer_oldpos ON temp_transfer_raw (OldPOS);`).catch(() => {});
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_temp_transfer_newpos ON temp_transfer_raw (NewPOS);`).catch(() => {});
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_temp_transfer_bkcode ON temp_transfer_raw (bkCode);`).catch(() => {});
 
     await dbRun(db, `
         CREATE TABLE IF NOT EXISTS temp_transfer (
@@ -648,6 +654,11 @@ function enrichRecordsWithSyncKey(tableName, records) {
         } else if (tableName === 'failure_points_raw') {
             sig = [row.type, row.model].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
         } else if (tableName === 'temp_transfer_raw') {
+            const pkVal = row.TransferID || row.transfer_id;
+            if (pkVal !== undefined && pkVal !== null && String(pkVal).trim() !== '') {
+                row.sync_key = String(pkVal).trim();
+                continue;
+            }
             sig = [row.POSCode, row.OldPOS, row.NewPOS, row.Transfer_Date, row.procedure, row.bkCode].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
         }
         const occ = (occurrenceMap.get(sig) || 0) + 1;
@@ -663,6 +674,24 @@ function enrichRecordsWithSyncKey(tableName, records) {
  */
 function getRowIdentifier(tableName, primaryKey, row) {
     if (!row) return '';
+    if (tableName === 'temp_transfer_raw') {
+        const pkVal = row.TransferID || row.transfer_id;
+        if (pkVal !== undefined && pkVal !== null && String(pkVal).trim() !== '') {
+            return String(pkVal).trim();
+        }
+    }
+    if (tableName === 'store_pos_raw') {
+        const pkVal = row.store_ID || row.store_id;
+        if (pkVal !== undefined && pkVal !== null && String(pkVal).trim() !== '') {
+            return String(pkVal).trim();
+        }
+    }
+    if (tableName === 'store_sim_raw') {
+        const pkVal = row.id || row.ID || row.sim_id;
+        if (pkVal !== undefined && pkVal !== null && String(pkVal).trim() !== '') {
+            return String(pkVal).trim();
+        }
+    }
     if (row.sync_key) return row.sync_key;
     if (tableName === 'store_sp_raw') {
         const sig = [row.Serial, row.type, row.in_date, row.out_date, row.notes, row.count_in, row.count_out, row.faulty_detils].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
@@ -1346,8 +1375,8 @@ async function performFullSync(db) {
             { file: 'TransAction.json', table: 'transactions_raw', pk: 'ID', arabicName: 'حركات وصيانة الماكينات (TransAction)' },
             { file: 'Maintenance.json', table: 'maintenance_raw', pk: 'ID', arabicName: 'بلاغات الصيانة (Maintenance)' },
             { file: 'payments.json', table: 'payments_raw', pk: 'ID', arabicName: 'المدفوعات والتحصيلات (Payments)' },
-            { file: 'Store_POS.json', table: 'store_pos_raw', pk: 'Serial', arabicName: 'مخزن ماكينات الـ POS (Store_POS)' },
-            { file: 'Store_Sim.json', table: 'store_sim_raw', pk: 'sim_serial', arabicName: 'مخزن شرائح الاتصال (Store_Sim)' },
+            { file: 'Store_POS.json', table: 'store_pos_raw', pk: 'store_ID', arabicName: 'مخزن ماكينات الـ POS (Store_POS)' },
+            { file: 'Store_Sim.json', table: 'store_sim_raw', pk: 'id', arabicName: 'مخزن شرائح الاتصال (Store_Sim)' },
             { file: 'Store_SP.json', table: 'store_sp_raw', pk: 'sync_key', arabicName: 'مخزن وحركات قطع غيار الفرع (Store_SP)' },
             { file: 'Store_SP_maintenance.json', table: 'store_sp_maintenance_raw', pk: 'sync_key', arabicName: 'قطع غيار مركز الصيانة الرئيسي (Store_SP_maintenance)' },
             { file: 'tblInstallments.json', table: 'installments_raw', pk: 'ID', arabicName: 'عقود وأقساط الماكينات (tblInstallments)' },
@@ -1356,7 +1385,7 @@ async function performFullSync(db) {
             { file: 'tblFixes.json', table: 'tblfixes_raw', pk: 'FixID', arabicName: 'أنواع الإصلاحات (tblFixes)' },
             { file: 'failure_points.json', table: 'failure_points_raw', pk: 'sync_key', arabicName: 'نقاط الأعطال (failure_points)' },
             { file: 'Trade.json', table: 'trade_raw', pk: 'ID', arabicName: 'حركات اللوجستيات والمخازن (Trade)' },
-            { file: 'temp_transfer.json', table: 'temp_transfer_raw', pk: 'sync_key', arabicName: 'استبدال ونقل الماكينات والشرائح (temp_transfer)' }
+            { file: 'temp_transfer.json', table: 'temp_transfer_raw', pk: 'TransferID', arabicName: 'استبدال ونقل الماكينات والشرائح (temp_transfer)' }
         ];
 
         setProgress(30, 'مقارنة وفحص التغييرات', 'بدء فحص وتتبع التغييرات ومقارنة الفروقات...', '', 3);
