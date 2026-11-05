@@ -697,21 +697,22 @@ body.light-theme .nav-item.active {
 /* Non-Blocking Sync Progress Popover (Top-Layer) */
 #sync-progress-popover {
     position: absolute;
+    top: calc(100% + 8px);
     inset-block-start: calc(100% + 8px);
     inset-inline-start: auto;
-    inset-inline-end: 20px;
+    inset-inline-end: 0;
     width: min(420px, 92vw);
     background: var(--surface-1);
     border: 1px solid var(--border-strong);
     border-radius: var(--md-shape-corner-large);
-    box-shadow: var(--md-elevation-4);
+    box-shadow: var(--shadow-lg, var(--md-elevation-4));
     padding: 16px;
     z-index: 1000;
     display: none;
 }
 
 #sync-progress-popover.active {
-    display: block;
+    display: block !important;
     animation: fadeInTab 0.2s ease;
 }
 
