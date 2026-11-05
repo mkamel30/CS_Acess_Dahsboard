@@ -104,7 +104,7 @@ function translateSqliteToPostgres(sql, params) {
         'Pinpad_2', 'Payment_amount', 'Retired Date',
         'Item Serial', 'Item Type', 'Trade Type', 'Trade Location', 'Out Date',
         'In Date', 'Quantity', 'Form Number', 'IN/OUT BY',
-        'POSCode', 'OldPOS', 'NewPOS', 'Transfer_Date', 'OldType', 'NewType', 'bkCode'
+        'POSCode', 'OldPOS', 'NewPOS', 'Transfer_Date', 'OldType', 'NewType', 'bkCode', 'TransferID', 'store_ID'
     ];
 
     // Quote case-sensitive column names from RAW tables ONLY when NOT already enclosed in quotes

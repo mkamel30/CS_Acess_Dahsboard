@@ -331,11 +331,6 @@ const RAW_TABLE_PK_MAP = {
 let _pgConstraintCache = new Map();
 async function getPgValidConstraintCol(tbl, cols) {
     if (!appCfg.isCloudServer) return null;
-    if (Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, tbl)) {
-        const pk = RAW_TABLE_PK_MAP[tbl];
-        if (pk && cols.includes(pk)) return pk;
-        return null;
-    }
     try {
         if (!_pgConstraintCache.has(tbl)) {
             const res = await allQuery(`
@@ -351,7 +346,12 @@ async function getPgValidConstraintCol(tbl, cols) {
             _pgConstraintCache.set(tbl, validSet);
         }
         const validCols = _pgConstraintCache.get(tbl);
-        return cols.find(c => validCols.has(c)) || null;
+        if (Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, tbl)) {
+            const pk = RAW_TABLE_PK_MAP[tbl];
+            if (pk && validCols && validCols.has(pk) && cols.includes(pk)) return pk;
+        }
+        if (cols.includes('sync_key') && validCols && validCols.has('sync_key')) return 'sync_key';
+        return cols.find(c => validCols && validCols.has(c)) || null;
     } catch (e) {
         return null;
     }
