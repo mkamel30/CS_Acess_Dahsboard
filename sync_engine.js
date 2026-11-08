@@ -545,13 +545,21 @@ async function initSyncDatabase(db) {
 
     await dbRun(db, `
         CREATE TABLE IF NOT EXISTS trade_raw (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT,
-            type TEXT,
-            amount REAL,
-            notes TEXT
+            "ID" TEXT PRIMARY KEY,
+            "Item Serial" TEXT,
+            "Item Type" TEXT,
+            "Trade Type" TEXT,
+            "Trade Location" TEXT,
+            "Out Date" TEXT,
+            "In Date" TEXT,
+            "Quantity" TEXT,
+            "Form Number" TEXT,
+            "IN/OUT BY" TEXT,
+            "Comments" TEXT
         );
     `);
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_trade_raw_id ON trade_raw ("ID");`).catch(() => {});
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_trade_raw_serial ON trade_raw ("Item Serial");`).catch(() => {});
 
     await dbRun(db, `
         CREATE TABLE IF NOT EXISTS installments_raw (
@@ -705,7 +713,17 @@ function getRowIdentifier(tableName, primaryKey, row) {
         const sig = [row.type, row.model].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
         return crypto.createHash('md5').update(sig).digest('hex');
     }
+    if (tableName === 'trade_raw') {
+        const pkVal = row.ID || row.id;
+        if (pkVal !== undefined && pkVal !== null && String(pkVal).trim() !== '') {
+            return String(pkVal).trim();
+        }
+    }
     if (tableName === 'temp_transfer_raw') {
+        const pkVal = row.TransferID || row.transfer_id;
+        if (pkVal !== undefined && pkVal !== null && String(pkVal).trim() !== '') {
+            return String(pkVal).trim();
+        }
         const sig = [row.POSCode, row.OldPOS, row.NewPOS, row.Transfer_Date, row.procedure, row.bkCode].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
         return crypto.createHash('md5').update(sig).digest('hex');
     }
@@ -854,10 +872,11 @@ async function upsertTableData(db, tableName, pkField, records) {
     // Ensure all columns exist in the table (in case schema expanded)
     try {
         const existingInfo = await dbAll(db, `PRAGMA table_info("${tableName}");`);
-        const existingColNames = new Set(existingInfo.map(i => i.name));
+        const existingColNames = new Set(existingInfo.map(i => (i.name || '').toLowerCase()));
         for (const col of cols) {
-            if (!existingColNames.has(col)) {
-                await dbRun(db, `ALTER TABLE "${tableName}" ADD COLUMN "${col}" TEXT;`);
+            if (!existingColNames.has((col || '').toLowerCase())) {
+                await dbRun(db, `ALTER TABLE "${tableName}" ADD COLUMN "${col}" TEXT;`).catch(() => {});
+                existingColNames.add((col || '').toLowerCase());
             }
         }
     } catch (e) {}
