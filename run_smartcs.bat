@@ -1,6 +1,6 @@
 @echo off
 set "PATH=%SystemRoot%\System32;%SystemRoot%\System32\WindowsPowerShell\v1.0;%ProgramFiles%\nodejs;%ProgramFiles(x86)%\nodejs;%LOCALAPPDATA%\Programs\nodejs;%APPDATA%\npm;%ProgramFiles%\Git\cmd;%PATH%"
-title SmartCS Dashboard - Central Operations System
+title SmartCS Dashboard - Operations Server
 color 0a
 
 cd /d "%~dp0"
@@ -15,7 +15,7 @@ if %errorlevel% neq 0 (
     echo [ERROR] Node.js is not installed or not in PATH!
     echo Please install Node.js ^(v18+^) from https://nodejs.org
     echo.
-    pause
+    if /I not "%~1"=="--silent" pause
     exit /b 1
 )
 
