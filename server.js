@@ -966,11 +966,21 @@ app.post('/api/ai/config', async (req, res) => {
 // 0. SETTINGS & DB PATH CONFIGURATION API
 // ==========================================
 
-// SSE Live Connection Pool for Real-Time UI Updates
+// SSE Live Connection Pool & Replay Buffer for Real-Time UI Updates (F-21)
 const sseClients = new Set();
+let nextSseEventId = 1;
+const SSE_BUFFER_MAX = 100;
+const sseEventBuffer = []; // Stores { id, eventType, data, timestamp }
 
 function broadcastSseEvent(eventType, data) {
-    const payload = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
+    const eventId = nextSseEventId++;
+    const entry = { id: eventId, eventType, data, timestamp: new Date().toISOString() };
+    sseEventBuffer.push(entry);
+    if (sseEventBuffer.length > SSE_BUFFER_MAX) {
+        sseEventBuffer.shift();
+    }
+
+    const payload = `id: ${eventId}\nevent: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
     for (const client of sseClients) {
         try {
             client.write(payload);
@@ -993,7 +1003,7 @@ syncEngine.setOnSyncCompleteCallback((result) => {
     });
 });
 
-// SSE Stream Endpoint
+// SSE Stream Endpoint with Last-Event-ID Replay Contract (F-21)
 app.get('/api/sync/events', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -1006,6 +1016,18 @@ app.get('/api/sync/events', (req, res) => {
     // Client reconnect retry delay contract (5 seconds)
     res.write('retry: 5000\n\n');
 
+    // Check for Last-Event-ID header (from standard EventSource reconnection) or query param
+    const lastEventIdHeader = req.headers['last-event-id'] || req.query.lastEventId;
+    const lastEventId = lastEventIdHeader ? parseInt(lastEventIdHeader, 10) : null;
+
+    if (lastEventId !== null && !isNaN(lastEventId)) {
+        // Replay missed events from buffer with IDs strictly greater than client's last seen ID
+        const missedEvents = sseEventBuffer.filter(e => e.id > lastEventId);
+        for (const ev of missedEvents) {
+            res.write(`id: ${ev.id}\nevent: ${ev.eventType}\ndata: ${JSON.stringify(ev.data)}\n\n`);
+        }
+    }
+
     // Fetch snapshot of current sync state for reconnecting clients
     let statusSnapshot = {};
     try {
@@ -1014,10 +1036,12 @@ app.get('/api/sync/events', (req, res) => {
         }
     } catch (e) {}
 
-    res.write(`event: connected\ndata: ${JSON.stringify({
+    const connectEventId = nextSseEventId++;
+    res.write(`id: ${connectEventId}\nevent: connected\ndata: ${JSON.stringify({
         status: 'connected',
         autoSync: syncEngine.isAutoSyncEnabled(),
         snapshot: statusSnapshot,
+        lastEventId: nextSseEventId - 1,
         timestamp: new Date().toISOString()
     })}\n\n`);
 
