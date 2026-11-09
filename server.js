@@ -1049,12 +1049,25 @@ app.post('/api/sync/retry-dlq', requireAdmin, async (req, res) => {
         const dlqItems = await allQuery("SELECT * FROM delta_outbox_dlq").catch(() => []);
         if (dlqItems && dlqItems.length > 0) {
             for (const item of dlqItems) {
-                await runQuery(
-                    "INSERT INTO delta_outbox (payload, changes_count, attempts, last_error) VALUES (?, ?, 0, ?)",
-                    [item.payload, item.changes_count, 'Re-queued from DLQ via Operator Action']
-                ).catch(() => {});
+                if (!item || !item.id) continue;
+                try {
+                    await runQuery(appCfg.isCloudServer ? "BEGIN" : "BEGIN IMMEDIATE");
+                    const insertRes = await runQuery(
+                        "INSERT INTO delta_outbox (payload, changes_count, attempts, last_error) VALUES (?, ?, 0, ?)",
+                        [item.payload, item.changes_count, 'Re-queued from DLQ via Operator Action']
+                    );
+                    const changes = insertRes?.changes || (insertRes?.lastID ? 1 : 0);
+                    if (changes > 0) {
+                        await runQuery("DELETE FROM delta_outbox_dlq WHERE id = ?", [item.id]);
+                        await runQuery("COMMIT");
+                    } else {
+                        throw new Error(`Requeue insert returned no changes for DLQ #${item.id}`);
+                    }
+                } catch (itemErr) {
+                    await runQuery("ROLLBACK").catch(() => {});
+                    console.error(`[DLQ REQUEUE] Failed to requeue item #${item.id}:`, itemErr.message);
+                }
             }
-            await runQuery("DELETE FROM delta_outbox_dlq").catch(() => {});
         }
         if (typeof syncEngine.flushDeltaOutbox === 'function') {
             await syncEngine.flushDeltaOutbox(db).catch(e => console.error('[FLUSH OUTBOX ERROR]', e));

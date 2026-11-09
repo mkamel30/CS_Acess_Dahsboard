@@ -1752,6 +1752,31 @@ async function pushDeltaToCloud(db, deltaChanges) {
     }
 }
 
+// Transactional and verified move from outbox to dead letter queue (DLQ)
+async function archiveOutboxItemToDlq(db, item) {
+    if (!db || !item || !item.id) return false;
+    await dbRun(db, 'BEGIN IMMEDIATE');
+    try {
+        await dbRun(db, `
+            INSERT INTO delta_outbox_dlq (original_id, payload, changes_count, attempts, last_error)
+            VALUES (?, ?, ?, ?, ?);
+        `, [item.id, item.payload, item.changes_count, item.attempts, item.last_error]);
+
+        const check = await dbAll(db, `SELECT id FROM delta_outbox_dlq WHERE original_id = ? ORDER BY id DESC LIMIT 1;`, [item.id]);
+        if (!check || check.length === 0) {
+            throw new Error(`DLQ insert verification failed for outbox item #${item.id}`);
+        }
+
+        await dbRun(db, `DELETE FROM delta_outbox WHERE id = ?;`, [item.id]);
+        await dbRun(db, 'COMMIT');
+        return true;
+    } catch (err) {
+        await dbRun(db, 'ROLLBACK').catch(() => {});
+        console.error(`[CLOUD DELTA OUTBOX] Transactional DLQ archive failed for #${item.id}:`, err.message);
+        return false;
+    }
+}
+
 /**
  * Flush and retry any pending delta changes queued in delta_outbox
  */
@@ -1772,18 +1797,13 @@ async function flushDeltaOutbox(db) {
         const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
 
         for (const item of pending) {
-            // Move poison-pill items that have exceeded max retry attempts to Dead Letter Queue (DLQ)
+            // Move poison-pill items that have exceeded max retry attempts to Dead Letter Queue (DLQ) transactionally
             if (item.attempts >= 15) {
                 console.warn(`[CLOUD DELTA OUTBOX] Archiving failed outbox #${item.id} to DLQ after ${item.attempts} attempts: ${item.last_error}`);
-                try {
-                    await dbRun(db, `
-                        INSERT INTO delta_outbox_dlq (original_id, payload, changes_count, attempts, last_error)
-                        VALUES (?, ?, ?, ?, ?);
-                    `, [item.id, item.payload, item.changes_count, item.attempts, item.last_error]);
-                } catch (dlqErr) {
-                    console.error('[CLOUD DELTA OUTBOX] DLQ insert failed:', dlqErr.message);
+                const archived = await archiveOutboxItemToDlq(db, item);
+                if (!archived) {
+                    await dbRun(db, `UPDATE delta_outbox SET last_error = ? WHERE id = ?;`, [`DLQ archive failed: ${item.last_error}`, item.id]).catch(() => {});
                 }
-                await dbRun(db, `DELETE FROM delta_outbox WHERE id = ?;`, [item.id]);
                 continue;
             }
             try {
@@ -1843,5 +1863,6 @@ module.exports = {
     ALLOWED_SYNC_TABLES,
     isAllowedSyncTable,
     isValidSqlIdentifier,
-    escapeSqlIdentifier
+    escapeSqlIdentifier,
+    archiveOutboxItemToDlq
 };
