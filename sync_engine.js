@@ -460,11 +460,13 @@ async function initSyncDatabase(db) {
     await dbRun(db, `
         CREATE TABLE IF NOT EXISTS delta_outbox (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            batch_id TEXT,
             payload TEXT NOT NULL,
             changes_count INTEGER DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             attempts INTEGER DEFAULT 0,
-            last_error TEXT
+            last_error TEXT,
+            next_attempt_at DATETIME
         );
     `);
 
@@ -472,6 +474,7 @@ async function initSyncDatabase(db) {
         CREATE TABLE IF NOT EXISTS delta_outbox_dlq (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             original_id INTEGER,
+            batch_id TEXT,
             payload TEXT NOT NULL,
             changes_count INTEGER DEFAULT 0,
             attempts INTEGER DEFAULT 0,
@@ -484,8 +487,10 @@ async function initSyncDatabase(db) {
     try { await dbRun(db, `ALTER TABLE sync_history ADD COLUMN sync_type TEXT DEFAULT 'LOCAL_ACCESS';`); } catch(e){}
     try { await dbRun(db, `ALTER TABLE sync_history ADD COLUMN message TEXT;`); } catch(e){}
     try { await dbRun(db, `ALTER TABLE delta_outbox ADD COLUMN batch_id TEXT;`); } catch(e){}
+    try { await dbRun(db, `ALTER TABLE delta_outbox ADD COLUMN next_attempt_at DATETIME;`); } catch(e){}
     try { await dbRun(db, `ALTER TABLE delta_outbox_dlq ADD COLUMN batch_id TEXT;`); } catch(e){}
     try { await dbRun(db, `CREATE TABLE IF NOT EXISTS sync_applied_batches (batch_id TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP, changes_count INTEGER DEFAULT 0);`); } catch(e){}
+    try { await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_outbox_next ON delta_outbox(next_attempt_at);`); } catch(e){}
 
     await dbRun(db, `
         CREATE TABLE IF NOT EXISTS merchants (
@@ -1960,8 +1965,36 @@ async function wipeDatabase(db) {
 }
 
 /**
- * Push Incremental Delta Changes to Oracle Cloud VPS in milliseconds
+ * Calculate backoff with full jitter and Retry-After support (F-07)
  */
+function computeBackoff(attempts, retryAfterHeader = null) {
+    if (retryAfterHeader) {
+        const seconds = parseInt(retryAfterHeader, 10);
+        if (!isNaN(seconds) && seconds > 0) {
+            return Math.min(seconds * 1000, 3600000); // capped at 1h
+        }
+        const parsedDate = Date.parse(retryAfterHeader);
+        if (!isNaN(parsedDate)) {
+            const diff = parsedDate - Date.now();
+            if (diff > 0) return Math.min(diff, 3600000);
+        }
+    }
+    const baseDelayMs = 5000; // 5s base
+    const maxDelayMs = 15 * 60 * 1000; // 15m cap
+    const cap = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, Math.min(attempts || 1, 10)));
+    return Math.floor(Math.random() * cap);
+}
+
+/**
+ * Classify poison 4xx vs retryable errors (F-07)
+ */
+function isPoisonStatus(status) {
+    if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
+        return true;
+    }
+    return false;
+}
+
 /**
  * Push Incremental Delta Changes to Oracle Cloud VPS in milliseconds
  * Features automatic local queueing (delta_outbox) on offline/network failure
@@ -2044,11 +2077,21 @@ async function pushDeltaToCloud(db, deltaChanges) {
             // Queue to outbox with batchId
             if (db) {
                 try {
-                    await dbRun(db, `
-                        INSERT INTO delta_outbox (batch_id, payload, changes_count, attempts, last_error)
-                        VALUES (?, ?, ?, 1, ?)
-                    `, [batchId, JSON.stringify(deltaChanges), deltaChanges.length, errMsg]);
-                    console.log(`[CLOUD DELTA OUTBOX] Queued ${deltaChanges.length} change(s) (batch: ${batchId}) in local outbox for automatic retry.`);
+                    if (isPoisonStatus(response.status)) {
+                        console.warn(`[CLOUD DELTA OUTBOX] Poison 4xx rejected directly: ${errMsg}. Archiving to DLQ.`);
+                        await dbRun(db, `
+                            INSERT INTO delta_outbox_dlq (batch_id, payload, changes_count, attempts, last_error)
+                            VALUES (?, ?, ?, 1, ?)
+                        `, [batchId, JSON.stringify(deltaChanges), deltaChanges.length, `POISON_4XX (${response.status}): ${errMsg}`]);
+                    } else {
+                        const delayMs = computeBackoff(1, response.headers ? response.headers.get('Retry-After') : null);
+                        const nextAttempt = new Date(Date.now() + delayMs).toISOString();
+                        await dbRun(db, `
+                            INSERT INTO delta_outbox (batch_id, payload, changes_count, attempts, last_error, next_attempt_at)
+                            VALUES (?, ?, ?, 1, ?, ?)
+                        `, [batchId, JSON.stringify(deltaChanges), deltaChanges.length, errMsg, nextAttempt]);
+                        console.log(`[CLOUD DELTA OUTBOX] Queued ${deltaChanges.length} change(s) (batch: ${batchId}) in local outbox (next attempt: ${nextAttempt}).`);
+                    }
                 } catch (e) {}
             }
         }
@@ -2057,11 +2100,13 @@ async function pushDeltaToCloud(db, deltaChanges) {
         // Queue to local delta_outbox for automatic background retry
         if (db) {
             try {
+                const delayMs = computeBackoff(1);
+                const nextAttempt = new Date(Date.now() + delayMs).toISOString();
                 await dbRun(db, `
-                    INSERT INTO delta_outbox (batch_id, payload, changes_count, attempts, last_error)
-                    VALUES (?, ?, ?, 1, ?)
-                `, [batchId, JSON.stringify(deltaChanges), deltaChanges.length, err.message]);
-                console.log(`[CLOUD DELTA OUTBOX] Queued ${deltaChanges.length} change(s) (batch: ${batchId}) in local outbox for automatic retry.`);
+                    INSERT INTO delta_outbox (batch_id, payload, changes_count, attempts, last_error, next_attempt_at)
+                    VALUES (?, ?, ?, 1, ?, ?)
+                `, [batchId, JSON.stringify(deltaChanges), deltaChanges.length, err.message, nextAttempt]);
+                console.log(`[CLOUD DELTA OUTBOX] Queued ${deltaChanges.length} change(s) (batch: ${batchId}) in local outbox (next attempt: ${nextAttempt}).`);
             } catch (e) {}
         }
     }
@@ -2103,7 +2148,7 @@ async function archiveOutboxItemToDlq(db, item) {
 }
 
 /**
- * Flush and retry any pending delta changes queued in delta_outbox
+ * Flush and retry any pending delta changes queued in delta_outbox (F-07)
  */
 let _isFlushingOutbox = false;
 async function flushDeltaOutbox(db) {
@@ -2114,7 +2159,12 @@ async function flushDeltaOutbox(db) {
     _isFlushingOutbox = true;
 
     try {
-        const pending = await dbAll(db, `SELECT * FROM delta_outbox ORDER BY id ASC LIMIT 5;`);
+        const nowIso = new Date().toISOString();
+        const pending = await dbAll(
+            db,
+            `SELECT * FROM delta_outbox WHERE next_attempt_at IS NULL OR next_attempt_at <= ? ORDER BY id ASC LIMIT 5;`,
+            [nowIso]
+        );
         if (!pending || pending.length === 0) return;
 
         const cloudEndpoint = config.cloudEndpoint || 'https://smartcs.m-kamel.workers.dev/api/sync/delta';
@@ -2126,8 +2176,8 @@ async function flushDeltaOutbox(db) {
         const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
 
         for (const item of pending) {
-            // Move poison-pill items that have exceeded max retry attempts to Dead Letter Queue (DLQ) transactionally
-            if (item.attempts >= 15) {
+            // Move poison-pill items that have exceeded max retry attempts (30 attempts) to DLQ transactionally
+            if (item.attempts >= 30) {
                 console.warn(`[CLOUD DELTA OUTBOX] Archiving failed outbox #${item.id} to DLQ after ${item.attempts} attempts: ${item.last_error}`);
                 const archived = await archiveOutboxItemToDlq(db, item);
                 if (!archived) {
@@ -2171,10 +2221,22 @@ async function flushDeltaOutbox(db) {
                     console.log(`[CLOUD DELTA OUTBOX] Successfully flushed outbox batch #${item.id} (${item.changes_count} changes, batchId: ${batchId}) to cloud! ⚡`);
                 } else {
                     const errMsg = (data && data.error) ? data.error : `HTTP ${response.status}: Cloud rejected batch`;
-                    await dbRun(db, `UPDATE delta_outbox SET attempts = attempts + 1, last_error = ? WHERE id = ?;`, [errMsg, item.id]);
+                    if (isPoisonStatus(response.status)) {
+                        console.warn(`[CLOUD DELTA OUTBOX] Quarantining poison batch #${item.id} (${response.status}) to DLQ`);
+                        await archiveOutboxItemToDlq(db, { ...item, last_error: `POISON_4XX (${response.status}): ${errMsg}` });
+                    } else {
+                        const nextAttempts = (item.attempts || 0) + 1;
+                        const retryAfter = response.headers ? response.headers.get('Retry-After') : null;
+                        const delayMs = computeBackoff(nextAttempts, retryAfter);
+                        const nextAttemptAt = new Date(Date.now() + delayMs).toISOString();
+                        await dbRun(db, `UPDATE delta_outbox SET attempts = ?, last_error = ?, next_attempt_at = ? WHERE id = ?;`, [nextAttempts, errMsg, nextAttemptAt, item.id]);
+                    }
                 }
             } catch (err) {
-                await dbRun(db, `UPDATE delta_outbox SET attempts = attempts + 1, last_error = ? WHERE id = ?;`, [err.message, item.id]);
+                const nextAttempts = (item.attempts || 0) + 1;
+                const delayMs = computeBackoff(nextAttempts);
+                const nextAttemptAt = new Date(Date.now() + delayMs).toISOString();
+                await dbRun(db, `UPDATE delta_outbox SET attempts = ?, last_error = ?, next_attempt_at = ? WHERE id = ?;`, [nextAttempts, err.message, nextAttemptAt, item.id]);
             }
         }
     } catch (e) {
@@ -2211,6 +2273,8 @@ module.exports = {
     escapeSqlIdentifier,
     archiveOutboxItemToDlq,
     applyTableAndOutbox,
+    computeBackoff,
+    isPoisonStatus,
     validateExportManifest,
     syncTableWithDiff,
     areValuesEqual,
