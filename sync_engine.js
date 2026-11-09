@@ -1215,34 +1215,99 @@ async function applyTableAndOutbox(db, tableName, pkField, records, deltaList = 
         if (records && records.length === 0) {
             await dbRun(db, `DELETE FROM ${escTbl};`);
         } else if (cols.length > 0 && records && records.length > 0) {
-            await dbRun(db, `DELETE FROM ${escTbl};`);
-            const placeholders = cols.map(() => '?').join(', ');
-            const quotedCols = cols.map(c => escapeSqlIdentifier(c)).join(', ');
-            const insertSql = `INSERT INTO ${escTbl} (${quotedCols}) VALUES (${placeholders});`;
-            rawStmt = await prepareStmt(db, insertSql);
+            const countRow = await dbAll(db, `SELECT COUNT(*) AS cnt FROM ${escTbl};`);
+            const existingCount = (countRow && countRow[0] && countRow[0].cnt) ? Number(countRow[0].cnt) : 0;
 
-            for (const row of records) {
-                const vals = cols.map(c => {
-                    const val = row[c];
-                    if (val === null || val === undefined) return '';
-                    if (typeof val === 'object') return JSON.stringify(val);
-                    return String(val);
-                });
+            // F-16: Targeted upsert/delete for incremental changes to bound WAL write amplification & lock duration
+            if (existingCount > 0 && deltaList && deltaList.length > 0 && deltaList.length < records.length * 0.3) {
+                const pkCol = pkField || RAW_TABLE_PK_MAP[tableName] || 'id';
+                const escPk = escapeSqlIdentifier(pkCol);
+
+                const deleteIds = [];
+                const upsertRecords = [];
+                const recordMap = new Map();
+                for (const r of records) {
+                    const id = getRowIdentifier(tableName, pkCol, r);
+                    if (id) recordMap.set(id, r);
+                }
+
+                for (const delta of deltaList) {
+                    if (delta.change_type === 'DELETE') {
+                        deleteIds.push(delta.record_id);
+                    } else if (delta.change_type === 'INSERT' || delta.change_type === 'UPDATE') {
+                        const rec = recordMap.get(delta.record_id);
+                        if (rec) upsertRecords.push(rec);
+                    }
+                }
+
+                if (deleteIds.length > 0) {
+                    const delPlaceholders = deleteIds.map(() => '?').join(', ');
+                    await dbRun(db, `DELETE FROM ${escTbl} WHERE ${escPk} IN (${delPlaceholders});`, deleteIds);
+                }
+
+                if (upsertRecords.length > 0) {
+                    const placeholders = cols.map(() => '?').join(', ');
+                    const quotedCols = cols.map(c => escapeSqlIdentifier(c)).join(', ');
+                    const upsertIds = upsertRecords.map(r => getRowIdentifier(tableName, pkCol, r)).filter(Boolean);
+                    if (upsertIds.length > 0) {
+                        const delUpsertPlaceholders = upsertIds.map(() => '?').join(', ');
+                        await dbRun(db, `DELETE FROM ${escTbl} WHERE ${escPk} IN (${delUpsertPlaceholders});`, upsertIds);
+                    }
+                    const insertSql = `INSERT INTO ${escTbl} (${quotedCols}) VALUES (${placeholders});`;
+                    rawStmt = await prepareStmt(db, insertSql);
+                    for (const row of upsertRecords) {
+                        const vals = cols.map(c => {
+                            const val = row[c];
+                            if (val === null || val === undefined) return '';
+                            if (typeof val === 'object') return JSON.stringify(val);
+                            return String(val);
+                        });
+                        await new Promise((resolve, reject) => {
+                            rawStmt.run(vals, function (err) {
+                                if (err) reject(err);
+                                else resolve(this);
+                            });
+                        });
+                    }
+                    await new Promise((resolve, reject) => {
+                        rawStmt.finalize((err) => {
+                            rawStmt = null;
+                            if (err) reject(err);
+                            else resolve();
+                        });
+                    });
+                }
+            } else {
+                // Baseline initial load or full replace: bulk delete + insert
+                await dbRun(db, `DELETE FROM ${escTbl};`);
+                const placeholders = cols.map(() => '?').join(', ');
+                const quotedCols = cols.map(c => escapeSqlIdentifier(c)).join(', ');
+                const insertSql = `INSERT INTO ${escTbl} (${quotedCols}) VALUES (${placeholders});`;
+                rawStmt = await prepareStmt(db, insertSql);
+
+                for (const row of records) {
+                    const vals = cols.map(c => {
+                        const val = row[c];
+                        if (val === null || val === undefined) return '';
+                        if (typeof val === 'object') return JSON.stringify(val);
+                        return String(val);
+                    });
+                    await new Promise((resolve, reject) => {
+                        rawStmt.run(vals, function (err) {
+                            if (err) reject(err);
+                            else resolve(this);
+                        });
+                    });
+                }
+
                 await new Promise((resolve, reject) => {
-                    rawStmt.run(vals, function (err) {
+                    rawStmt.finalize((err) => {
+                        rawStmt = null;
                         if (err) reject(err);
-                        else resolve(this);
+                        else resolve();
                     });
                 });
             }
-
-            await new Promise((resolve, reject) => {
-                rawStmt.finalize((err) => {
-                    rawStmt = null;
-                    if (err) reject(err);
-                    else resolve();
-                });
-            });
         }
 
         // Apply audit change logs in the exact same transaction (F-19)

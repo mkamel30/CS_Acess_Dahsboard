@@ -6188,19 +6188,15 @@ async function executeCloudReseed(config, SYNC_SECRET) {
     broadcastReseedProgress();
 
     try {
-        // 1. Upfront count across all tables
+        // 1. Upfront count across all tables using lightweight COUNT(*) queries (F-16: Bounded RAM)
         let overallTotalRecords = 0;
-        const tableRowsMap = new Map();
         for (let i = 0; i < CORE_RECONCILIATION_TABLES.length; i++) {
             const item = CORE_RECONCILIATION_TABLES[i];
-            let rows = [];
             try {
-                rows = await allQuery(`SELECT * FROM "${item.table}"`) || [];
-            } catch(e) {
-                rows = [];
-            }
-            tableRowsMap.set(item.table, rows);
-            overallTotalRecords += rows.length;
+                const countRow = await getQuery(`SELECT COUNT(*) AS cnt FROM "${item.table}"`);
+                const cnt = (countRow && countRow.cnt) ? Number(countRow.cnt) : 0;
+                overallTotalRecords += cnt;
+            } catch(e) {}
         }
 
         cloudReseedState.totalRecords = overallTotalRecords;
@@ -6216,7 +6212,8 @@ async function executeCloudReseed(config, SYNC_SECRET) {
 
         for (let tIdx = 0; tIdx < CORE_RECONCILIATION_TABLES.length; tIdx++) {
             const item = CORE_RECONCILIATION_TABLES[tIdx];
-            let rows = tableRowsMap.get(item.table) || [];
+            // Stream only the current table into memory and release after processing (F-16)
+            let rows = await allQuery(`SELECT * FROM "${item.table}"`) || [];
             if (item.table === 'store_sim_raw') {
                 rows = rows.filter(r => r && r.sim_serial && String(r.sim_serial).trim() !== '');
             } else if (item.table === 'store_pos_raw') {
