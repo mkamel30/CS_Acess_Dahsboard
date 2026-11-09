@@ -8,14 +8,18 @@ echo     STOPPING SMARTCS DASHBOARD ^& SYNC ENGINE
 echo ===================================================
 echo.
 
-echo [*] Stopping SmartCS Dashboard window...
+echo [*] Ending boot task (if installed)...
+schtasks /end /tn "SmartCS_Host_Service" >nul 2>&1
+
+echo [*] Stopping SmartCS launcher loop (run_smartcs.bat)...
 taskkill /F /FI "WINDOWTITLE eq SmartCS Dashboard*" /T >nul 2>nul
+powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='cmd.exe'\" | Where-Object { $_.CommandLine -like '*run_smartcs.bat*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
 
 echo [*] Stopping isolated SmartCS Node processes...
-powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { .Name -eq 'node.exe' -and .CommandLine -like '*server.js*' } | Stop-Process -Force -ErrorAction SilentlyContinue"
+powershell.exe -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Where-Object { $_.CommandLine -like '*server.js*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
 
 echo.
-echo Server has been stopped successfully without affecting other apps!
-echo You can safely close this window.
+echo Server has been stopped without affecting other apps.
+echo (If it was started by the boot task, run this file as Administrator.)
 echo.
 pause

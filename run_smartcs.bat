@@ -19,9 +19,13 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-:: Clear port 8970 if already occupied by a previous dead process
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr ":8970" ^| findstr "LISTENING"') do (
-    taskkill /F /PID %%a >nul 2>nul
+:: If SmartCS is already running (e.g. started by the boot task), do NOT start
+:: a second copy and do NOT kill the running one - just open the browser.
+netstat -aon | findstr ":8970" | findstr "LISTENING" >nul 2>nul
+if %errorlevel% equ 0 (
+    echo [i] SmartCS is already running on port 8970.
+    if /I not "%~1"=="--silent" start "" "http://localhost:8970"
+    exit /b 0
 )
 
 :: Open browser unless running in silent background mode
