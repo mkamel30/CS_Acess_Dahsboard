@@ -7900,6 +7900,11 @@ async function triggerFullCloudReseed() {
 
         if (!res.ok || !data.success) throw new Error(data.error || 'فشلت المزامنة الشاملة');
 
+        // T-14: If 202 Accepted, background job is running; let SSE and polling drive progress modal
+        if (res.status === 202 || data.status === 'accepted') {
+            return;
+        }
+
         handleReseedProgressUpdate({
             stage: 'completed',
             percent: 100,

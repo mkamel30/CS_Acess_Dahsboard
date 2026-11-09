@@ -1166,24 +1166,65 @@ app.post('/api/sync/retry-dlq', requireAdmin, async (req, res) => {
     }
 });
 
-// Trigger full sync from Access Database
+// Trigger full sync from Access Database (Supports async 202 job model - T-14 / F-15)
 app.post('/api/sync/run', requireAdmin, async (req, res) => {
     try {
         const config = readAppConfig();
         if (config.isCloudServer) {
             // Cloud VPS is in receiver mode. Rebuild domain entities on demand.
-            await syncEngine.syncHighLevelDomainEntities();
-            return res.json({ 
-                success: true, 
-                is_cloud: true, 
-                message: 'السيرفر السحابي في وضع الاستقبال التلقائي - تمت إعادة بناء الكيانات السحابية بنجاح ⚡' 
+            if (req.query.sync === 'true') {
+                await syncEngine.syncHighLevelDomainEntities();
+                return res.json({ 
+                    success: true, 
+                    is_cloud: true, 
+                    message: 'السيرفر السحابي في وضع الاستقبال التلقائي - تمت إعادة بناء الكيانات السحابية بنجاح ⚡' 
+                });
+            } else {
+                syncEngine.syncHighLevelDomainEntities().catch(err => {
+                    logSystemError('CLOUD_DOMAIN_REBUILD', '/api/sync/run', err);
+                });
+                return res.status(202).json({
+                    success: true,
+                    status: 'accepted',
+                    is_cloud: true,
+                    message: 'تم بدء إعادة بناء الكيانات السحابية في الخلفية ⚡',
+                    status_url: '/api/sync/status'
+                });
+            }
+        }
+
+        const currentStatus = syncEngine.getSyncStatus ? syncEngine.getSyncStatus() : {};
+        if (currentStatus && currentStatus.isSyncInProgress) {
+            return res.status(409).json({
+                success: false,
+                inProgress: true,
+                message: 'عملية مزامنة أخرى قيد التنفيذ حالياً، يرجى الانتظار...',
+                status_url: '/api/sync/status'
             });
         }
-        const result = await syncEngine.syncFromAccessDatabase(db);
-        res.json(result);
+
+        // Synchronous execution path (for CLI or explicit sync callers)
+        if (req.query.sync === 'true') {
+            const result = await syncEngine.syncFromAccessDatabase(db);
+            return res.json(result);
+        }
+
+        // Asynchronous 202 Accepted execution path
+        const jobId = `sync_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        syncEngine.syncFromAccessDatabase(db).catch(err => {
+            logSystemError('SYNC_RUN', '/api/sync/run', err);
+        });
+
+        res.status(202).json({
+            success: true,
+            job_id: jobId,
+            status: 'accepted',
+            message: 'تم قبول طلب المزامنة وبدء التنفيذ في الخلفية ⚡',
+            status_url: '/api/sync/status'
+        });
     } catch (err) {
         if (err.message && err.message.includes('قيد التنفيذ')) {
-            return res.json({ success: true, inProgress: true, message: err.message });
+            return res.status(409).json({ success: false, inProgress: true, message: err.message, status_url: '/api/sync/status' });
         }
         res.status(500).json({ success: false, error: err.message });
     }
@@ -6119,41 +6160,34 @@ app.get('/api/diagnostics/reseed-status', (req, res) => {
     res.json({ success: true, ...cloudReseedState });
 });
 
-// 7. Reseed Cloud VPS from Local Database (1-Click Action with Live Progress)
-app.post('/api/diagnostics/reseed-vps', requireAdmin, async (req, res) => {
+/**
+ * Execute Cloud Reseed with byte-size caps, AbortSignal timeouts, and real-time progress (T-14 / F-15)
+ */
+async function executeCloudReseed(config, SYNC_SECRET) {
+    console.log('[DIAGNOSTICS] Starting 1-Click Batched Cloud Reseed from Local SQLite with Real-Time Progress...');
+    const startTime = Date.now();
+
+    cloudReseedState = {
+        inProgress: true,
+        percent: 2,
+        stage: 'counting',
+        currentTable: '',
+        currentTableAr: '',
+        tableIndex: 0,
+        totalTables: CORE_RECONCILIATION_TABLES.length,
+        chunkIndex: 0,
+        totalChunks: 0,
+        recordsProcessed: 0,
+        totalRecords: 0,
+        detail: `حساب إجمالي السجلات في الجداول الـ ${CORE_RECONCILIATION_TABLES.length} محلياً...`,
+        startedAt: new Date().toISOString(),
+        durationMs: 0,
+        error: null,
+        completedTables: []
+    };
+    broadcastReseedProgress();
+
     try {
-        const config = readAppConfig();
-        if (config.isCloudServer) {
-            return res.status(400).json({ success: false, error: 'Cannot reseed cloud from cloud itself.' });
-        }
-
-        if (cloudReseedState.inProgress) {
-            return res.status(409).json({ success: false, error: 'عملية تأسيس السيرفر السحابي قيد التنفيذ بالفعل، يرجى الانتظار...' });
-        }
-
-        console.log('[DIAGNOSTICS] Starting 1-Click Batched Cloud Reseed from Local SQLite with Real-Time Progress...');
-        const startTime = Date.now();
-
-        cloudReseedState = {
-            inProgress: true,
-            percent: 2,
-            stage: 'counting',
-            currentTable: '',
-            currentTableAr: '',
-            tableIndex: 0,
-            totalTables: CORE_RECONCILIATION_TABLES.length,
-            chunkIndex: 0,
-            totalChunks: 0,
-            recordsProcessed: 0,
-            totalRecords: 0,
-            detail: `حساب إجمالي السجلات في الجداول الـ ${CORE_RECONCILIATION_TABLES.length} محلياً...`,
-            startedAt: new Date().toISOString(),
-            durationMs: 0,
-            error: null,
-            completedTables: []
-        };
-        broadcastReseedProgress();
-
         // 1. Upfront count across all tables
         let overallTotalRecords = 0;
         const tableRowsMap = new Map();
@@ -6200,11 +6234,31 @@ app.post('/api/diagnostics/reseed-vps', requireAdmin, async (req, res) => {
                 continue;
             }
 
-            const CHUNK_SIZE = 500;
-            const totalChunks = Math.ceil(rows.length / CHUNK_SIZE);
+            // Cap chunks by record count (500) and byte size (max 2MB per payload)
+            const MAX_CHUNK_ROWS = 500;
+            const MAX_CHUNK_BYTES = 2 * 1024 * 1024; // 2MB
+            const chunks = [];
+            let currentChunk = [];
+            let currentChunkBytes = 0;
+
+            for (const row of rows) {
+                const rowBytes = Buffer.byteLength(JSON.stringify(row), 'utf8');
+                if (currentChunk.length >= MAX_CHUNK_ROWS || (currentChunkBytes + rowBytes > MAX_CHUNK_BYTES && currentChunk.length > 0)) {
+                    chunks.push(currentChunk);
+                    currentChunk = [];
+                    currentChunkBytes = 0;
+                }
+                currentChunk.push(row);
+                currentChunkBytes += rowBytes;
+            }
+            if (currentChunk.length > 0) {
+                chunks.push(currentChunk);
+            }
+
+            const totalChunks = chunks.length;
 
             for (let cIdx = 0; cIdx < totalChunks; cIdx++) {
-                const chunk = rows.slice(cIdx * CHUNK_SIZE, (cIdx + 1) * CHUNK_SIZE);
+                const chunk = chunks[cIdx];
                 const isFirst = (cIdx === 0);
 
                 const currentPercent = overallTotalRecords > 0 
@@ -6221,6 +6275,10 @@ app.post('/api/diagnostics/reseed-vps', requireAdmin, async (req, res) => {
                     detail: `جاري نقل ${item.name_ar} (دفعة ${cIdx + 1} من ${totalChunks})`
                 });
 
+                const timeoutSignal = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout)
+                    ? AbortSignal.timeout(30000)
+                    : undefined;
+
                 const cloudResp = await fetchFn(cloudUrl, {
                     method: 'POST',
                     headers: {
@@ -6232,7 +6290,8 @@ app.post('/api/diagnostics/reseed-vps', requireAdmin, async (req, res) => {
                         isAppend: !isFirst,
                         rebuildDomain: false,
                         timestamp: new Date().toISOString()
-                    })
+                    }),
+                    signal: timeoutSignal
                 });
 
                 const rawText = await cloudResp.text();
@@ -6262,6 +6321,10 @@ app.post('/api/diagnostics/reseed-vps', requireAdmin, async (req, res) => {
             detail: 'إعادة بناء محفظة الأقساط وجداول الأجهزة والصيانة على السيرفر السحابي (VPS)...'
         });
 
+        const rebuildTimeout = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout)
+            ? AbortSignal.timeout(45000)
+            : undefined;
+
         await fetchFn(cloudUrl, {
             method: 'POST',
             headers: {
@@ -6272,7 +6335,8 @@ app.post('/api/diagnostics/reseed-vps', requireAdmin, async (req, res) => {
                 tablesData: {},
                 rebuildDomain: true,
                 timestamp: new Date().toISOString()
-            })
+            }),
+            signal: rebuildTimeout
         });
 
         const duration = Date.now() - startTime;
@@ -6285,19 +6349,54 @@ app.post('/api/diagnostics/reseed-vps', requireAdmin, async (req, res) => {
         cloudReseedState.detail = `تمت المزامنة والتأسيس الشامل بنجاح لجميع الجداول (${totalCount.toLocaleString('ar-EG')} سجل) ⚡`;
         broadcastReseedProgress();
 
-        res.json({
+        return {
             success: true,
             total_records: totalCount,
             duration_ms: duration,
             message: `تمت المزامنة وإعادة التأسيس الشامل بنجاح لجميع الجداول (${totalCount.toLocaleString('ar-EG')} سجل) على السيرفر السحابي ⚡`
-        });
+        };
     } catch (err) {
         cloudReseedState.inProgress = false;
         cloudReseedState.stage = 'error';
         cloudReseedState.error = err.message;
         cloudReseedState.detail = `فشلت العملية: ${err.message}`;
         broadcastReseedProgress();
+        throw err;
+    }
+}
 
+// 7. Reseed Cloud VPS from Local Database (Supports 202 async job model - T-14 / F-15)
+app.post('/api/diagnostics/reseed-vps', requireAdmin, async (req, res) => {
+    try {
+        const config = readAppConfig();
+        if (config.isCloudServer) {
+            return res.status(400).json({ success: false, error: 'Cannot reseed cloud from cloud itself.' });
+        }
+
+        if (cloudReseedState.inProgress) {
+            return res.status(409).json({ success: false, inProgress: true, error: 'عملية تأسيس السيرفر السحابي قيد التنفيذ بالفعل، يرجى الانتظار...', status_url: '/api/diagnostics/reseed-status' });
+        }
+
+        const jobId = `reseed_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+        if (req.query.sync === 'true') {
+            const result = await executeCloudReseed(config, SYNC_SECRET);
+            return res.json(result);
+        }
+
+        // Return 202 Accepted immediately and execute in background
+        executeCloudReseed(config, SYNC_SECRET).catch(err => {
+            logSystemError('RESEED_VPS', '/api/diagnostics/reseed-vps', err, req);
+        });
+
+        res.status(202).json({
+            success: true,
+            job_id: jobId,
+            status: 'accepted',
+            message: 'بدأت عملية تأسيس السيرفر السحابي في الخلفية بنجاح ⚡',
+            status_url: '/api/diagnostics/reseed-status'
+        });
+    } catch (err) {
         logSystemError('RESEED_VPS', '/api/diagnostics/reseed-vps', err, req);
         res.status(500).json({ success: false, error: err.message });
     }
