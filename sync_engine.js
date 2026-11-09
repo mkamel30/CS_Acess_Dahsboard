@@ -109,9 +109,20 @@ function setAccessFilePath(newPath) {
 let fileWatcher = null;
 let watcherDebounceTimer = null;
 let periodicInterval = null;
+let startupVerificationTimer = null;
+let outboxFlushInterval = null;
 let onSyncCompleteCallback = null;
 let lastKnownMtime = 0;
 let pendingResync = false;
+
+function ensureOutboxFlusher(db) {
+    if (outboxFlushInterval) return;
+    const cfg = readConfigSafely();
+    if (cfg.isCloudServer) return;
+    outboxFlushInterval = setInterval(() => {
+        flushDeltaOutbox(db).catch(() => {});
+    }, 20000);
+}
 
 function isAutoSyncEnabled() {
     const config = readConfigSafely();
@@ -123,6 +134,9 @@ function setOnSyncCompleteCallback(cb) {
 }
 
 function startFileWatcher(db) {
+    // F-23: Ensure cloud outbox flush runs independently of local watcher toggle
+    ensureOutboxFlusher(db);
+
     if (fileWatcher) {
         try { fileWatcher.close(); } catch(e){}
         fileWatcher = null;
@@ -130,6 +144,14 @@ function startFileWatcher(db) {
     if (periodicInterval) {
         clearInterval(periodicInterval);
         periodicInterval = null;
+    }
+    if (watcherDebounceTimer) {
+        clearTimeout(watcherDebounceTimer);
+        watcherDebounceTimer = null;
+    }
+    if (startupVerificationTimer) {
+        clearTimeout(startupVerificationTimer);
+        startupVerificationTimer = null;
     }
 
     const watcherConfig = readConfigSafely();
@@ -161,26 +183,38 @@ function startFileWatcher(db) {
     const triggerAutoSync = (reason) => {
         clearTimeout(watcherDebounceTimer);
         watcherDebounceTimer = setTimeout(async () => {
+            // F-23: Recheck enabled state inside debounce callback
+            if (!isAutoSyncEnabled()) return;
+
+            // F-11: Always record pendingResync when a sync is already in progress
             if (isSyncInProgress) {
-                if (!reason.startsWith('detected modification')) {
-                    pendingResync = true;
-                    console.log(`[FILE WATCHER] Sync in progress, deferring resync for: ${reason}`);
-                }
+                pendingResync = true;
+                console.log(`[FILE WATCHER] Sync in progress, deferring resync for: ${reason}`);
                 return;
             }
+
             try {
                 const curAccessPath = getAccessFilePath();
                 if (fs.existsSync(curAccessPath)) {
-                    lastKnownMtime = fs.statSync(curAccessPath).mtimeMs;
+                    const preSyncMtime = fs.statSync(curAccessPath).mtimeMs;
+                    lastKnownMtime = preSyncMtime;
                     lastHeartbeatSync = Date.now();
                     console.log(`[FILE WATCHER] Auto-triggering sync (${reason})...`);
                     const result = await performFullSync(db);
-                    // Refresh mtime AFTER export_accdb_tables.vbs closes the .accdb file so we don't self-trigger!
+
+                    // F-11: Do NOT advance lastKnownMtime past what was exported if file was modified during export!
                     try {
                         if (fs.existsSync(curAccessPath)) {
-                            lastKnownMtime = fs.statSync(curAccessPath).mtimeMs;
+                            const postSyncMtime = fs.statSync(curAccessPath).mtimeMs;
+                            if (postSyncMtime > preSyncMtime) {
+                                pendingResync = true;
+                                console.log('[FILE WATCHER] File modified during export, marked for resync');
+                            } else {
+                                lastKnownMtime = postSyncMtime;
+                            }
                         }
                     } catch (e) {}
+
                     lastSyncFinishedAt = Date.now();
                     if (onSyncCompleteCallback && typeof onSyncCompleteCallback === 'function') {
                         onSyncCompleteCallback(result);
@@ -208,9 +242,7 @@ function startFileWatcher(db) {
             const baseTarget = fileName.toLowerCase().replace(/\.(accdb|mdb)$/, '');
 
             fileWatcher = fs.watch(dir, { persistent: true }, (eventType, triggerFile) => {
-                if (!isAutoSyncEnabled() || isSyncInProgress) return;
-                // Ignore fs.watch events within 10 seconds of finishing our own ADODB export
-                if (Date.now() - lastSyncFinishedAt < 10000) return;
+                if (!isAutoSyncEnabled()) return;
                 if (!triggerFile) return;
 
                 const lower = triggerFile.toLowerCase();
@@ -218,6 +250,13 @@ function startFileWatcher(db) {
                     return;
                 }
                 if (lower.includes(baseTarget) || lower.endsWith('.accdb')) {
+                    // F-11: If sync is in progress, mark dirty event immediately
+                    if (isSyncInProgress) {
+                        pendingResync = true;
+                        return;
+                    }
+                    // Ignore fs.watch events within 10 seconds of finishing our own ADODB export
+                    if (Date.now() - lastSyncFinishedAt < 10000) return;
                     triggerAutoSync(`detected modification in ${triggerFile}`);
                 }
             });
@@ -236,18 +275,11 @@ function startFileWatcher(db) {
 
     attachNativeWatcher();
 
-    // 2. Continuous Background Interval (Every 20 seconds):
-    //    - Flushes outbox to Cloud VPS
-    //    - Re-attaches native watcher if network share was reconnected
-    //    - Detects mtime changes
-    //    - Triggers heartbeat resync every 10 minutes to beat SMB caching
+    // 2. Periodic check for mtime changes & heartbeat (every 20s)
     periodicInterval = setInterval(() => {
-        // 1. Always flush outbox to Cloud VPS if changes are waiting
-        flushDeltaOutbox(db).catch(() => {});
-
         if (!isAutoSyncEnabled()) return;
 
-        // 2. Ensure native watcher is active if directory reachable
+        // Ensure native watcher is active if directory reachable
         if (!fileWatcher) {
             attachNativeWatcher();
         }
@@ -274,12 +306,35 @@ function startFileWatcher(db) {
     }, 20000);
 
     // 3. Proactive Initial Startup Sync (after 10s to let server settle)
-    setTimeout(() => {
+    startupVerificationTimer = setTimeout(() => {
         if (isAutoSyncEnabled() && !isSyncInProgress) {
             console.log('[FILE WATCHER] Running startup verification sync...');
             triggerAutoSync('startup-verification');
         }
     }, 10000);
+}
+
+function stopAllWatchers() {
+    if (fileWatcher) {
+        try { fileWatcher.close(); } catch(e){}
+        fileWatcher = null;
+    }
+    if (periodicInterval) {
+        clearInterval(periodicInterval);
+        periodicInterval = null;
+    }
+    if (watcherDebounceTimer) {
+        clearTimeout(watcherDebounceTimer);
+        watcherDebounceTimer = null;
+    }
+    if (startupVerificationTimer) {
+        clearTimeout(startupVerificationTimer);
+        startupVerificationTimer = null;
+    }
+    if (outboxFlushInterval) {
+        clearInterval(outboxFlushInterval);
+        outboxFlushInterval = null;
+    }
 }
 
 function setAutoSyncEnabled(enabled, db) {
@@ -289,6 +344,7 @@ function setAutoSyncEnabled(enabled, db) {
     if (isEnabled) {
         startFileWatcher(db);
     } else {
+        // F-23: Disabling auto-sync only halts Access watcher & periodic checks, NOT cloud outbox flusher
         if (fileWatcher) {
             try { fileWatcher.close(); } catch(e){}
             fileWatcher = null;
@@ -296,6 +352,14 @@ function setAutoSyncEnabled(enabled, db) {
         if (periodicInterval) {
             clearInterval(periodicInterval);
             periodicInterval = null;
+        }
+        if (watcherDebounceTimer) {
+            clearTimeout(watcherDebounceTimer);
+            watcherDebounceTimer = null;
+        }
+        if (startupVerificationTimer) {
+            clearTimeout(startupVerificationTimer);
+            startupVerificationTimer = null;
         }
     }
     return isEnabled;
@@ -2072,6 +2136,8 @@ module.exports = {
     getAccessFilePath,
     setAccessFilePath,
     startFileWatcher,
+    stopAllWatchers,
+    isPendingResync: () => pendingResync,
     isAutoSyncEnabled,
     setAutoSyncEnabled,
     setOnSyncCompleteCallback,
