@@ -17,23 +17,29 @@ function translateSqliteToPostgres(sql, params) {
         pgSql = pgSql.replace(/INSERT OR REPLACE INTO tblinstallments \((.*?)\) VALUES \((.*?)\)/i, 
             "INSERT INTO tblinstallments ($1) VALUES ($2) ON CONFLICT (id) DO UPDATE SET pos = EXCLUDED.pos, installments = EXCLUDED.installments, unitprice = EXCLUDED.unitprice, monthlyinstallmentprice = EXCLUDED.monthlyinstallmentprice, finalunitprice = EXCLUDED.finalunitprice");
     }
-    else if (pgSql.match(/INSERT OR REPLACE INTO merchants/i)) {
-        pgSql = pgSql.replace(/INSERT OR REPLACE INTO merchants \((.*?)\)\s+SELECT/is, 
-            "INSERT INTO merchants ($1) SELECT");
-        pgSql = pgSql.replace(/;\s*$/, '') + 
-            " ON CONFLICT (merchant_code) DO UPDATE SET name = EXCLUDED.name, type = EXCLUDED.type, contact_phone = EXCLUDED.contact_phone, contact_phone_2 = EXCLUDED.contact_phone_2, address = EXCLUDED.address, government = EXCLUDED.government, national_id = EXCLUDED.national_id, notes = EXCLUDED.notes, status = EXCLUDED.status";
+    else if (pgSql.match(/INSERT (?:OR REPLACE )?INTO merchants/i)) {
+        if (!pgSql.includes('ON CONFLICT')) {
+            pgSql = pgSql.replace(/INSERT (?:OR REPLACE )?INTO merchants \((.*?)\)\s+SELECT/is, 
+                "INSERT INTO merchants ($1) SELECT");
+            pgSql = pgSql.replace(/;\s*$/, '') + 
+                " ON CONFLICT (merchant_code) DO UPDATE SET name = EXCLUDED.name, type = EXCLUDED.type, contact_phone = EXCLUDED.contact_phone, contact_phone_2 = EXCLUDED.contact_phone_2, address = EXCLUDED.address, government = EXCLUDED.government, national_id = EXCLUDED.national_id, notes = EXCLUDED.notes, status = EXCLUDED.status";
+        }
     }
-    else if (pgSql.match(/INSERT OR REPLACE INTO devices/i)) {
-        pgSql = pgSql.replace(/INSERT OR REPLACE INTO devices \((.*?)\)\s+SELECT/is, 
-            "INSERT INTO devices ($1) SELECT");
-        pgSql = pgSql.replace(/;\s*$/, '') + 
-            " ON CONFLICT (serial) DO UPDATE SET manufacturer = EXCLUDED.manufacturer, model = EXCLUDED.model, status = EXCLUDED.status, faulty_details = EXCLUDED.faulty_details, solder_bridges = EXCLUDED.solder_bridges";
+    else if (pgSql.match(/INSERT (?:OR REPLACE )?INTO devices/i)) {
+        if (!pgSql.includes('ON CONFLICT')) {
+            pgSql = pgSql.replace(/INSERT (?:OR REPLACE )?INTO devices \((.*?)\)\s+SELECT/is, 
+                "INSERT INTO devices ($1) SELECT");
+            pgSql = pgSql.replace(/;\s*$/, '') + 
+                " ON CONFLICT (serial) DO UPDATE SET manufacturer = EXCLUDED.manufacturer, model = EXCLUDED.model, status = EXCLUDED.status, faulty_details = EXCLUDED.faulty_details, solder_bridges = EXCLUDED.solder_bridges";
+        }
     }
-    else if (pgSql.match(/INSERT OR REPLACE INTO sim_cards/i)) {
-        pgSql = pgSql.replace(/INSERT OR REPLACE INTO sim_cards \((.*?)\)\s+SELECT/is, 
-            "INSERT INTO sim_cards ($1) SELECT");
-        pgSql = pgSql.replace(/;\s*$/, '') + 
-            " ON CONFLICT (serial) DO UPDATE SET carrier = EXCLUDED.carrier, status = EXCLUDED.status";
+    else if (pgSql.match(/INSERT (?:OR REPLACE )?INTO sim_cards/i)) {
+        if (!pgSql.includes('ON CONFLICT')) {
+            pgSql = pgSql.replace(/INSERT (?:OR REPLACE )?INTO sim_cards \((.*?)\)\s+SELECT/is, 
+                "INSERT INTO sim_cards ($1) SELECT");
+            pgSql = pgSql.replace(/;\s*$/, '') + 
+                " ON CONFLICT (serial) DO UPDATE SET carrier = EXCLUDED.carrier, status = EXCLUDED.status";
+        }
     }
     else if (pgSql.match(/INSERT OR REPLACE INTO payments/i)) {
         pgSql = pgSql.replace(/INSERT OR REPLACE INTO payments \((.*?)\)\s+SELECT/is, 
