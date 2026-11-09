@@ -228,6 +228,13 @@ db.run(`
         client_ip TEXT
     );
 `);
+db.run(`
+    CREATE TABLE IF NOT EXISTS sync_applied_batches (
+        batch_id TEXT PRIMARY KEY,
+        applied_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        changes_count INTEGER DEFAULT 0
+    );
+`);
 
 // Helper for database queries with automatic error logging
 async function logSystemError(module, endpoint, err, req = null, severity = 'ERROR') {
@@ -645,6 +652,14 @@ async function initAppSchema() {
             await pgPool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_store_sp_raw_sync_key ON store_sp_raw(sync_key);`).catch(() => {});
             await pgPool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_store_sp_maint_sync_key ON store_sp_maintenance_raw(sync_key);`).catch(() => {});
             await pgPool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_failure_points_sync_key ON failure_points_raw(sync_key);`).catch(() => {});
+            await pgPool.query(`
+                CREATE TABLE IF NOT EXISTS sync_applied_batches (
+                    batch_id VARCHAR(128) PRIMARY KEY,
+                    applied_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                    changes_count INTEGER DEFAULT 0
+                );
+            `).catch(() => {});
+            await pgPool.query(`CREATE INDEX IF NOT EXISTS idx_sync_applied_batches_time ON sync_applied_batches(applied_at);`).catch(() => {});
         } else {
             await runQuery(`
                 CREATE TABLE IF NOT EXISTS system_error_logs (
@@ -660,6 +675,13 @@ async function initAppSchema() {
                 );
             `).catch(() => {});
             await runQuery(`CREATE INDEX IF NOT EXISTS idx_system_error_logs_ts ON system_error_logs(timestamp);`).catch(() => {});
+            await runQuery(`
+                CREATE TABLE IF NOT EXISTS sync_applied_batches (
+                    batch_id TEXT PRIMARY KEY,
+                    applied_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    changes_count INTEGER DEFAULT 0
+                );
+            `).catch(() => {});
         }
         await runQuery(`CREATE INDEX IF NOT EXISTS idx_tickets_issue_clean ON tickets(issue_details);`).catch(() => {});
         await runQuery(`CREATE INDEX IF NOT EXISTS idx_devices_model ON devices(model);`).catch(() => {});
@@ -5155,10 +5177,49 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
         return res.status(401).json({ success: false, error: 'Unauthorized: Invalid sync secret' });
     }
 
-    const { changes, tablesData } = req.body || {};
+    const { changes, tablesData, batchId: rawBatchId, batch_id: altBatchId } = req.body || {};
+    const batchId = rawBatchId || altBatchId || null;
     let appliedCount = 0;
 
-    // In-memory column cache to eliminate repetitive DDL queries and avoid PostgreSQL table lock contention
+    // Ensure sync_applied_batches table exists for idempotency tracking
+    try {
+        if (appCfg.isCloudServer && pgPool) {
+            await pgPool.query(`
+                CREATE TABLE IF NOT EXISTS sync_applied_batches (
+                    batch_id VARCHAR(128) PRIMARY KEY,
+                    applied_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                    changes_count INTEGER DEFAULT 0
+                );
+            `).catch(() => {});
+        } else {
+            await runQuery(`
+                CREATE TABLE IF NOT EXISTS sync_applied_batches (
+                    batch_id TEXT PRIMARY KEY,
+                    applied_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    changes_count INTEGER DEFAULT 0
+                );
+            `).catch(() => {});
+        }
+    } catch (e) {}
+
+    // Idempotency check: if this batchId has already been applied, return idempotent success
+    if (batchId) {
+        try {
+            const existing = await getQuery("SELECT batch_id FROM sync_applied_batches WHERE batch_id = ?", [batchId]);
+            if (existing && existing.batch_id) {
+                console.log(`[CLOUD DELTA SYNC] Duplicate batch ${batchId} already applied. Returning idempotent success.`);
+                return res.json({
+                    success: true,
+                    applied: 0,
+                    duplicate: true,
+                    batchId: batchId,
+                    message: 'Batch already applied previously'
+                });
+            }
+        } catch (e) {}
+    }
+
+    // In-memory column cache to eliminate repetitive DDL queries and avoid table lock contention
     const syncedTableColumnsCache = new Map();
 
     async function getOrFetchTableColumns(tableName) {
@@ -5217,21 +5278,76 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
         }
     }
 
+    // Phase 1: Validate payload and prepare table schemas before transaction
     try {
         if (tablesData && typeof tablesData === 'object') {
             for (const [tbl, rows] of Object.entries(tablesData)) {
-                if (!isAllowedSyncTable(tbl)) continue;
+                if (!isAllowedSyncTable(tbl)) {
+                    return res.status(400).json({ success: false, error: `Table '${tbl}' not allowed for sync` });
+                }
                 if (Array.isArray(rows) && rows.length > 0) {
                     const sample = rows[0];
                     const rawKeys = Object.keys(sample);
                     const keys = rawKeys.filter(k => isValidSqlIdentifier(k));
-                    if (keys.length === 0) continue;
-                    let tablePk = Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, tbl) ? RAW_TABLE_PK_MAP[tbl] : null;
-                    if (tablePk === undefined && !Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, tbl)) {
-                        const pkCandidates = ['ID', 'id', 'Serial', 'sim_serial', 'faultid', 'FixID'];
-                        tablePk = pkCandidates.find(c => keys.includes(c)) || null;
+                    if (keys.length > 0) {
+                        let tablePk = Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, tbl) ? RAW_TABLE_PK_MAP[tbl] : null;
+                        if (tablePk === undefined && !Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, tbl)) {
+                            const pkCandidates = ['ID', 'id', 'Serial', 'sim_serial', 'faultid', 'FixID'];
+                            tablePk = pkCandidates.find(c => keys.includes(c)) || null;
+                        }
+                        await ensureTableAndColumnsForBatch(tbl, keys, tablePk);
                     }
-                    await ensureTableAndColumnsForBatch(tbl, keys, tablePk);
+                }
+            }
+        }
+
+        if (changes && Array.isArray(changes) && changes.length > 0) {
+            for (const change of changes) {
+                if (!change.table_name || !isAllowedSyncTable(change.table_name)) {
+                    return res.status(400).json({ success: false, error: `Table '${change.table_name}' not allowed for sync` });
+                }
+                if (change.new_data) {
+                    const parsed = typeof change.new_data === 'string' ? JSON.parse(change.new_data) : change.new_data;
+                    const rawKeys = Object.keys(parsed || {});
+                    const keys = rawKeys.filter(k => isValidSqlIdentifier(k));
+                    if (keys.length > 0) {
+                        let tablePk = Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, change.table_name) ? RAW_TABLE_PK_MAP[change.table_name] : null;
+                        if (tablePk === undefined && !Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, change.table_name)) {
+                            const pkCandidates = ['ID', 'id', 'Serial', 'sim_serial', 'faultid', 'FixID'];
+                            tablePk = pkCandidates.find(c => keys.includes(c)) || null;
+                        }
+                        await ensureTableAndColumnsForBatch(change.table_name, keys, tablePk);
+                    }
+                }
+            }
+        }
+    } catch (prepErr) {
+        return res.status(400).json({ success: false, error: `Schema preparation failed: ${prepErr.message}` });
+    }
+
+    // Phase 2: Transactional Execution (Single Transaction: all rows + audit logs + batch record commit or rollback together)
+    let pgClient = null;
+    try {
+        if (appCfg.isCloudServer && pgPool) {
+            pgClient = await pgPool.connect();
+            await pgClient.query('BEGIN');
+        } else {
+            await runQuery('BEGIN IMMEDIATE');
+        }
+
+        const txRun = async (sql, params = []) => {
+            if (pgClient) {
+                const { pgSql, pgParams } = translateSqliteToPostgres(sql, params);
+                return await pgClient.query(pgSql, pgParams);
+            } else {
+                return await runQuery(sql, params);
+            }
+        };
+
+        if (tablesData && typeof tablesData === 'object') {
+            for (const [tbl, rows] of Object.entries(tablesData)) {
+                if (!isAllowedSyncTable(tbl)) continue;
+                if (Array.isArray(rows) && rows.length > 0) {
                     const escTbl = escapeSqlIdentifier(tbl);
                     for (const row of rows) {
                         const rowKeys = Object.keys(row).filter(k => isValidSqlIdentifier(k));
@@ -5251,7 +5367,7 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
                             }
                         }
                         
-                        await runQuery(insertSql, rowValues);
+                        await txRun(insertSql, rowValues);
                         appliedCount++;
                     }
                 }
@@ -5262,118 +5378,142 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
             for (const change of changes) {
                 let rowApplied = false;
                 if (change.table_name && isAllowedSyncTable(change.table_name) && change.new_data) {
-                    try {
-                        const parsed = typeof change.new_data === 'string' ? JSON.parse(change.new_data) : change.new_data;
-                        const rawKeys = Object.keys(parsed);
-                        const keys = rawKeys.filter(k => isValidSqlIdentifier(k));
-                        if (keys.length > 0) {
-                            let tablePk = Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, change.table_name) ? RAW_TABLE_PK_MAP[change.table_name] : null;
-                            if (tablePk === undefined && !Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, change.table_name)) {
-                                const pkCandidates = ['ID', 'id', 'Serial', 'sim_serial', 'faultid', 'FixID'];
-                                tablePk = pkCandidates.find(c => keys.includes(c)) || null;
+                    const parsed = typeof change.new_data === 'string' ? JSON.parse(change.new_data) : change.new_data;
+                    const rawKeys = Object.keys(parsed || {});
+                    const keys = rawKeys.filter(k => isValidSqlIdentifier(k));
+                    if (keys.length > 0) {
+                        const escChangeTbl = escapeSqlIdentifier(change.table_name);
+                        const placeholders = keys.map(() => '?').join(', ');
+                        const quotedCols = keys.map(k => escapeSqlIdentifier(k)).join(', ');
+                        const values = keys.map(k => {
+                            const v = parsed[k];
+                            return v === null || v === undefined ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
+                        });
+                        
+                        let insertSql = `INSERT OR REPLACE INTO ${escChangeTbl} (${quotedCols}) VALUES (${placeholders})`;
+                        if (appCfg.isCloudServer) {
+                            const matchedPk = await getPgValidConstraintCol(change.table_name, keys);
+                            if (matchedPk && isValidSqlIdentifier(matchedPk)) {
+                                const updateCols = keys.filter(k => k !== matchedPk).map(k => `${escapeSqlIdentifier(k)} = EXCLUDED.${escapeSqlIdentifier(k)}`).join(', ');
+                                insertSql = `INSERT INTO ${escChangeTbl} (${quotedCols}) VALUES (${placeholders}) ON CONFLICT (${escapeSqlIdentifier(matchedPk)}) DO UPDATE SET ${updateCols || `${escapeSqlIdentifier(matchedPk)} = EXCLUDED.${escapeSqlIdentifier(matchedPk)}`}`;
+                            } else {
+                                insertSql = `INSERT INTO ${escChangeTbl} (${quotedCols}) VALUES (${placeholders})`;
                             }
-                            await ensureTableAndColumnsForBatch(change.table_name, keys, tablePk);
-                            const escChangeTbl = escapeSqlIdentifier(change.table_name);
-                            const placeholders = keys.map(() => '?').join(', ');
-                            const quotedCols = keys.map(k => escapeSqlIdentifier(k)).join(', ');
-                            const values = keys.map(k => {
-                                const v = parsed[k];
-                                return v === null || v === undefined ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
-                            });
-                            
-                            let insertSql = `INSERT OR REPLACE INTO ${escChangeTbl} (${quotedCols}) VALUES (${placeholders})`;
-                            if (appCfg.isCloudServer) {
-                                const matchedPk = await getPgValidConstraintCol(change.table_name, keys);
-                                if (matchedPk && isValidSqlIdentifier(matchedPk)) {
-                                    const updateCols = keys.filter(k => k !== matchedPk).map(k => `${escapeSqlIdentifier(k)} = EXCLUDED.${escapeSqlIdentifier(k)}`).join(', ');
-                                    insertSql = `INSERT INTO ${escChangeTbl} (${quotedCols}) VALUES (${placeholders}) ON CONFLICT (${escapeSqlIdentifier(matchedPk)}) DO UPDATE SET ${updateCols || `${escapeSqlIdentifier(matchedPk)} = EXCLUDED.${escapeSqlIdentifier(matchedPk)}`}`;
-                                } else {
-                                    insertSql = `INSERT INTO ${escChangeTbl} (${quotedCols}) VALUES (${placeholders})`;
-                                }
-                            }
-                            
-                            await runQuery(insertSql, values);
-                            appliedCount++;
-                            rowApplied = true;
                         }
-                    } catch(e) {
-                        console.error(`[DELTA APPLY ERROR on ${change.table_name}]:`, e.message);
+                        
+                        await txRun(insertSql, values);
+                        appliedCount++;
+                        rowApplied = true;
                     }
                 } else if (change.table_name && isAllowedSyncTable(change.table_name) && change.change_type === 'DELETE' && change.record_id) {
-                    try {
-                        const existingCols = await getOrFetchTableColumns(change.table_name);
-                        let matchedPk = Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, change.table_name) ? RAW_TABLE_PK_MAP[change.table_name] : null;
-                        if (matchedPk === undefined && !Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, change.table_name)) {
-                            const pkCandidates = ['ID', 'id', 'Serial', 'sim_serial', 'faultid', 'FixID'];
-                            matchedPk = pkCandidates.find(c => existingCols.has(c));
-                        }
-                        if (matchedPk && isValidSqlIdentifier(matchedPk)) {
-                            await runQuery(`DELETE FROM ${escapeSqlIdentifier(change.table_name)} WHERE ${escapeSqlIdentifier(matchedPk)} = ?`, [change.record_id]);
-                            appliedCount++;
-                            rowApplied = true;
-                        }
-                    } catch(e) {
-                        console.error(`[DELTA DELETE ERROR on ${change.table_name}]:`, e.message);
+                    const existingCols = await getOrFetchTableColumns(change.table_name);
+                    let matchedPk = Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, change.table_name) ? RAW_TABLE_PK_MAP[change.table_name] : null;
+                    if (matchedPk === undefined && !Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, change.table_name)) {
+                        const pkCandidates = ['ID', 'id', 'Serial', 'sim_serial', 'faultid', 'FixID'];
+                        matchedPk = pkCandidates.find(c => existingCols.has(c));
+                    }
+                    if (matchedPk && isValidSqlIdentifier(matchedPk)) {
+                        await txRun(`DELETE FROM ${escapeSqlIdentifier(change.table_name)} WHERE ${escapeSqlIdentifier(matchedPk)} = ?`, [change.record_id]);
+                        appliedCount++;
+                        rowApplied = true;
+                    } else {
+                        throw new Error(`Cannot delete from '${change.table_name}': no primary key column found`);
                     }
                 }
 
-                // Persist in cloud audit_change_logs ONLY if the row change was actually applied
+                // Persist in cloud audit_change_logs inside the same transaction
                 if (rowApplied) {
-                    try {
-                        await runQuery(`
-                            INSERT INTO audit_change_logs (table_name, record_id, change_type, summary, old_data, new_data, source)
-                            VALUES (?, ?, ?, ?, ?, ?, ?)
-                        `, [
-                            change.table_name,
-                            change.record_id,
-                            change.change_type || 'UPDATE',
-                            change.summary || '',
-                            typeof change.old_data === 'object' ? JSON.stringify(change.old_data) : (change.old_data || null),
-                            typeof change.new_data === 'object' ? JSON.stringify(change.new_data) : (change.new_data || null),
-                            change.source || 'MS_ACCESS_SYNC'
-                        ]);
-                    } catch(e) {}
+                    await txRun(`
+                        INSERT INTO audit_change_logs (table_name, record_id, change_type, summary, old_data, new_data, source)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    `, [
+                        change.table_name,
+                        change.record_id,
+                        change.change_type || 'UPDATE',
+                        change.summary || '',
+                        typeof change.old_data === 'object' ? JSON.stringify(change.old_data) : (change.old_data || null),
+                        typeof change.new_data === 'object' ? JSON.stringify(change.new_data) : (change.new_data || null),
+                        change.source || 'MS_ACCESS_SYNC'
+                    ]);
                 }
             }
         }
 
-        // Broadcast real-time event to connected browsers
+        // Record batchId in sync_applied_batches within transaction if present
+        if (batchId) {
+            if (pgClient) {
+                await pgClient.query(
+                    'INSERT INTO sync_applied_batches (batch_id, applied_at, changes_count) VALUES ($1, CURRENT_TIMESTAMP, $2) ON CONFLICT (batch_id) DO NOTHING',
+                    [batchId, appliedCount]
+                );
+            } else {
+                await runQuery(
+                    'INSERT OR IGNORE INTO sync_applied_batches (batch_id, applied_at, changes_count) VALUES (?, CURRENT_TIMESTAMP, ?)',
+                    [batchId, appliedCount]
+                );
+            }
+        }
+
+        // Commit transaction
+        if (pgClient) {
+            await pgClient.query('COMMIT');
+        } else {
+            await runQuery('COMMIT');
+        }
+    } catch (txErr) {
+        if (pgClient) {
+            await pgClient.query('ROLLBACK').catch(() => {});
+        } else {
+            await runQuery('ROLLBACK').catch(() => {});
+        }
+        console.error('[CLOUD DELTA SYNC ERROR - ROLLED BACK]:', txErr.message);
+        return res.status(422).json({
+            success: false,
+            applied: 0,
+            batchId: batchId || null,
+            error: txErr.message,
+            details: 'Batch application failed and was rolled back cleanly'
+        });
+    } finally {
+        if (pgClient) {
+            pgClient.release();
+        }
+    }
+
+    // Phase 3: Post-commit telemetry, notifications, and response
+    try {
         broadcastSseEvent('sync_completed', {
             type: 'cloud_delta_applied',
             changesCount: appliedCount,
+            batchId: batchId || null,
             timestamp: new Date().toISOString()
         });
 
         // Log to sync_history for cloud telemetry
-        try {
-            await runQuery(`
-                INSERT INTO sync_history (sync_type, status, tables_count, records_count, changes_count, duration_ms, message, details)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `, [
-                'CLOUD_VPS',
-                'SUCCESS',
-                tablesData ? Object.keys(tablesData).length : (changes ? new Set(changes.map(c => c.table_name)).size : 0),
-                appliedCount,
-                appliedCount,
-                0,
-                `استلام وتطبيق ${appliedCount} سجل دلتا على السيرفر السحابي (VPS) بنجاح ⚡`,
-                JSON.stringify({ client_ip: req.ip, applied_records: appliedCount })
-            ]);
-        } catch(e) {}
+        await runQuery(`
+            INSERT INTO sync_history (sync_type, status, tables_count, records_count, changes_count, duration_ms, message, details)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+            'CLOUD_VPS',
+            'SUCCESS',
+            tablesData ? Object.keys(tablesData).length : (changes ? new Set(changes.map(c => c.table_name)).size : 0),
+            appliedCount,
+            appliedCount,
+            0,
+            `استلام وتطبيق ${appliedCount} سجل دلتا على السيرفر السحابي (VPS) بنجاح ⚡`,
+            JSON.stringify({ client_ip: req.ip, applied_records: appliedCount, batch_id: batchId })
+        ]).catch(() => {});
 
-        console.log(`[CLOUD DELTA SYNC] Successfully applied ${appliedCount} delta record(s) to cloud database!`);
-        
-        // IMPORTANT: Send response FIRST so client (and Nginx) doesn't timeout!
-        res.json({ success: true, applied: appliedCount, timestamp: new Date().toISOString() });
+        console.log(`[CLOUD DELTA SYNC] Successfully applied ${appliedCount} delta record(s) (batch: ${batchId || 'legacy'})!`);
 
-        // Optimized: DO NOT rebuild domain entities synchronously or immediately on each delta batch!
-        // Schedule debounced reconciliation (30 minutes of idle time) to protect VPS CPU from starvation
+        res.json({ success: true, applied: appliedCount, batchId: batchId || null, timestamp: new Date().toISOString() });
+
+        // Schedule debounced reconciliation to protect VPS CPU
         if (syncEngine && typeof syncEngine.scheduleDebouncedDomainRebuild === 'function') {
             syncEngine.scheduleDebouncedDomainRebuild(db, 30 * 60 * 1000);
         }
-    } catch (err) {
-        console.error('[CLOUD DELTA SYNC ERROR]', err);
-        res.status(500).json({ success: false, error: err.message });
+    } catch (postErr) {
+        console.error('[CLOUD DELTA POST-SYNC ERROR]:', postErr.message);
     }
 });
 

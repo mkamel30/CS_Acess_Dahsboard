@@ -418,6 +418,9 @@ async function initSyncDatabase(db) {
     // Safely add missing columns for backward compatibility
     try { await dbRun(db, `ALTER TABLE sync_history ADD COLUMN sync_type TEXT DEFAULT 'LOCAL_ACCESS';`); } catch(e){}
     try { await dbRun(db, `ALTER TABLE sync_history ADD COLUMN message TEXT;`); } catch(e){}
+    try { await dbRun(db, `ALTER TABLE delta_outbox ADD COLUMN batch_id TEXT;`); } catch(e){}
+    try { await dbRun(db, `ALTER TABLE delta_outbox_dlq ADD COLUMN batch_id TEXT;`); } catch(e){}
+    try { await dbRun(db, `CREATE TABLE IF NOT EXISTS sync_applied_batches (batch_id TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP, changes_count INTEGER DEFAULT 0);`); } catch(e){}
 
     await dbRun(db, `
         CREATE TABLE IF NOT EXISTS merchants (
@@ -1682,8 +1685,9 @@ async function pushDeltaToCloud(db, deltaChanges) {
     const cloudEndpoint = config.cloudEndpoint || 'https://smartcs.m-kamel.workers.dev/api/sync/delta';
     const secret = config.syncSecret || 'smartcs-cloud-secret-2026';
     const startTime = Date.now();
+    const batchId = crypto.randomUUID ? crypto.randomUUID() : `batch_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
-    console.log(`[CLOUD DELTA SYNC] Pushing ${deltaChanges.length} incremental change(s) to Oracle Cloud VPS...`);
+    console.log(`[CLOUD DELTA SYNC] Pushing ${deltaChanges.length} incremental change(s) (batch: ${batchId}) to Oracle Cloud VPS...`);
     try {
         const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
         const timeoutSignal = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) 
@@ -1696,14 +1700,20 @@ async function pushDeltaToCloud(db, deltaChanges) {
                 'x-sync-secret': secret
             },
             body: JSON.stringify({
+                batchId: batchId,
                 changes: deltaChanges,
                 timestamp: new Date().toISOString()
             }),
             signal: timeoutSignal
         });
-        const data = await response.json();
+        let data = null;
+        try {
+            data = await response.json();
+        } catch (jsonErr) {
+            throw new Error(`Cloud returned invalid JSON (${response.status} ${response.statusText})`);
+        }
         const duration = Date.now() - startTime;
-        if (data.success) {
+        if (response.ok && data && data.success === true) {
             console.log(`[CLOUD DELTA SYNC SUCCESS] Applied ${data.applied} change(s) in cloud database! ⚡`);
             if (db) {
                 try {
@@ -1714,26 +1724,27 @@ async function pushDeltaToCloud(db, deltaChanges) {
                         'CLOUD_VPS',
                         'SUCCESS',
                         new Set(deltaChanges.map(c => c.table_name)).size,
-                        data.applied || deltaChanges.length,
-                        data.applied || deltaChanges.length,
+                        data.applied !== undefined ? data.applied : deltaChanges.length,
+                        data.applied !== undefined ? data.applied : deltaChanges.length,
                         duration,
-                        `تم إرسال ودفع ${data.applied || deltaChanges.length} تغييراً فورياً إلى السيرفر السحابي (VPS) بنجاح ⚡`,
-                        JSON.stringify({ cloud_endpoint: cloudEndpoint, changes_pushed: deltaChanges.length })
+                        `تم إرسال ودفع ${data.applied !== undefined ? data.applied : deltaChanges.length} تغييراً فورياً إلى السيرفر السحابي (VPS) بنجاح ⚡`,
+                        JSON.stringify({ cloud_endpoint: cloudEndpoint, changes_pushed: deltaChanges.length, batch_id: batchId })
                     ]);
                 } catch (e) {}
                 // Also flush any pending queued retries
                 flushDeltaOutbox(db).catch(() => {});
             }
         } else {
-            console.warn(`[CLOUD DELTA SYNC WARNING] Cloud response:`, data.error);
-            // Queue to outbox
+            const errMsg = (data && data.error) ? data.error : `HTTP ${response.status}: Cloud rejected batch`;
+            console.warn(`[CLOUD DELTA SYNC WARNING] Cloud response:`, errMsg);
+            // Queue to outbox with batchId
             if (db) {
                 try {
                     await dbRun(db, `
-                        INSERT INTO delta_outbox (payload, changes_count, attempts, last_error)
-                        VALUES (?, ?, 1, ?)
-                    `, [JSON.stringify(deltaChanges), deltaChanges.length, data.error || 'Unknown cloud error']);
-                    console.log(`[CLOUD DELTA OUTBOX] Queued ${deltaChanges.length} change(s) in local outbox for automatic retry.`);
+                        INSERT INTO delta_outbox (batch_id, payload, changes_count, attempts, last_error)
+                        VALUES (?, ?, ?, 1, ?)
+                    `, [batchId, JSON.stringify(deltaChanges), deltaChanges.length, errMsg]);
+                    console.log(`[CLOUD DELTA OUTBOX] Queued ${deltaChanges.length} change(s) (batch: ${batchId}) in local outbox for automatic retry.`);
                 } catch (e) {}
             }
         }
@@ -1743,10 +1754,10 @@ async function pushDeltaToCloud(db, deltaChanges) {
         if (db) {
             try {
                 await dbRun(db, `
-                    INSERT INTO delta_outbox (payload, changes_count, attempts, last_error)
-                    VALUES (?, ?, 1, ?)
-                `, [JSON.stringify(deltaChanges), deltaChanges.length, err.message]);
-                console.log(`[CLOUD DELTA OUTBOX] Queued ${deltaChanges.length} change(s) in local outbox for automatic retry.`);
+                    INSERT INTO delta_outbox (batch_id, payload, changes_count, attempts, last_error)
+                    VALUES (?, ?, ?, 1, ?)
+                `, [batchId, JSON.stringify(deltaChanges), deltaChanges.length, err.message]);
+                console.log(`[CLOUD DELTA OUTBOX] Queued ${deltaChanges.length} change(s) (batch: ${batchId}) in local outbox for automatic retry.`);
             } catch (e) {}
         }
     }
@@ -1758,9 +1769,19 @@ async function archiveOutboxItemToDlq(db, item) {
     await dbRun(db, 'BEGIN IMMEDIATE');
     try {
         await dbRun(db, `
-            INSERT INTO delta_outbox_dlq (original_id, payload, changes_count, attempts, last_error)
-            VALUES (?, ?, ?, ?, ?);
-        `, [item.id, item.payload, item.changes_count, item.attempts, item.last_error]);
+            INSERT INTO delta_outbox_dlq (original_id, batch_id, payload, changes_count, attempts, last_error)
+            VALUES (?, ?, ?, ?, ?, ?);
+        `, [item.id, item.batch_id || null, item.payload, item.changes_count, item.attempts, item.last_error]).catch(async (e) => {
+            if (e.message && e.message.includes('has no column named batch_id')) {
+                await dbRun(db, `ALTER TABLE delta_outbox_dlq ADD COLUMN batch_id TEXT;`).catch(() => {});
+                await dbRun(db, `
+                    INSERT INTO delta_outbox_dlq (original_id, batch_id, payload, changes_count, attempts, last_error)
+                    VALUES (?, ?, ?, ?, ?, ?);
+                `, [item.id, item.batch_id || null, item.payload, item.changes_count, item.attempts, item.last_error]);
+            } else {
+                throw e;
+            }
+        });
 
         const check = await dbAll(db, `SELECT id FROM delta_outbox_dlq WHERE original_id = ? ORDER BY id DESC LIMIT 1;`, [item.id]);
         if (!check || check.length === 0) {
@@ -1807,6 +1828,12 @@ async function flushDeltaOutbox(db) {
                 continue;
             }
             try {
+                let batchId = item.batch_id;
+                if (!batchId) {
+                    batchId = crypto.randomUUID ? crypto.randomUUID() : `batch_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+                    await dbRun(db, `UPDATE delta_outbox SET batch_id = ? WHERE id = ?;`, [batchId, item.id]).catch(() => {});
+                }
+
                 const changes = JSON.parse(item.payload);
                 const timeoutSignal = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) 
                     ? AbortSignal.timeout(15000) 
@@ -1818,17 +1845,25 @@ async function flushDeltaOutbox(db) {
                         'x-sync-secret': secret
                     },
                     body: JSON.stringify({
+                        batchId: batchId,
                         changes: changes,
                         timestamp: new Date().toISOString()
                     }),
                     signal: timeoutSignal
                 });
-                const data = await response.json();
-                if (data.success) {
+                let data = null;
+                try {
+                    data = await response.json();
+                } catch (jsonErr) {
+                    throw new Error(`Cloud returned invalid JSON (${response.status} ${response.statusText})`);
+                }
+
+                if (response.ok && data && data.success === true) {
                     await dbRun(db, `DELETE FROM delta_outbox WHERE id = ?;`, [item.id]);
-                    console.log(`[CLOUD DELTA OUTBOX] Successfully flushed outbox batch #${item.id} (${item.changes_count} changes) to cloud! ⚡`);
+                    console.log(`[CLOUD DELTA OUTBOX] Successfully flushed outbox batch #${item.id} (${item.changes_count} changes, batchId: ${batchId}) to cloud! ⚡`);
                 } else {
-                    await dbRun(db, `UPDATE delta_outbox SET attempts = attempts + 1, last_error = ? WHERE id = ?;`, [data.error || 'Cloud error', item.id]);
+                    const errMsg = (data && data.error) ? data.error : `HTTP ${response.status}: Cloud rejected batch`;
+                    await dbRun(db, `UPDATE delta_outbox SET attempts = attempts + 1, last_error = ? WHERE id = ?;`, [errMsg, item.id]);
                 }
             } catch (err) {
                 await dbRun(db, `UPDATE delta_outbox SET attempts = attempts + 1, last_error = ? WHERE id = ?;`, [err.message, item.id]);
