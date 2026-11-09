@@ -29,6 +29,14 @@ function safeStorageGet(key, defaultVal = null) {
     return defaultVal;
 }
 
+function getActiveAdminSecret() {
+    try {
+        return (localStorage.getItem('smartcs_admin_secret') || sessionStorage.getItem('cs_admin_secret') || '').trim();
+    } catch (e) {
+        return '';
+    }
+}
+
 function safeStorageSet(key, val) {
     try {
         if (typeof window !== 'undefined' && window.localStorage) {
@@ -876,7 +884,7 @@ async function triggerAccessSync(btn, icon) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'x-admin-secret': 'TITI'
+                'x-admin-secret': getActiveAdminSecret()
             }
         });
         const data = await response.json();
@@ -3534,7 +3542,7 @@ async function retrySyncDlqQueue() {
     if (icon) icon.classList.add('spin-animation');
 
     try {
-        const adminSecret = sessionStorage.getItem('cs_admin_secret') || 'TITI';
+        const adminSecret = getActiveAdminSecret();
         const res = await fetch('/api/sync/retry-dlq', {
             method: 'POST',
             headers: { 
@@ -6067,7 +6075,7 @@ async function applyGitHubUpdate() {
     refreshIcons();
 
     try {
-        const adminSecret = localStorage.getItem('smartcs_admin_secret') || 'TITI';
+        const adminSecret = getActiveAdminSecret();
         const res = await fetch('/api/system/auto-update', {
             method: 'POST',
             headers: {
@@ -7885,7 +7893,7 @@ async function triggerFullCloudReseed() {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
-                'x-admin-secret': 'TITI'
+                'x-admin-secret': getActiveAdminSecret()
             }
         });
         const data = await res.json();
@@ -8008,7 +8016,7 @@ async function syncSingleTable(tableName, tableAr) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'x-admin-secret': 'TITI'
+                'x-admin-secret': getActiveAdminSecret()
             },
             body: JSON.stringify({ table: tableName })
         });
@@ -8379,7 +8387,7 @@ async function deleteCurrentDiagError() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'x-admin-secret': 'TITI'
+                'x-admin-secret': getActiveAdminSecret()
             },
             body: JSON.stringify({ id: currentSelectedDiagErrorId })
         });
@@ -8403,7 +8411,7 @@ async function deleteDiagErrorById(id, event) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'x-admin-secret': 'TITI'
+                'x-admin-secret': getActiveAdminSecret()
             },
             body: JSON.stringify({ id })
         });
@@ -8427,7 +8435,7 @@ async function clearAllDiagnosticsErrors() {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
-                'x-admin-secret': 'TITI'
+                'x-admin-secret': getActiveAdminSecret()
             }
         });
         const data = await res.json();

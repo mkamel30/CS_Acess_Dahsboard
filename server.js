@@ -176,9 +176,10 @@ if (appCfg.isCloudServer) {
         syncEngine.setSharedPgPool(pgPool);
     }
 }
-const SYNC_SECRET   = appCfg.syncSecret   || process.env.SYNC_SECRET   || 'smartcs-cloud-secret-2026';
-const WEBHOOK_SECRET = appCfg.webhookSecret || process.env.WEBHOOK_SECRET || '';
-const ADMIN_SECRET   = appCfg.adminSecret   || process.env.ADMIN_SECRET   || (appCfg.isCloudServer ? 'smartcs-admin-2026' : '');
+const SYNC_SECRET     = (appCfg.syncSecret     || process.env.SYNC_SECRET     || '').trim();
+const SYNC_SECRET_OLD = (appCfg.syncSecretOld  || process.env.SYNC_SECRET_OLD || '').trim();
+const WEBHOOK_SECRET  = (appCfg.webhookSecret  || process.env.WEBHOOK_SECRET  || '').trim();
+const ADMIN_SECRET    = (appCfg.adminSecret    || process.env.ADMIN_SECRET    || '').trim();
 
 // Timing-safe secret comparison to prevent timing attacks
 function safeCompareSecret(provided, expected) {
@@ -191,31 +192,61 @@ function safeCompareSecret(provided, expected) {
     } catch { return false; }
 }
 
+// Dual-secret validation helper for zero-downtime secret rotation
+function isValidSyncSecret(provided) {
+    if (!provided) return false;
+    if (SYNC_SECRET && safeCompareSecret(provided, SYNC_SECRET)) return true;
+    if (SYNC_SECRET_OLD && safeCompareSecret(provided, SYNC_SECRET_OLD)) return true;
+    return false;
+}
+
+// Exact RFC 1918 private CIDR check (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8)
+function isPrivateIp(ipStr) {
+    if (!ipStr || typeof ipStr !== 'string') return false;
+    let ip = ipStr.trim();
+    if (ip === 'localhost' || ip === '::1') return true;
+    if (ip.startsWith('::ffff:')) {
+        ip = ip.slice(7);
+    }
+    const parts = ip.split('.').map(p => parseInt(p, 10));
+    if (parts.length !== 4 || parts.some(p => isNaN(p) || p < 0 || p > 255)) {
+        return false;
+    }
+    // 127.0.0.0/8 (Loopback)
+    if (parts[0] === 127) return true;
+    // 10.0.0.0/8 (Class A private)
+    if (parts[0] === 10) return true;
+    // 172.16.0.0/12 (Class B private: 172.16.0.0 - 172.31.255.255)
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+    // 192.168.0.0/16 (Class C private)
+    if (parts[0] === 192 && parts[1] === 168) return true;
+
+    return false;
+}
+
 // Admin-guard middleware: protects destructive endpoints
 function requireAdmin(req, res, next) {
-    // Localhost and Office LAN bypass on branch machines (safe behind office subnet)
     const clientIp = req.ip || req.socket?.remoteAddress || '';
-    const isLocalOrLan = !appCfg.isCloudServer && (
-        clientIp === '127.0.0.1' || 
-        clientIp === '::1' || 
-        clientIp.includes('127.0.0.1') ||
-        clientIp === 'localhost' ||
-        clientIp.startsWith('192.168.') ||
-        clientIp.startsWith('10.') ||
-        clientIp.startsWith('172.') ||
-        clientIp.startsWith('::ffff:192.168.') ||
-        clientIp.startsWith('::ffff:10.') ||
-        clientIp.startsWith('::ffff:172.')
-    );
-    if (isLocalOrLan) return next();
+    if (!appCfg.isCloudServer && isPrivateIp(clientIp)) {
+        return next();
+    }
 
-    const activeSecret = ADMIN_SECRET || (appCfg.isCloudServer ? 'smartcs-admin-2026' : '');
-    if (!activeSecret) return next(); // Local mode without password configured
+    const activeSecret = ADMIN_SECRET;
+    if (!activeSecret) {
+        if (!appCfg.isCloudServer) {
+            // Local mode without password configured on local machine
+            return next();
+        }
+        // Cloud server without admin secret configured must fail closed!
+        return res.status(500).json({ success: false, error: 'Server misconfiguration: ADMIN_SECRET not configured' });
+    }
 
     const provided = req.headers['x-admin-secret'] || req.query.admin_secret;
-    if (safeCompareSecret(provided, activeSecret) || safeCompareSecret(provided, 'TITI') || safeCompareSecret(provided, 'smartcs-admin-2026')) return next();
+    if (safeCompareSecret(provided, activeSecret)) {
+        return next();
+    }
 
-    return res.status(403).json({ success: false, error: 'Forbidden: Admin authentication required. Please provide x-admin-secret header.' });
+    return res.status(403).json({ success: false, error: 'Forbidden: Admin authentication required. Please provide valid x-admin-secret header.' });
 }
 
 // SQLite connection
@@ -5201,7 +5232,7 @@ app.post('/api/webhook/github', express.raw({ type: 'application/json' }), (req,
 
 app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async (req, res) => {
     const secret = req.headers['x-sync-secret'] || req.query.secret;
-    if (!safeCompareSecret(secret, SYNC_SECRET)) {
+    if (!isValidSyncSecret(secret)) {
         return res.status(401).json({ success: false, error: 'Unauthorized: Invalid sync secret' });
     }
 
@@ -5904,7 +5935,7 @@ app.get('/api/diagnostics/reconciliation', async (req, res) => {
 // 6. Full Cloud Seed Receiver (VPS Endpoint)
 app.post('/api/sync/full-seed', express.json({ limit: '100mb' }), async (req, res) => {
     const secret = req.headers['x-sync-secret'] || req.query.secret;
-    if (!safeCompareSecret(secret, SYNC_SECRET)) {
+    if (!isValidSyncSecret(secret)) {
         return res.status(401).json({ success: false, error: 'Unauthorized: Invalid sync secret' });
     }
 

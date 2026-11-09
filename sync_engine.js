@@ -1683,7 +1683,11 @@ async function pushDeltaToCloud(db, deltaChanges) {
     }
 
     const cloudEndpoint = config.cloudEndpoint || 'https://smartcs.m-kamel.workers.dev/api/sync/delta';
-    const secret = config.syncSecret || 'smartcs-cloud-secret-2026';
+    const secret = (config.syncSecret || process.env.SYNC_SECRET || '').trim();
+    if (!secret) {
+        console.error('[CLOUD DELTA SYNC] No syncSecret configured in config.json or environment. Push aborted to prevent unauthorized or insecure sync.');
+        return;
+    }
     const startTime = Date.now();
     const batchId = crypto.randomUUID ? crypto.randomUUID() : `batch_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
@@ -1814,7 +1818,11 @@ async function flushDeltaOutbox(db) {
         if (!pending || pending.length === 0) return;
 
         const cloudEndpoint = config.cloudEndpoint || 'https://smartcs.m-kamel.workers.dev/api/sync/delta';
-        const secret = config.syncSecret || 'smartcs-cloud-secret-2026';
+        const secret = (config.syncSecret || process.env.SYNC_SECRET || '').trim();
+        if (!secret) {
+            console.error('[CLOUD DELTA OUTBOX] No syncSecret configured. Flush aborted.');
+            return;
+        }
         const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
 
         for (const item of pending) {
