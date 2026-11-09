@@ -6176,8 +6176,16 @@ app.post('/api/sync/full-seed', express.json({ limit: '100mb' }), async (req, re
             }
             if (rows.length === 0) continue;
 
-            const sample = rows[0];
-            const rawCols = Object.keys(sample);
+            // F-25: Union sparse columns across all rows in chunk rather than deriving only from rows[0]
+            const colSet = new Set();
+            for (const r of rows) {
+                if (r && typeof r === 'object') {
+                    for (const k of Object.keys(r)) {
+                        colSet.add(k);
+                    }
+                }
+            }
+            const rawCols = Array.from(colSet);
             // 2. Strict column identifier validation
             for (const c of rawCols) {
                 if (!isValidSqlIdentifier(c)) {

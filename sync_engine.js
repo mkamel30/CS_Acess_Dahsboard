@@ -217,11 +217,11 @@ function startFileWatcher(db) {
         try {
             lastKnownMtime = fs.statSync(accessPath).mtimeMs;
         } catch (e) {
-            lastKnownMtime = Date.now();
+            lastKnownMtime = 0;
         }
     } else {
         console.warn(`[FILE WATCHER] Access file currently unreachable: ${accessPath} (Continuous watcher will keep retrying in background)`);
-        lastKnownMtime = Date.now();
+        lastKnownMtime = 0; // F-25: Restored-file baseline: initialize to 0 so older restored files trigger sync promptly
     }
 
     let lastHeartbeatSync = Date.now();
@@ -285,18 +285,18 @@ function startFileWatcher(db) {
         if (!fs.existsSync(curPath)) return;
         try {
             const dir = path.dirname(curPath);
-            const fileName = path.basename(curPath);
-            const baseTarget = fileName.toLowerCase().replace(/\.(accdb|mdb)$/, '');
+            const targetFileName = path.basename(curPath).toLowerCase();
 
             fileWatcher = fs.watch(dir, { persistent: true }, (eventType, triggerFile) => {
                 if (!isAutoSyncEnabled()) return;
                 if (!triggerFile) return;
 
-                const lower = triggerFile.toLowerCase();
+                const lower = path.basename(triggerFile).toLowerCase();
                 if (lower.endsWith('.laccdb') || lower.endsWith('.ldb') || lower.startsWith('~$') || lower.endsWith('.tmp')) {
                     return;
                 }
-                if (lower.includes(baseTarget) || lower.endsWith('.accdb')) {
+                // F-25: Exact filename matching to prevent unrelated .accdb files from triggering sync
+                if (lower === targetFileName) {
                     // F-11: If sync is in progress, mark dirty event immediately
                     if (isSyncInProgress) {
                         pendingResync = true;
