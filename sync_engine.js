@@ -55,6 +55,7 @@ function scheduleDebouncedDomainRebuild(db, delayMs = 30 * 60 * 1000) {
 }
 
 const DATA_SYNC_DIR = path.join(__dirname, 'data_sync');
+const DATA_SYNC_STAGING_DIR = path.join(__dirname, 'data_sync_staging');
 const CONFIG_FILE_PATH = path.join(__dirname, 'config.json');
 const DEFAULT_ACCESS_FILE_PATH = '\\\\Share\\d\\gROCER SUPPORT\\0 Gro.Support\\DB\\BRrelease\\BE\\Bread_Final_be.accdb';
 const FALLBACK_LOCAL_ACCESS_PATH = 'h:\\Programming\\Br_DB\\BE\\Bread_Final_be.accdb';
@@ -648,25 +649,116 @@ async function initSyncDatabase(db) {
 }
 
 /**
- * Execute the VBScript extractor to dump Access tables to JSON
+ * Validate an Access export manifest and ensure all expected table files exist and match counts (F-12, F-13)
  */
-function runAccessExporter() {
+function validateExportManifest(manifest, expectedTableFiles, targetDir) {
+    if (!manifest || typeof manifest !== 'object') {
+        throw new Error('Export manifest is missing or invalid JSON');
+    }
+    if (manifest.success !== true) {
+        throw new Error(`Export manifest reports failure: ${manifest.error || 'One or more tables failed to export'}`);
+    }
+    if (!manifest.tables || typeof manifest.tables !== 'object') {
+        throw new Error('Export manifest missing tables map');
+    }
+
+    for (const item of expectedTableFiles) {
+        const tableName = item.endsWith('.json') ? item.slice(0, -5) : item;
+        const fileName = item.endsWith('.json') ? item : `${item}.json`;
+
+        const entryKey = Object.keys(manifest.tables).find(k => k.toLowerCase() === tableName.toLowerCase());
+        const entry = entryKey ? manifest.tables[entryKey] : null;
+
+        if (!entry) {
+            throw new Error(`Export manifest missing entry for table '${tableName}'`);
+        }
+        if (entry.status !== 'OK') {
+            throw new Error(`Export manifest indicates table '${tableName}' failed: ${entry.error || entry.status}`);
+        }
+        if (typeof entry.rowCount !== 'number' || entry.rowCount < 0) {
+            throw new Error(`Export manifest invalid rowCount for table '${tableName}'`);
+        }
+
+        const filePath = path.join(targetDir, fileName);
+        if (!fs.existsSync(filePath)) {
+            throw new Error(`Exported file missing on disk: ${fileName}`);
+        }
+
+        const records = readJsonSafely(filePath);
+        if (!Array.isArray(records)) {
+            throw new Error(`Exported file '${fileName}' contains invalid JSON array`);
+        }
+        if (records.length !== entry.rowCount) {
+            throw new Error(`Exported file '${fileName}' row count mismatch: manifest=${entry.rowCount}, actual=${records.length}`);
+        }
+    }
+
+    return { valid: true, manifest };
+}
+
+/**
+ * Execute the VBScript extractor into a staging directory, validate manifest, and promote atomically (F-12)
+ */
+function runAccessExporter(stagingDir = DATA_SYNC_STAGING_DIR, destDir = DATA_SYNC_DIR) {
     return new Promise((resolve, reject) => {
         const cscriptPath = 'C:\\Windows\\System32\\cscript.exe';
         const activePath = getAccessFilePath();
-        const cmd = `"${cscriptPath}" //nologo "${VBS_EXPORTER_PATH}" "${activePath}" "${DATA_SYNC_DIR}"`;
         
-        console.log(`[SYNC ENGINE] Starting Access Database Export from: ${activePath}`);
+        // Ensure clean staging directory
+        if (!fs.existsSync(stagingDir)) {
+            fs.mkdirSync(stagingDir, { recursive: true });
+        } else {
+            const oldFiles = fs.readdirSync(stagingDir);
+            for (const f of oldFiles) {
+                try { fs.unlinkSync(path.join(stagingDir, f)); } catch (e) {}
+            }
+        }
+
+        const cmd = `"${cscriptPath}" //nologo "${VBS_EXPORTER_PATH}" "${activePath}" "${stagingDir}"`;
+        
+        console.log(`[SYNC ENGINE] Starting Access Database Export to staging: ${stagingDir} from: ${activePath}`);
         const startTime = Date.now();
         
         exec(cmd, { maxBuffer: 1024 * 1024 * 100, timeout: 60000 }, (error, stdout, stderr) => {
             const duration = Date.now() - startTime;
             if (error) {
-                console.error('[SYNC ENGINE] Export Error:', error.message);
+                console.error('[SYNC ENGINE] Export Process Error:', error.message);
                 return reject(error);
             }
-            console.log(`[SYNC ENGINE] Export finished in ${duration}ms`);
-            resolve({ stdout, duration });
+
+            try {
+                const manifestPath = path.join(stagingDir, 'manifest.json');
+                const manifest = readJsonSafely(manifestPath);
+                
+                const expectedFiles = [
+                    'Assets.json', 'TransAction.json', 'Maintenance.json', 'payments.json',
+                    'Store_POS.json', 'Store_Sim.json', 'Store_SP.json', 'Store_SP_maintenance.json',
+                    'tblInstallments.json', 'tblFaults.json', 'AuthorizedUsers.json', 'tblFixes.json',
+                    'failure_points.json', 'Trade.json', 'temp_transfer.json'
+                ];
+                
+                validateExportManifest(manifest, expectedFiles, stagingDir);
+
+                // Promoted to destination directory
+                if (!fs.existsSync(destDir)) {
+                    fs.mkdirSync(destDir, { recursive: true });
+                }
+
+                const stagingFiles = fs.readdirSync(stagingDir);
+                for (const file of stagingFiles) {
+                    if (file.endsWith('.json')) {
+                        const src = path.join(stagingDir, file);
+                        const dst = path.join(destDir, file);
+                        fs.copyFileSync(src, dst);
+                    }
+                }
+
+                console.log(`[SYNC ENGINE] Export finished and validated in ${duration}ms`);
+                resolve({ stdout, duration, manifest });
+            } catch (valErr) {
+                console.error('[SYNC ENGINE] Export Validation Failed:', valErr.message);
+                reject(valErr);
+            }
         });
     });
 }
@@ -905,7 +997,8 @@ async function syncTableWithDiff(db, tableName, primaryKey, jsonRecords) {
     }
 
     // Check for DELETIONS (if existing records were already populated)
-    if (existingRows.length > 0 && jsonRecords.length > 0) {
+    // F-13: Allow deletion detection when jsonRecords is empty to propagate table truncation/clearing
+    if (existingRows.length > 0) {
         for (const [key, oldRow] of existingMap.entries()) {
             if (!currentMap.has(key)) {
                 deletedCount++;
@@ -988,7 +1081,10 @@ async function applyTableAndOutbox(db, tableName, pkField, records, deltaList = 
     let rawStmt = null;
     let auditStmt = null;
     try {
-        if (cols.length > 0 && records && records.length > 0) {
+        // F-13: Handle empty records explicitly - delete all rows from replica
+        if (records && records.length === 0) {
+            await dbRun(db, `DELETE FROM ${escTbl};`);
+        } else if (cols.length > 0 && records && records.length > 0) {
             await dbRun(db, `DELETE FROM ${escTbl};`);
             const placeholders = cols.map(() => '?').join(', ');
             const quotedCols = cols.map(c => escapeSqlIdentifier(c)).join(', ');
@@ -1607,28 +1703,27 @@ async function performFullSync(db) {
 
             const filePath = path.join(DATA_SYNC_DIR, cfg.file);
             let records = readJsonSafely(filePath);
-            if (records && Array.isArray(records)) {
-                records = enrichRecordsWithSyncKey(cfg.table, records);
-                records = records.filter(r => getRowIdentifier(cfg.table, cfg.pk, r));
-                try {
-                    const diffResult = await syncTableWithDiff(db, cfg.table, cfg.pk, records);
-                    const changesInTable = diffResult.inserted + diffResult.updated + diffResult.deleted;
-                    totalChanges += changesInTable;
-                    tablesCount++;
-                    totalRecords += records.length;
+            if (records === null || !Array.isArray(records)) {
+                throw new Error(`Sync aborted: Table ${cfg.table} export file (${cfg.file}) is missing or corrupted.`);
+            }
 
-                    if (diffResult.deltaList && diffResult.deltaList.length > 0) {
-                        allDeltaChanges.push(...diffResult.deltaList);
-                    }
+            records = enrichRecordsWithSyncKey(cfg.table, records);
+            records = records.filter(r => getRowIdentifier(cfg.table, cfg.pk, r));
 
-                    console.log(`[SYNC] ${cfg.table}: +${diffResult.inserted} ~${diffResult.updated} -${diffResult.deleted} (Total: ${diffResult.total})`);
+            const diffResult = await syncTableWithDiff(db, cfg.table, cfg.pk, records);
+            const changesInTable = diffResult.inserted + diffResult.updated + diffResult.deleted;
+            totalChanges += changesInTable;
+            tablesCount++;
+            totalRecords += records.length;
 
-                    if (records.length > 0 && (changesInTable > 0 || !diffResult.hadExistingRows)) {
-                        await applyTableAndOutbox(db, cfg.table, cfg.pk, records, diffResult.deltaList);
-                    }
-                } catch (e) {
-                    console.error(`[SYNC ERROR] Error processing ${cfg.file}:`, e.message);
-                }
+            if (diffResult.deltaList && diffResult.deltaList.length > 0) {
+                allDeltaChanges.push(...diffResult.deltaList);
+            }
+
+            console.log(`[SYNC] ${cfg.table}: +${diffResult.inserted} ~${diffResult.updated} -${diffResult.deleted} (Total: ${diffResult.total})`);
+
+            if (changesInTable > 0 || !diffResult.hadExistingRows) {
+                await applyTableAndOutbox(db, cfg.table, cfg.pk, records, diffResult.deltaList);
             }
         }
 
@@ -1988,5 +2083,9 @@ module.exports = {
     isValidSqlIdentifier,
     escapeSqlIdentifier,
     archiveOutboxItemToDlq,
-    applyTableAndOutbox
+    applyTableAndOutbox,
+    validateExportManifest,
+    syncTableWithDiff,
+    DATA_SYNC_DIR,
+    DATA_SYNC_STAGING_DIR
 };

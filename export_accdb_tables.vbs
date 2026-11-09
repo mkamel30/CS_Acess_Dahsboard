@@ -103,8 +103,11 @@ Function EscapeJson(str)
     EscapeJson = """" & res & """"
 End Function
 
-Function ExportTableToJson(tableName, outputPath)
+Function ExportTableToJson(tableName, outputPath, ByRef outRowCount, ByRef outErrDesc)
     On Error Resume Next
+    outRowCount = 0
+    outErrDesc = ""
+    
     Dim cmd, rst
     Set cmd = CreateObject("ADODB.Command")
     cmd.ActiveConnection = conn
@@ -112,9 +115,17 @@ Function ExportTableToJson(tableName, outputPath)
     Set rst = cmd.Execute
     
     If Err.Number <> 0 Then
+        outErrDesc = Err.Description
         WScript.Echo "Error reading table " & tableName & ": " & Err.Description
         Err.Clear
+        ExportTableToJson = False
         Exit Function
+    End If
+    
+    Dim tmpPath
+    tmpPath = outputPath & ".tmp"
+    If fso.FileExists(tmpPath) Then
+        fso.DeleteFile tmpPath, True
     End If
     
     Dim utfStream
@@ -157,10 +168,26 @@ Function ExportTableToJson(tableName, outputPath)
     
     utfStream.WriteText vbCrLf & "]"
     
-    utfStream.SaveToFile outputPath, 2 ' adSaveCreateOverWrite
+    If Err.Number <> 0 Then
+        outErrDesc = Err.Description
+        Err.Clear
+        utfStream.Close
+        rst.Close
+        ExportTableToJson = False
+        Exit Function
+    End If
+    
+    utfStream.SaveToFile tmpPath, 2 ' adSaveCreateOverWrite
     utfStream.Close
     rst.Close
     
+    If fso.FileExists(outputPath) Then
+        fso.DeleteFile outputPath, True
+    End If
+    fso.MoveFile tmpPath, outputPath
+    
+    outRowCount = rowCount
+    ExportTableToJson = True
     WScript.Echo "Exported " & tableName & " (" & rowCount & " rows) -> " & outputPath
 End Function
 
@@ -201,9 +228,68 @@ essentialTables.Add "temp_transfer", True
 Dim tKey, tArr
 tArr = essentialTables.Keys
 
+Dim allSucceeded
+allSucceeded = True
+
+Dim manifestStream
+Set manifestStream = CreateObject("ADODB.Stream")
+manifestStream.Type = 2 ' adTypeText
+manifestStream.Charset = "utf-8"
+manifestStream.Open
+
+manifestStream.WriteText "{" & vbCrLf
+manifestStream.WriteText "  ""sourcePath"": " & EscapeJson(dbPath) & "," & vbCrLf
+manifestStream.WriteText "  ""exportedAt"": " & EscapeJson(Now()) & "," & vbCrLf
+manifestStream.WriteText "  ""tables"": {" & vbCrLf
+
+Dim isFirstTable, rowCnt, errDesc, tblSuccess
+isFirstTable = True
+
 For Each tKey In tArr
-    ExportTableToJson tKey, exportDir & "\" & tKey & ".json"
+    If Not isFirstTable Then manifestStream.WriteText "," & vbCrLf
+    isFirstTable = False
+    
+    tblSuccess = ExportTableToJson(tKey, exportDir & "\" & tKey & ".json", rowCnt, errDesc)
+    If Not tblSuccess Then allSucceeded = False
+    
+    manifestStream.WriteText "    """ & tKey & """: {"
+    manifestStream.WriteText """file"": """ & tKey & ".json"", "
+    If tblSuccess Then
+        manifestStream.WriteText """status"": ""OK"", "
+        manifestStream.WriteText """rowCount"": " & rowCnt & ", "
+        If rowCnt = 0 Then
+            manifestStream.WriteText """isEmpty"": true"
+        Else
+            manifestStream.WriteText """isEmpty"": false"
+        End If
+    Else
+        manifestStream.WriteText """status"": ""FAILED"", "
+        manifestStream.WriteText """rowCount"": 0, "
+        manifestStream.WriteText """isEmpty"": false, "
+        manifestStream.WriteText """error"": " & EscapeJson(errDesc)
+    End If
+    manifestStream.WriteText "}"
 Next
 
+manifestStream.WriteText vbCrLf & "  }," & vbCrLf
+If allSucceeded Then
+    manifestStream.WriteText "  ""success"": true" & vbCrLf
+Else
+    manifestStream.WriteText "  ""success"": false" & vbCrLf
+End If
+manifestStream.WriteText "}" & vbCrLf
+
+Dim manifestPath
+manifestPath = exportDir & "\manifest.json"
+manifestStream.SaveToFile manifestPath, 2 ' adSaveCreateOverWrite
+manifestStream.Close
+
 conn.Close
-WScript.Echo "DYNAMIC_EXPORT_FINISHED"
+
+If allSucceeded Then
+    WScript.Echo "DYNAMIC_EXPORT_FINISHED"
+    WScript.Quit 0
+Else
+    WScript.Echo "DYNAMIC_EXPORT_FAILED: One or more tables failed to export"
+    WScript.Quit 1
+End If
