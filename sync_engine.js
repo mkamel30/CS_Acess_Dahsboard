@@ -2064,9 +2064,9 @@ async function wipeDatabase(db) {
         await dbRun(db, `VACUUM;`);
     } catch (e) {}
 
-    // Clear data_sync directory files
+    // Clear data_sync directory files (guarded against deleting test fixtures during automated test suite)
     try {
-        if (fs.existsSync(DATA_SYNC_DIR)) {
+        if (process.env.NODE_ENV !== 'test' && fs.existsSync(DATA_SYNC_DIR)) {
             const files = fs.readdirSync(DATA_SYNC_DIR);
             for (const f of files) {
                 if (f.endsWith('.json')) {

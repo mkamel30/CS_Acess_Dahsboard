@@ -4,7 +4,8 @@
   "description": "SmartCS Central Operations & Multi-Device Auto-Update Engine",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test tests/test_*.js"
   },
   "dependencies": {
     "@ngrok/ngrok": "^1.7.0",
