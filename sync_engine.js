@@ -2026,6 +2026,11 @@ async function performFullSync(db) {
             VALUES (?, ?, 0, 0, 0, ?, ?, ?)
         `, ['LOCAL_ACCESS', 'ERROR', duration, err.message, JSON.stringify({ error: err.message })]).catch(() => {});
 
+        await dbRun(db, `
+            INSERT INTO system_error_logs (severity, module, endpoint, error_message, stack_trace)
+            VALUES ('ERROR', 'sync_engine', 'runDatabaseSync', ?, ?)
+        `, [err.message, err.stack || '']).catch(() => {});
+
         throw err;
     }
 }
@@ -2354,6 +2359,10 @@ async function flushDeltaOutbox(db) {
         }
     } catch (e) {
         console.error('[CLOUD DELTA OUTBOX] Flush error:', e.message);
+        await dbRun(db, `
+            INSERT INTO system_error_logs (severity, module, endpoint, error_message, stack_trace)
+            VALUES ('ERROR', 'sync_engine', 'flushDeltaOutbox', ?, ?)
+        `, [e.message, e.stack || '']).catch(() => {});
     } finally {
         _isFlushingOutbox = false;
     }

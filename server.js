@@ -809,7 +809,7 @@ app.get('/api/explorer/:table', async (req, res) => {
             'store_pos_raw', 'store_sim_raw', 'store_sp_raw', 'store_sp_maintenance_raw',
             'installments_raw', 'tblinstallments', 'tblfaults_raw', 'tblstaff_raw',
             'tblfixes_raw', 'failure_points_raw', 'temp_transfer_raw', 'trade_raw',
-            'merchant_assets', 'audit_logs', 'sync_history', 'diagnostic_errors'
+            'merchant_assets', 'audit_logs', 'sync_history', 'system_error_logs'
         ];
         const table = req.params.table.toLowerCase();
         if (!allowedTables.includes(table)) {
@@ -1134,6 +1134,8 @@ app.get('/api/sync/status', async (req, res) => {
         const status = syncEngine.getSyncStatus();
         let lastHistory = null;
         try { lastHistory = await getQuery("SELECT * FROM sync_history ORDER BY id DESC LIMIT 1"); } catch(e){}
+        let lastSuccess = null;
+        try { lastSuccess = await getQuery("SELECT * FROM sync_history WHERE status = 'SUCCESS' ORDER BY id DESC LIMIT 1"); } catch(e){}
         let totalLogsCount = 0;
         try { totalLogsCount = (await getQuery("SELECT COUNT(*) as count FROM audit_change_logs"))?.count || 0; } catch(e){}
         let outboxPending = 0;
@@ -1141,13 +1143,43 @@ app.get('/api/sync/status', async (req, res) => {
         let dlqPending = 0;
         try { dlqPending = (await getQuery("SELECT COUNT(*) as count FROM delta_outbox_dlq"))?.count || 0; } catch (e) {}
         
+        let oldestOutbox = null;
+        try { oldestOutbox = await getQuery("SELECT MIN(created_at) as oldest FROM delta_outbox"); } catch (e) {}
+        const oldestOutboxItemAt = oldestOutbox?.oldest || null;
+
+        let replicationLagSeconds = 0;
+        if (oldestOutboxItemAt) {
+            const oldestDate = new Date(oldestOutboxItemAt);
+            if (!isNaN(oldestDate.getTime())) {
+                replicationLagSeconds = Math.max(0, Math.round((Date.now() - oldestDate.getTime()) / 1000));
+            }
+        }
+
+        let dlqReasons = [];
+        try {
+            dlqReasons = await allQuery("SELECT last_error, COUNT(*) as count FROM delta_outbox_dlq GROUP BY last_error ORDER BY count DESC LIMIT 5");
+        } catch (e) {}
+
+        // Determine system health honestly (F-20)
+        let health = 'healthy';
+        if (dlqPending > 0 || replicationLagSeconds > 3600) {
+            health = 'degraded';
+        } else if (lastHistory && lastHistory.status === 'ERROR') {
+            health = 'degraded';
+        } else if (status && status.status === 'error') {
+            health = 'degraded';
+        }
+
         res.json({
             success: true,
+            health: health,
             isCloudServer: !!appCfg.isCloudServer,
             status: status.status || 'idle',
             isSyncInProgress: !!status.isSyncInProgress,
             progress: status.progress || {},
             lastSyncTime: lastHistory ? lastHistory.sync_time : status.lastSyncTime,
+            lastSuccessTime: lastSuccess ? lastSuccess.sync_time : null,
+            lastAttemptTime: lastHistory ? lastHistory.sync_time : null,
             message: status.message || 'جاهز',
             changesDetected: lastHistory ? lastHistory.changes_count : (status.changesDetected || 0),
             tablesSynced: lastHistory ? lastHistory.tables_count : (status.tablesSynced || 0),
@@ -1155,14 +1187,22 @@ app.get('/api/sync/status', async (req, res) => {
             durationMs: lastHistory ? lastHistory.duration_ms : (status.durationMs || 0),
             totalAuditLogs: totalLogsCount,
             outboxPendingCount: outboxPending,
-            dlqPendingCount: dlqPending
+            dlqPendingCount: dlqPending,
+            oldestOutboxItemAt: oldestOutboxItemAt,
+            replicationLagSeconds: replicationLagSeconds,
+            dlqReasons: dlqReasons
         });
     } catch (err) {
-        res.json({
-            success: true,
-            status: 'idle',
+        if (typeof logSystemError === 'function') {
+            logSystemError('sync_monitor', '/api/sync/status', err, req, 'CRITICAL').catch(() => {});
+        }
+        res.status(503).json({
+            success: false,
+            health: 'unhealthy',
+            status: 'error',
             isSyncInProgress: false,
-            message: err.message,
+            message: 'فشل فحص حالة المزامنة: ' + err.message,
+            error: err.message,
             outboxPendingCount: 0,
             dlqPendingCount: 0
         });
