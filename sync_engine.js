@@ -1619,6 +1619,17 @@ async function pushDeltaToCloud(db, deltaChanges) {
     const config = readConfigSafely();
     if (config.isCloudServer) return; // Skip if already on cloud
 
+    // If batch is large (> 500 changes), chunk into smaller packets to avoid network payload limits and timeouts
+    const CHUNK_SIZE = 500;
+    if (deltaChanges.length > CHUNK_SIZE) {
+        console.log(`[CLOUD DELTA SYNC] Batch size (${deltaChanges.length}) exceeds ${CHUNK_SIZE}. Chunking into smaller packets...`);
+        for (let i = 0; i < deltaChanges.length; i += CHUNK_SIZE) {
+            const chunk = deltaChanges.slice(i, i + CHUNK_SIZE);
+            await pushDeltaToCloud(db, chunk);
+        }
+        return;
+    }
+
     const cloudEndpoint = config.cloudEndpoint || 'https://smartcs.m-kamel.workers.dev/api/sync/delta';
     const secret = config.syncSecret || 'smartcs-cloud-secret-2026';
     const startTime = Date.now();
