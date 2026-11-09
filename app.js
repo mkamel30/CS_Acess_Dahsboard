@@ -4775,14 +4775,37 @@ function initLiveSyncStream() {
 
     let reconnectDelay = 3000;
     let sse = null;
+
+    function updateSseIndicator(connected) {
+        const sseState = document.getElementById('settings-sse-state');
+        const sseStatus = document.getElementById('sync-telemetry-sse-status');
+        const pulse = sseStatus ? sseStatus.previousElementSibling : null;
+        if (connected) {
+            if (sseState) sseState.textContent = 'متصل ومستعد (Live Connected)';
+            if (sseStatus) sseStatus.textContent = 'قناة SSE متصلة ⚡';
+            if (pulse) pulse.style.background = 'var(--status-success)';
+        } else {
+            if (sseState) sseState.textContent = 'جاري إعادة الاتصال...';
+            if (sseStatus) sseStatus.textContent = 'قناة SSE غير متصلة (جاري المحاولة)';
+            if (pulse) pulse.style.background = 'var(--status-warning, #f59e0b)';
+        }
+    }
+
     function connect() {
         sse = new EventSource('/api/sync/events');
 
         sse.addEventListener('connected', (e) => {
             console.log('[LIVE SSE] Connected to server auto-sync stream.');
-            const sseState = document.getElementById('settings-sse-state');
-            if (sseState) sseState.textContent = 'متصل ومستعد (Live Connected)';
+            updateSseIndicator(true);
             reconnectDelay = 3000;
+
+            try {
+                const data = JSON.parse(e.data);
+                // On connect/reconnect, refresh view from latest snapshot
+                if (data && data.snapshot) {
+                    debounceRefreshActiveTab();
+                }
+            } catch (err) {}
         });
 
         const handleSyncEvent = (rawPayload) => {
@@ -4834,8 +4857,8 @@ function initLiveSyncStream() {
         sse.onmessage = (e) => handleSyncEvent(e.data);
 
         sse.onerror = () => {
-            const sseState = document.getElementById('settings-sse-state');
-            if (sseState) sseState.textContent = 'جاري إعادة الاتصال...';
+            console.warn('[LIVE SSE] Connection lost, attempting reconnection...');
+            updateSseIndicator(false);
             sse.close();
             setTimeout(connect, reconnectDelay);
             reconnectDelay = Math.min(reconnectDelay * 2, 30000);

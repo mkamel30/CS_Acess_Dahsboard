@@ -50,7 +50,15 @@ process.on('unhandledRejection', (reason) => {
     console.error('[SERVER GUARD - UNHANDLED REJECTION]', reason);
 });
 
-app.use(compression());
+app.use(compression({
+    filter: (req, res) => {
+        // Bypass compression on SSE stream to prevent proxy buffering
+        if (req.path === '/api/sync/events' || req.headers.accept === 'text/event-stream') {
+            return false;
+        }
+        return compression.filter(req, res);
+    }
+}));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Block access to database files, environment configs and source scripts
@@ -890,6 +898,7 @@ function broadcastSseEvent(eventType, data) {
     for (const client of sseClients) {
         try {
             client.write(payload);
+            if (typeof client.flush === 'function') client.flush();
         } catch (e) {
             sseClients.delete(client);
         }
@@ -917,7 +926,26 @@ app.get('/api/sync/events', (req, res) => {
     res.flushHeaders();
 
     sseClients.add(res);
-    res.write(`event: connected\ndata: ${JSON.stringify({ status: 'connected', autoSync: syncEngine.isAutoSyncEnabled() })}\n\n`);
+
+    // Client reconnect retry delay contract (5 seconds)
+    res.write('retry: 5000\n\n');
+
+    // Fetch snapshot of current sync state for reconnecting clients
+    let statusSnapshot = {};
+    try {
+        if (typeof syncEngine.getSyncStatus === 'function') {
+            statusSnapshot = syncEngine.getSyncStatus();
+        }
+    } catch (e) {}
+
+    res.write(`event: connected\ndata: ${JSON.stringify({
+        status: 'connected',
+        autoSync: syncEngine.isAutoSyncEnabled(),
+        snapshot: statusSnapshot,
+        timestamp: new Date().toISOString()
+    })}\n\n`);
+
+    if (typeof res.flush === 'function') res.flush();
 
     req.on('close', () => {
         sseClients.delete(res);
