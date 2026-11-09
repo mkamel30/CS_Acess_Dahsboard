@@ -384,9 +384,34 @@ const RAW_TABLE_PK_MAP = (syncEngine && syncEngine.RAW_TABLE_PK_MAP) ? syncEngin
     'temp_transfer_raw': 'sync_key'
 };
 
+// Whitelist of allowed raw replica tables to prevent SQL injection and unauthorized writes
+const ALLOWED_SYNC_TABLES = (syncEngine && syncEngine.ALLOWED_SYNC_TABLES) ? syncEngine.ALLOWED_SYNC_TABLES : new Set([
+    'assets_raw', 'transactions_raw', 'maintenance_raw', 'payments_raw',
+    'store_pos_raw', 'store_sim_raw', 'store_sp_raw', 'store_sp_maintenance_raw',
+    'installments_raw', 'tblfaults_raw', 'tblstaff_raw', 'tblfixes_raw',
+    'failure_points_raw', 'trade_raw', 'temp_transfer_raw', 'audit_change_logs', 'sync_history'
+]);
+
+const isAllowedSyncTable = (syncEngine && syncEngine.isAllowedSyncTable) ? syncEngine.isAllowedSyncTable : function(t) {
+    return typeof t === 'string' && ALLOWED_SYNC_TABLES.has(t.trim().toLowerCase());
+};
+
+const isValidSqlIdentifier = (syncEngine && syncEngine.isValidSqlIdentifier) ? syncEngine.isValidSqlIdentifier : function(i) {
+    if (typeof i !== 'string') return false;
+    const trimmed = i.trim();
+    if (!trimmed || trimmed.length > 64) return false;
+    if (/[\0\r\n;"'`]|--|\/\*|\*\//.test(trimmed)) return false;
+    return true;
+};
+
+const escapeSqlIdentifier = (syncEngine && syncEngine.escapeSqlIdentifier) ? syncEngine.escapeSqlIdentifier : function(i) {
+    if (!isValidSqlIdentifier(i)) throw new Error(`Invalid identifier: ${String(i)}`);
+    return `"${i.trim().replace(/"/g, '""')}"`;
+};
+
 let _pgConstraintCache = new Map();
 async function getPgValidConstraintCol(tbl, cols) {
-    if (!appCfg.isCloudServer) return null;
+    if (!appCfg.isCloudServer || !isAllowedSyncTable(tbl)) return null;
     try {
         if (!_pgConstraintCache.has(tbl)) {
             const res = await allQuery(`
@@ -395,17 +420,17 @@ async function getPgValidConstraintCol(tbl, cols) {
                 JOIN information_schema.constraint_column_usage ccu 
                   ON ccu.constraint_name = tc.constraint_name 
                  AND ccu.table_name = tc.table_name
-                WHERE tc.table_name = '${tbl}' 
+                WHERE tc.table_name = ? 
                   AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')
                 UNION
                 SELECT a.attname AS column_name
                 FROM pg_index i
                 JOIN pg_class c ON c.oid = i.indrelid
                 JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = ANY(i.indkey)
-                WHERE c.relname = '${tbl}'
+                WHERE c.relname = ?
                   AND i.indisunique = true
                   AND i.indnatts = 1;
-            `);
+            `, [tbl.toLowerCase(), tbl.toLowerCase()]);
             const validSet = new Set(res.map(r => r.column_name));
             _pgConstraintCache.set(tbl, validSet);
         }
@@ -5120,29 +5145,22 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
     const { changes, tablesData } = req.body || {};
     let appliedCount = 0;
 
-    // Whitelist of allowed table names to prevent SQL injection via dynamic table names
-    const ALLOWED_SYNC_TABLES = new Set([
-        'assets_raw', 'transactions_raw', 'maintenance_raw', 'payments_raw',
-        'store_pos_raw', 'store_sim_raw', 'store_sp_raw', 'store_sp_maintenance_raw',
-        'installments_raw', 'tblfaults_raw', 'tblstaff_raw', 'tblfixes_raw',
-        'failure_points_raw', 'trade_raw', 'temp_transfer_raw', 'audit_change_logs', 'sync_history'
-    ]);
-
     // In-memory column cache to eliminate repetitive DDL queries and avoid PostgreSQL table lock contention
     const syncedTableColumnsCache = new Map();
 
     async function getOrFetchTableColumns(tableName) {
+        if (!isAllowedSyncTable(tableName)) return new Set();
         let existingCols = syncedTableColumnsCache.get(tableName);
         if (!existingCols) {
             existingCols = new Set();
             try {
                 if (appCfg.isCloudServer) {
-                    const info = await allQuery(`SELECT column_name FROM information_schema.columns WHERE table_name = '${tableName}';`);
+                    const info = await allQuery(`SELECT column_name FROM information_schema.columns WHERE table_name = ?;`, [tableName.toLowerCase()]);
                     if (info && Array.isArray(info)) {
                         info.forEach(i => existingCols.add(i.column_name));
                     }
                 } else {
-                    const info = await allQuery(`PRAGMA table_info("${tableName}");`);
+                    const info = await allQuery(`PRAGMA table_info(${escapeSqlIdentifier(tableName)});`);
                     if (info && Array.isArray(info)) {
                         info.forEach(i => existingCols.add(i.name));
                     }
@@ -5156,24 +5174,28 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
     }
 
     async function ensureTableAndColumnsForBatch(tableName, keys, tablePk) {
-        if (!tableName || !keys || keys.length === 0) return;
+        if (!isAllowedSyncTable(tableName) || !keys || keys.length === 0) return;
+        const validKeys = keys.filter(k => isValidSqlIdentifier(k));
+        if (validKeys.length === 0) return;
         const existingCols = await getOrFetchTableColumns(tableName);
+        const escTable = escapeSqlIdentifier(tableName);
 
         if (existingCols.size === 0) {
-            const createCols = keys.map(k => {
-                if (tablePk && k === tablePk) return `"${k}" TEXT PRIMARY KEY`;
-                return `"${k}" TEXT`;
+            const createCols = validKeys.map(k => {
+                const escK = escapeSqlIdentifier(k);
+                if (tablePk && k === tablePk) return `${escK} TEXT PRIMARY KEY`;
+                return `${escK} TEXT`;
             }).join(', ');
-            await runQuery(`CREATE TABLE IF NOT EXISTS "${tableName}" (${createCols});`).catch(() => {});
-            keys.forEach(k => existingCols.add(k));
+            await runQuery(`CREATE TABLE IF NOT EXISTS ${escTable} (${createCols});`).catch(() => {});
+            validKeys.forEach(k => existingCols.add(k));
             syncedTableColumnsCache.set(tableName, existingCols);
             return;
         }
 
-        for (const k of keys) {
+        for (const k of validKeys) {
             if (!existingCols.has(k)) {
                 try {
-                    await runQuery(`ALTER TABLE "${tableName}" ADD COLUMN "${k}" TEXT;`);
+                    await runQuery(`ALTER TABLE ${escTable} ADD COLUMN ${escapeSqlIdentifier(k)} TEXT;`);
                     existingCols.add(k);
                 } catch(e) {
                     existingCols.add(k);
@@ -5185,32 +5207,38 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
     try {
         if (tablesData && typeof tablesData === 'object') {
             for (const [tbl, rows] of Object.entries(tablesData)) {
-                if (Array.isArray(rows) && rows.length > 0 && ALLOWED_SYNC_TABLES.has(tbl)) {
+                if (!isAllowedSyncTable(tbl)) continue;
+                if (Array.isArray(rows) && rows.length > 0) {
                     const sample = rows[0];
-                    const keys = Object.keys(sample);
+                    const rawKeys = Object.keys(sample);
+                    const keys = rawKeys.filter(k => isValidSqlIdentifier(k));
+                    if (keys.length === 0) continue;
                     let tablePk = Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, tbl) ? RAW_TABLE_PK_MAP[tbl] : null;
                     if (tablePk === undefined && !Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, tbl)) {
                         const pkCandidates = ['ID', 'id', 'Serial', 'sim_serial', 'faultid', 'FixID'];
                         tablePk = pkCandidates.find(c => keys.includes(c)) || null;
                     }
                     await ensureTableAndColumnsForBatch(tbl, keys, tablePk);
+                    const escTbl = escapeSqlIdentifier(tbl);
                     for (const row of rows) {
-                        const rowKeys = Object.keys(row);
+                        const rowKeys = Object.keys(row).filter(k => isValidSqlIdentifier(k));
+                        if (rowKeys.length === 0) continue;
                         const placeholders = rowKeys.map(() => '?').join(', ');
-                        const quotedCols = rowKeys.map(k => `"${k}"`).join(', ');
+                        const quotedCols = rowKeys.map(k => escapeSqlIdentifier(k)).join(', ');
+                        const rowValues = rowKeys.map(k => row[k]);
                         
-                        let insertSql = `INSERT OR REPLACE INTO "${tbl}" (${quotedCols}) VALUES (${placeholders})`;
+                        let insertSql = `INSERT OR REPLACE INTO ${escTbl} (${quotedCols}) VALUES (${placeholders})`;
                         if (appCfg.isCloudServer) {
                             const matchedPk = await getPgValidConstraintCol(tbl, rowKeys);
-                            if (matchedPk) {
-                                const updateCols = rowKeys.filter(k => k !== matchedPk).map(k => `"${k}" = EXCLUDED."${k}"`).join(', ');
-                                insertSql = `INSERT INTO "${tbl}" (${quotedCols}) VALUES (${placeholders}) ON CONFLICT ("${matchedPk}") DO UPDATE SET ${updateCols || `"${matchedPk}" = EXCLUDED."${matchedPk}"`}`;
+                            if (matchedPk && isValidSqlIdentifier(matchedPk)) {
+                                const updateCols = rowKeys.filter(k => k !== matchedPk).map(k => `${escapeSqlIdentifier(k)} = EXCLUDED.${escapeSqlIdentifier(k)}`).join(', ');
+                                insertSql = `INSERT INTO ${escTbl} (${quotedCols}) VALUES (${placeholders}) ON CONFLICT (${escapeSqlIdentifier(matchedPk)}) DO UPDATE SET ${updateCols || `${escapeSqlIdentifier(matchedPk)} = EXCLUDED.${escapeSqlIdentifier(matchedPk)}`}`;
                             } else {
-                                insertSql = `INSERT INTO "${tbl}" (${quotedCols}) VALUES (${placeholders})`;
+                                insertSql = `INSERT INTO ${escTbl} (${quotedCols}) VALUES (${placeholders})`;
                             }
                         }
                         
-                        await runQuery(insertSql, Object.values(row));
+                        await runQuery(insertSql, rowValues);
                         appliedCount++;
                     }
                 }
@@ -5220,10 +5248,11 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
         if (changes && Array.isArray(changes) && changes.length > 0) {
             for (const change of changes) {
                 let rowApplied = false;
-                if (change.table_name && ALLOWED_SYNC_TABLES.has(change.table_name) && change.new_data) {
+                if (change.table_name && isAllowedSyncTable(change.table_name) && change.new_data) {
                     try {
                         const parsed = typeof change.new_data === 'string' ? JSON.parse(change.new_data) : change.new_data;
-                        const keys = Object.keys(parsed);
+                        const rawKeys = Object.keys(parsed);
+                        const keys = rawKeys.filter(k => isValidSqlIdentifier(k));
                         if (keys.length > 0) {
                             let tablePk = Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, change.table_name) ? RAW_TABLE_PK_MAP[change.table_name] : null;
                             if (tablePk === undefined && !Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, change.table_name)) {
@@ -5231,18 +5260,22 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
                                 tablePk = pkCandidates.find(c => keys.includes(c)) || null;
                             }
                             await ensureTableAndColumnsForBatch(change.table_name, keys, tablePk);
+                            const escChangeTbl = escapeSqlIdentifier(change.table_name);
                             const placeholders = keys.map(() => '?').join(', ');
-                            const quotedCols = keys.map(k => `"${k}"`).join(', ');
-                            const values = Object.values(parsed).map(v => v === null || v === undefined ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v)));
+                            const quotedCols = keys.map(k => escapeSqlIdentifier(k)).join(', ');
+                            const values = keys.map(k => {
+                                const v = parsed[k];
+                                return v === null || v === undefined ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
+                            });
                             
-                            let insertSql = `INSERT OR REPLACE INTO "${change.table_name}" (${quotedCols}) VALUES (${placeholders})`;
+                            let insertSql = `INSERT OR REPLACE INTO ${escChangeTbl} (${quotedCols}) VALUES (${placeholders})`;
                             if (appCfg.isCloudServer) {
                                 const matchedPk = await getPgValidConstraintCol(change.table_name, keys);
-                                if (matchedPk) {
-                                    const updateCols = keys.filter(k => k !== matchedPk).map(k => `"${k}" = EXCLUDED."${k}"`).join(', ');
-                                    insertSql = `INSERT INTO "${change.table_name}" (${quotedCols}) VALUES (${placeholders}) ON CONFLICT ("${matchedPk}") DO UPDATE SET ${updateCols || `"${matchedPk}" = EXCLUDED."${matchedPk}"`}`;
+                                if (matchedPk && isValidSqlIdentifier(matchedPk)) {
+                                    const updateCols = keys.filter(k => k !== matchedPk).map(k => `${escapeSqlIdentifier(k)} = EXCLUDED.${escapeSqlIdentifier(k)}`).join(', ');
+                                    insertSql = `INSERT INTO ${escChangeTbl} (${quotedCols}) VALUES (${placeholders}) ON CONFLICT (${escapeSqlIdentifier(matchedPk)}) DO UPDATE SET ${updateCols || `${escapeSqlIdentifier(matchedPk)} = EXCLUDED.${escapeSqlIdentifier(matchedPk)}`}`;
                                 } else {
-                                    insertSql = `INSERT INTO "${change.table_name}" (${quotedCols}) VALUES (${placeholders})`;
+                                    insertSql = `INSERT INTO ${escChangeTbl} (${quotedCols}) VALUES (${placeholders})`;
                                 }
                             }
                             
@@ -5253,7 +5286,7 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
                     } catch(e) {
                         console.error(`[DELTA APPLY ERROR on ${change.table_name}]:`, e.message);
                     }
-                } else if (change.table_name && ALLOWED_SYNC_TABLES.has(change.table_name) && change.change_type === 'DELETE' && change.record_id) {
+                } else if (change.table_name && isAllowedSyncTable(change.table_name) && change.change_type === 'DELETE' && change.record_id) {
                     try {
                         const existingCols = await getOrFetchTableColumns(change.table_name);
                         let matchedPk = Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, change.table_name) ? RAW_TABLE_PK_MAP[change.table_name] : null;
@@ -5261,8 +5294,8 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
                             const pkCandidates = ['ID', 'id', 'Serial', 'sim_serial', 'faultid', 'FixID'];
                             matchedPk = pkCandidates.find(c => existingCols.has(c));
                         }
-                        if (matchedPk) {
-                            await runQuery(`DELETE FROM "${change.table_name}" WHERE "${matchedPk}" = ?`, [change.record_id]);
+                        if (matchedPk && isValidSqlIdentifier(matchedPk)) {
+                            await runQuery(`DELETE FROM ${escapeSqlIdentifier(change.table_name)} WHERE ${escapeSqlIdentifier(matchedPk)} = ?`, [change.record_id]);
                             appliedCount++;
                             rowApplied = true;
                         }
@@ -5699,87 +5732,111 @@ app.post('/api/sync/full-seed', express.json({ limit: '100mb' }), async (req, re
     let totalImported = 0;
 
     try {
-        if (tablesData && typeof tablesData === 'object') {
-            for (const [tbl, rawRows] of Object.entries(tablesData)) {
-                if (!Array.isArray(rawRows) || rawRows.length === 0) continue;
-                let rows = rawRows;
-                if (tbl === 'store_sim_raw') {
-                    rows = rawRows.filter(r => r && r.sim_serial && String(r.sim_serial).trim() !== '');
-                } else if (tbl === 'store_pos_raw') {
-                    rows = rawRows.filter(r => r && (r.Serial || r.serial) && String(r.Serial || r.serial).trim() !== '');
-                }
-                if (rows.length === 0) continue;
+        if (!tablesData || typeof tablesData !== 'object' || Array.isArray(tablesData)) {
+            return res.status(400).json({ success: false, error: 'Invalid payload: tablesData object required' });
+        }
 
-                const sample = rows[0];
-                const cols = Object.keys(sample);
-                let tablePk = Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, tbl) ? RAW_TABLE_PK_MAP[tbl] : null;
-                if (tablePk === undefined && !Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, tbl)) {
-                    const pkCandidates = ['ID', 'id', 'Serial', 'sim_serial', 'faultid', 'FixID'];
-                    tablePk = pkCandidates.find(c => cols.includes(c)) || null;
-                }
-                const createCols = cols.map(c => {
-                    if (tablePk && c === tablePk) {
-                        return `"${c}" TEXT PRIMARY KEY`;
-                    }
-                    return `"${c}" TEXT`;
-                }).join(', ');
-                await runQuery(`CREATE TABLE IF NOT EXISTS "${tbl}" (${createCols});`);
-                
-                if (appCfg.isCloudServer) {
-                    const existingInfo = await allQuery(`SELECT column_name as name FROM information_schema.columns WHERE table_name = '${tbl}'`).catch(() => []);
-                    const existingCols = new Set(existingInfo.map(i => i.name));
-                    for (const c of cols) {
-                        if (!existingCols.has(c) && !existingCols.has(c.toLowerCase())) {
-                            await runQuery(`ALTER TABLE "${tbl}" ADD COLUMN "${c}" TEXT;`).catch(() => {});
-                        }
-                    }
-                }
+        // 1. Strict table whitelist check: reject request if any table is not allowed
+        for (const tbl of Object.keys(tablesData)) {
+            if (!isAllowedSyncTable(tbl)) {
+                return res.status(400).json({ success: false, error: `Table '${tbl}' is not permitted for full-seed` });
+            }
+        }
 
-                const placeholders = cols.map(() => '?').join(', ');
-                const quotedCols = cols.map(c => `"${c}"`).join(', ');
-                let insertSql = `INSERT OR REPLACE INTO "${tbl}" (${quotedCols}) VALUES (${placeholders});`;
-                
-                if (appCfg.isCloudServer) {
-                    const matchedPk = await getPgValidConstraintCol(tbl, cols);
-                    if (matchedPk) {
-                        const updateCols = cols.filter(k => k !== matchedPk).map(k => `"${k}" = EXCLUDED."${k}"`).join(', ');
-                        insertSql = `INSERT INTO "${tbl}" (${quotedCols}) VALUES (${placeholders}) ON CONFLICT ("${matchedPk}") DO UPDATE SET ${updateCols || `"${matchedPk}" = EXCLUDED."${matchedPk}"`};`;
-                    } else {
-                        insertSql = `INSERT INTO "${tbl}" (${quotedCols}) VALUES (${placeholders});`;
+        for (const [tbl, rawRows] of Object.entries(tablesData)) {
+            if (!Array.isArray(rawRows) || rawRows.length === 0) continue;
+            let rows = rawRows;
+            if (tbl === 'store_sim_raw') {
+                rows = rawRows.filter(r => r && r.sim_serial && String(r.sim_serial).trim() !== '');
+            } else if (tbl === 'store_pos_raw') {
+                rows = rawRows.filter(r => r && (r.Serial || r.serial) && String(r.Serial || r.serial).trim() !== '');
+            }
+            if (rows.length === 0) continue;
+
+            const sample = rows[0];
+            const rawCols = Object.keys(sample);
+            // 2. Strict column identifier validation
+            for (const c of rawCols) {
+                if (!isValidSqlIdentifier(c)) {
+                    return res.status(400).json({ success: false, error: `Invalid column name '${c}' in table '${tbl}'` });
+                }
+            }
+            const cols = rawCols;
+            const escTbl = escapeSqlIdentifier(tbl);
+
+            let tablePk = Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, tbl) ? RAW_TABLE_PK_MAP[tbl] : null;
+            if (tablePk === undefined && !Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, tbl)) {
+                const pkCandidates = ['ID', 'id', 'Serial', 'sim_serial', 'faultid', 'FixID'];
+                tablePk = pkCandidates.find(c => cols.includes(c)) || null;
+            }
+            if (tablePk && !isValidSqlIdentifier(tablePk)) {
+                tablePk = null;
+            }
+
+            const createCols = cols.map(c => {
+                const escC = escapeSqlIdentifier(c);
+                if (tablePk && c === tablePk) {
+                    return `${escC} TEXT PRIMARY KEY`;
+                }
+                return `${escC} TEXT`;
+            }).join(', ');
+            await runQuery(`CREATE TABLE IF NOT EXISTS ${escTbl} (${createCols});`);
+            
+            if (appCfg.isCloudServer) {
+                const existingInfo = await allQuery(`SELECT column_name as name FROM information_schema.columns WHERE table_name = ?`, [tbl.toLowerCase()]).catch(() => []);
+                const existingCols = new Set(existingInfo.map(i => i.name));
+                for (const c of cols) {
+                    if (!existingCols.has(c) && !existingCols.has(c.toLowerCase())) {
+                        await runQuery(`ALTER TABLE ${escTbl} ADD COLUMN ${escapeSqlIdentifier(c)} TEXT;`).catch(() => {});
                     }
                 }
+            }
 
-                if (appCfg.isCloudServer && pgPool) {
-                    const client = await pgPool.connect();
-                    try {
-                        await client.query('BEGIN');
-                        if (!isAppend) {
-                            await client.query(`DELETE FROM "${tbl}";`);
-                        }
-                        const dummyVals = cols.map(() => '');
-                        const { pgSql: preparedPgSql } = translateSqliteToPostgres(insertSql, dummyVals);
-                        for (const row of rows) {
-                            const vals = cols.map(c => {
-                                const v = row[c];
-                                if (v === null || v === undefined) return '';
-                                if (typeof v === 'object') return JSON.stringify(v);
-                                return String(v);
-                            });
-                            await client.query(preparedPgSql, vals);
-                        }
-                        await client.query('COMMIT');
-                        totalImported += rows.length;
-                    } catch (e) {
-                        await client.query('ROLLBACK').catch(() => {});
-                        throw e;
-                    } finally {
-                        client.release();
-                    }
+            const placeholders = cols.map(() => '?').join(', ');
+            const quotedCols = cols.map(c => escapeSqlIdentifier(c)).join(', ');
+            let insertSql = `INSERT OR REPLACE INTO ${escTbl} (${quotedCols}) VALUES (${placeholders});`;
+            
+            if (appCfg.isCloudServer) {
+                const matchedPk = await getPgValidConstraintCol(tbl, cols);
+                if (matchedPk && isValidSqlIdentifier(matchedPk)) {
+                    const updateCols = cols.filter(k => k !== matchedPk).map(k => `${escapeSqlIdentifier(k)} = EXCLUDED.${escapeSqlIdentifier(k)}`).join(', ');
+                    insertSql = `INSERT INTO ${escTbl} (${quotedCols}) VALUES (${placeholders}) ON CONFLICT (${escapeSqlIdentifier(matchedPk)}) DO UPDATE SET ${updateCols || `${escapeSqlIdentifier(matchedPk)} = EXCLUDED.${escapeSqlIdentifier(matchedPk)}`};`;
                 } else {
-                    if (!appCfg.isCloudServer) await runQuery('SAVEPOINT sp_full_seed;');
-                    try {
-                        if (!isAppend) {
-                            await runQuery(`DELETE FROM "${tbl}";`);
+                    insertSql = `INSERT INTO ${escTbl} (${quotedCols}) VALUES (${placeholders});`;
+                }
+            }
+
+            if (appCfg.isCloudServer && pgPool) {
+                const client = await pgPool.connect();
+                try {
+                    await client.query('BEGIN');
+                    if (!isAppend) {
+                        await client.query(`DELETE FROM ${escTbl};`);
+                    }
+                    const dummyVals = cols.map(() => '');
+                    const { pgSql: preparedPgSql } = translateSqliteToPostgres(insertSql, dummyVals);
+                    for (const row of rows) {
+                        const vals = cols.map(c => {
+                            const v = row[c];
+                            if (v === null || v === undefined) return '';
+                            if (typeof v === 'object') return JSON.stringify(v);
+                            return String(v);
+                        });
+                        await client.query(preparedPgSql, vals);
+                    }
+                    await client.query('COMMIT');
+                    totalImported += rows.length;
+                } catch (e) {
+                    await client.query('ROLLBACK').catch(() => {});
+                    throw e;
+                } finally {
+                    client.release();
+                }
+            } else {
+                if (!appCfg.isCloudServer) await runQuery('SAVEPOINT sp_full_seed;');
+                try {
+                    if (!isAppend) {
+                        await runQuery(`DELETE FROM ${escTbl};`);
                         }
                         for (const row of rows) {
                             const vals = cols.map(c => {
@@ -5798,7 +5855,6 @@ app.post('/api/sync/full-seed', express.json({ limit: '100mb' }), async (req, re
                     }
                 }
             }
-        }
 
         res.json({
             success: true,

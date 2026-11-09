@@ -736,6 +736,35 @@ const RAW_TABLE_PK_MAP = {
     'temp_transfer_raw': 'sync_key'
 };
 
+// Whitelist of allowed raw replica tables to prevent SQL injection and unauthorized writes
+const ALLOWED_SYNC_TABLES = new Set([
+    'assets_raw', 'transactions_raw', 'maintenance_raw', 'payments_raw',
+    'store_pos_raw', 'store_sim_raw', 'store_sp_raw', 'store_sp_maintenance_raw',
+    'installments_raw', 'tblfaults_raw', 'tblstaff_raw', 'tblfixes_raw',
+    'failure_points_raw', 'trade_raw', 'temp_transfer_raw', 'audit_change_logs', 'sync_history'
+]);
+
+function isAllowedSyncTable(tableName) {
+    if (typeof tableName !== 'string') return false;
+    return ALLOWED_SYNC_TABLES.has(tableName.trim().toLowerCase());
+}
+
+function isValidSqlIdentifier(ident) {
+    if (typeof ident !== 'string') return false;
+    const trimmed = ident.trim();
+    if (!trimmed || trimmed.length > 64) return false;
+    // Disallow null bytes, semicolons, comments, single/double quotes, backticks
+    if (/[\0\r\n;"'`]|--|\/\*|\*\//.test(trimmed)) return false;
+    return true;
+}
+
+function escapeSqlIdentifier(ident) {
+    if (!isValidSqlIdentifier(ident)) {
+        throw new Error(`Rejected invalid SQL identifier: ${String(ident)}`);
+    }
+    return `"${ident.trim().replace(/"/g, '""')}"`;
+}
+
 /**
  * Generate unique record identifier supporting single PK and composite signatures
  */
@@ -1810,5 +1839,9 @@ module.exports = {
     setOnSyncCompleteCallback,
     wipeDatabase,
     getRowIdentifier,
-    RAW_TABLE_PK_MAP
+    RAW_TABLE_PK_MAP,
+    ALLOWED_SYNC_TABLES,
+    isAllowedSyncTable,
+    isValidSqlIdentifier,
+    escapeSqlIdentifier
 };
