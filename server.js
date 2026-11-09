@@ -5096,12 +5096,21 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
         if (!existingCols) {
             existingCols = new Set();
             try {
-                const info = await allQuery(`PRAGMA table_info("${tableName}");`);
-                if (info && Array.isArray(info)) {
-                    info.forEach(i => existingCols.add(i.name));
+                if (appCfg.isCloudServer) {
+                    const info = await allQuery(`SELECT column_name FROM information_schema.columns WHERE table_name = '${tableName}';`);
+                    if (info && Array.isArray(info)) {
+                        info.forEach(i => existingCols.add(i.column_name));
+                    }
+                } else {
+                    const info = await allQuery(`PRAGMA table_info("${tableName}");`);
+                    if (info && Array.isArray(info)) {
+                        info.forEach(i => existingCols.add(i.name));
+                    }
                 }
             } catch(e) {}
-            syncedTableColumnsCache.set(tableName, existingCols);
+            if (existingCols.size > 0) {
+                syncedTableColumnsCache.set(tableName, existingCols);
+            }
         }
         return existingCols;
     }
@@ -5117,6 +5126,7 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
             }).join(', ');
             await runQuery(`CREATE TABLE IF NOT EXISTS "${tableName}" (${createCols});`).catch(() => {});
             keys.forEach(k => existingCols.add(k));
+            syncedTableColumnsCache.set(tableName, existingCols);
             return;
         }
 
