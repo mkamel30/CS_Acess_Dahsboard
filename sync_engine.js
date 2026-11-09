@@ -11,6 +11,8 @@ const { Pool } = require('pg');
 const crypto = require('crypto');
 
 let pgPool = null;
+let _cachedConfig = null;
+let _cachedConfigMtime = 0;
 function setSharedPgPool(pool) {
     if (pool) pgPool = pool;
 }
@@ -26,10 +28,11 @@ function initPgPool() {
             database: config.pgDatabase || process.env.PGDATABASE || 'smartcs_db',
             host: config.pgHost || process.env.PGHOST || '127.0.0.1',
             port: config.pgPort || process.env.PGPORT || 5432,
-            max: 3, // Conservative limit if standalone
+            max: 5,
             connectionTimeoutMillis: 5000,
             idleTimeoutMillis: 10000,
             statement_timeout: 30000,
+            idle_in_transaction_session_timeout: 15000
         });
         pgPool.on('error', (err) => {
             console.error('[PG POOL ERROR in SYNC_ENGINE]:', err.message);
@@ -90,18 +93,32 @@ const DEFAULT_ACCESS_FILE_PATH = '\\\\Share\\d\\gROCER SUPPORT\\0 Gro.Support\\D
 const FALLBACK_LOCAL_ACCESS_PATH = 'h:\\Programming\\Br_DB\\BE\\Bread_Final_be.accdb';
 const VBS_EXPORTER_PATH = path.join(__dirname, 'export_accdb_tables.vbs');
 
-function readConfigSafely() {
+function readConfigSafely(forceReload = false) {
+    if (!forceReload && _cachedConfig) {
+        return _cachedConfig;
+    }
     let cfg = {};
     try {
         if (fs.existsSync(CONFIG_FILE_PATH)) {
+            const stat = fs.statSync(CONFIG_FILE_PATH);
+            if (!forceReload && _cachedConfig && _cachedConfigMtime === stat.mtimeMs) {
+                return _cachedConfig;
+            }
             cfg = JSON.parse(fs.readFileSync(CONFIG_FILE_PATH, 'utf8')) || {};
+            _cachedConfigMtime = stat.mtimeMs;
         }
     } catch (e) {}
     if (process.platform === 'linux' || process.env.IS_CLOUD_SERVER === 'true') {
         cfg.isCloudServer = true;
         cfg.usePostgres = true;
     }
-    return cfg;
+    _cachedConfig = cfg;
+    return _cachedConfig;
+}
+
+function invalidateConfigCache() {
+    _cachedConfig = null;
+    _cachedConfigMtime = 0;
 }
 
 function getAccessFilePath() {
@@ -132,6 +149,7 @@ function setAccessFilePath(newPath) {
     }
     const config = { ...readConfigSafely(), accessFilePath: cleanPath, updatedAt: new Date().toISOString() };
     fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(config, null, 2), 'utf8');
+    invalidateConfigCache();
     return cleanPath;
 }
 
@@ -370,6 +388,7 @@ function setAutoSyncEnabled(enabled, db) {
     const isEnabled = !!enabled;
     const config = { ...readConfigSafely(), autoSync: isEnabled, updatedAt: new Date().toISOString() };
     fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(config, null, 2), 'utf8');
+    invalidateConfigCache();
     if (isEnabled) {
         startFileWatcher(db);
     } else {
@@ -2353,6 +2372,7 @@ module.exports = {
     flushDeltaOutbox,
     getAccessFilePath,
     setAccessFilePath,
+    readConfigSafely,
     startFileWatcher,
     stopAllWatchers,
     isPendingResync: () => pendingResync,

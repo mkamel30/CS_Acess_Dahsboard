@@ -143,14 +143,28 @@ app.get('/favicon.ico', (req, res) => {
     res.status(200).send('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#0284c7"><rect width="24" height="24" rx="6" fill="#0284c7"/><path d="M4 7h16M4 12h16M4 17h16" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/></svg>');
 });
 
-function readAppConfig() {
+let _serverConfigCache = null;
+let _serverConfigMtime = 0;
+
+function readAppConfig(forceReload = false) {
+    if (!forceReload && _serverConfigCache) return _serverConfigCache;
     let cfg = {};
-    try { cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) || {}; } catch (e) {}
+    try {
+        if (fs.existsSync(CONFIG_FILE)) {
+            const stat = fs.statSync(CONFIG_FILE);
+            if (!forceReload && _serverConfigCache && _serverConfigMtime === stat.mtimeMs) {
+                return _serverConfigCache;
+            }
+            cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) || {};
+            _serverConfigMtime = stat.mtimeMs;
+        }
+    } catch (e) {}
     if (process.platform === 'linux' || process.env.IS_CLOUD_SERVER === 'true') {
         cfg.isCloudServer = true;
         cfg.usePostgres = true;
     }
-    return cfg;
+    _serverConfigCache = cfg;
+    return _serverConfigCache;
 }
 const appCfg = readAppConfig();
 let pgPool = null;
@@ -164,10 +178,11 @@ if (appCfg.isCloudServer) {
         database: appCfg.pgDatabase || process.env.PGDATABASE || 'smartcs_db',
         host: appCfg.pgHost || process.env.PGHOST || '127.0.0.1',
         port: appCfg.pgPort || process.env.PGPORT || 5432,
-        max: 5, // Strict low connection limit (5) for 1GB RAM micro VPS
+        max: 10, // Increased burst capacity for multi-worker syncing
         connectionTimeoutMillis: 5000,
         idleTimeoutMillis: 10000,
         statement_timeout: 30000,
+        idle_in_transaction_session_timeout: 15000 // F-22: Kill leaked idle transactions after 15s
     });
     pgPool.on('error', (err) => {
         console.error('[PG POOL ERROR] Unexpected error on idle client:', err.message);
@@ -175,6 +190,36 @@ if (appCfg.isCloudServer) {
     if (syncEngine && typeof syncEngine.setSharedPgPool === 'function') {
         syncEngine.setSharedPgPool(pgPool);
     }
+}
+
+/**
+ * Execute work inside a dedicated, pinned PostgreSQL transaction client (F-22)
+ * Guarantees BEGIN/COMMIT/ROLLBACK are executed on the exact same client and released
+ */
+async function withPgTransaction(workFn) {
+    if (!isPgPoolSafe()) throw new Error('PostgreSQL pool not available');
+    const client = await pgPool.connect();
+    try {
+        await client.query('BEGIN');
+        const res = await workFn(client);
+        await client.query('COMMIT');
+        return res;
+    } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+    } finally {
+        client.release();
+    }
+}
+
+function getPoolMetrics() {
+    if (!pgPool) return { active: false, totalCount: 0, idleCount: 0, waitingCount: 0 };
+    return {
+        active: isPgPoolSafe(),
+        totalCount: pgPool.totalCount || 0,
+        idleCount: pgPool.idleCount || 0,
+        waitingCount: pgPool.waitingCount || 0
+    };
 }
 const SYNC_SECRET     = (appCfg.syncSecret     || process.env.SYNC_SECRET     || '').trim();
 const SYNC_SECRET_OLD = (appCfg.syncSecretOld  || process.env.SYNC_SECRET_OLD || '').trim();
@@ -6158,6 +6203,11 @@ function broadcastReseedProgress(updates = {}) {
 // Reseed status endpoint for polling fallback
 app.get('/api/diagnostics/reseed-status', (req, res) => {
     res.json({ success: true, ...cloudReseedState });
+});
+
+// Database pool metrics endpoint (T-17 / F-22)
+app.get('/api/diagnostics/pool-metrics', (req, res) => {
+    res.json({ success: true, metrics: getPoolMetrics() });
 });
 
 /**
