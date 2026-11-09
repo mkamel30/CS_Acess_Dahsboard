@@ -923,23 +923,6 @@ async function syncTableWithDiff(db, tableName, primaryKey, jsonRecords) {
         }
     }
 
-    // Save change logs inside a single transaction (limit batch per sync to avoid huge payload on first run)
-    const logsToInsert = changeLogs.slice(0, 500);
-    if (logsToInsert.length > 0) {
-        try {
-            await dbRun(db, 'BEGIN TRANSACTION');
-            for (const log of logsToInsert) {
-                await dbRun(db, `
-                    INSERT INTO audit_change_logs (table_name, record_id, change_type, summary, old_data, new_data, source)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                `, [log.table_name, log.record_id, log.change_type, log.summary, log.old_data, log.new_data, log.source]);
-            }
-            await dbRun(db, 'COMMIT');
-        } catch (e) {
-            try { await dbRun(db, 'ROLLBACK'); } catch (rbErr) {}
-        }
-    }
-
     return {
         inserted: insertedCount,
         updated: updatedCount,
@@ -950,61 +933,149 @@ async function syncTableWithDiff(db, tableName, primaryKey, jsonRecords) {
     };
 }
 
+function prepareStmt(db, sql) {
+    return new Promise((resolve, reject) => {
+        let stmt;
+        stmt = db.prepare(sql, function (err) {
+            if (err) reject(err);
+            else resolve(stmt);
+        });
+        if (stmt && typeof stmt.on === 'function') {
+            stmt.on('error', () => {});
+        }
+    });
+}
+
+/**
+ * Atomic Transactional Outbox:
+ * In a single SQLite transaction (BEGIN IMMEDIATE / COMMIT / ROLLBACK), applies:
+ * 1. Raw replica table replacement with awaited stmt.run / stmt.finalize (F-08)
+ * 2. Audit change logs without truncation (F-19)
+ * 3. Delta outbox queue record for cloud delivery (F-01)
+ */
+async function applyTableAndOutbox(db, tableName, pkField, records, deltaList = []) {
+    if (!isAllowedSyncTable(tableName)) {
+        throw new Error(`Table '${tableName}' not allowed in whitelist`);
+    }
+
+    const escTbl = escapeSqlIdentifier(tableName);
+
+    // 1. Prepare table columns
+    const allColsSet = new Set();
+    for (const row of (records || [])) {
+        for (const k of Object.keys(row)) {
+            if (isValidSqlIdentifier(k)) allColsSet.add(k);
+        }
+    }
+    const cols = Array.from(allColsSet);
+
+    if (cols.length > 0) {
+        const createCols = cols.map(c => `${escapeSqlIdentifier(c)} TEXT`).join(', ');
+        await dbRun(db, `CREATE TABLE IF NOT EXISTS ${escTbl} (${createCols});`);
+        try {
+            const existingInfo = await dbAll(db, `PRAGMA table_info(${escTbl});`);
+            const existingColNames = new Set(existingInfo.map(i => (i.name || '').toLowerCase()));
+            for (const col of cols) {
+                if (!existingColNames.has(col.toLowerCase())) {
+                    await dbRun(db, `ALTER TABLE ${escTbl} ADD COLUMN ${escapeSqlIdentifier(col)} TEXT;`).catch(() => {});
+                }
+            }
+        } catch (e) {}
+    }
+
+    // 2. Transactional execution
+    await dbRun(db, 'BEGIN IMMEDIATE;');
+    let rawStmt = null;
+    let auditStmt = null;
+    try {
+        if (cols.length > 0 && records && records.length > 0) {
+            await dbRun(db, `DELETE FROM ${escTbl};`);
+            const placeholders = cols.map(() => '?').join(', ');
+            const quotedCols = cols.map(c => escapeSqlIdentifier(c)).join(', ');
+            const insertSql = `INSERT INTO ${escTbl} (${quotedCols}) VALUES (${placeholders});`;
+            rawStmt = await prepareStmt(db, insertSql);
+
+            for (const row of records) {
+                const vals = cols.map(c => {
+                    const val = row[c];
+                    if (val === null || val === undefined) return '';
+                    if (typeof val === 'object') return JSON.stringify(val);
+                    return String(val);
+                });
+                await new Promise((resolve, reject) => {
+                    rawStmt.run(vals, function (err) {
+                        if (err) reject(err);
+                        else resolve(this);
+                    });
+                });
+            }
+
+            await new Promise((resolve, reject) => {
+                rawStmt.finalize((err) => {
+                    rawStmt = null;
+                    if (err) reject(err);
+                    else resolve();
+                });
+            });
+        }
+
+        // Apply audit change logs in the exact same transaction (F-19)
+        if (deltaList && deltaList.length > 0) {
+            const auditSql = `
+                INSERT INTO audit_change_logs (table_name, record_id, change_type, summary, old_data, new_data, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?);
+            `;
+            auditStmt = await prepareStmt(db, auditSql);
+            for (const log of deltaList) {
+                await new Promise((resolve, reject) => {
+                    auditStmt.run([
+                        log.table_name,
+                        log.record_id,
+                        log.change_type,
+                        log.summary,
+                        log.old_data,
+                        log.new_data,
+                        log.source || 'MS_ACCESS_SYNC'
+                    ], function (err) {
+                        if (err) reject(err);
+                        else resolve(this);
+                    });
+                });
+            }
+            await new Promise((resolve, reject) => {
+                auditStmt.finalize((err) => {
+                    auditStmt = null;
+                    if (err) reject(err);
+                    else resolve();
+                });
+            });
+
+            // Enqueue into delta_outbox in the exact same transaction (F-01)
+            const batchId = crypto.randomUUID ? crypto.randomUUID() : `batch_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+            await dbRun(db, `
+                INSERT INTO delta_outbox (batch_id, payload, changes_count, attempts, last_error)
+                VALUES (?, ?, ?, 0, NULL);
+            `, [batchId, JSON.stringify(deltaList), deltaList.length]);
+        }
+
+        await dbRun(db, 'COMMIT;');
+    } catch (err) {
+        if (rawStmt) {
+            try { rawStmt.finalize(() => {}); } catch (e) {}
+        }
+        if (auditStmt) {
+            try { auditStmt.finalize(() => {}); } catch (e) {}
+        }
+        await dbRun(db, 'ROLLBACK;').catch(() => {});
+        throw err;
+    }
+}
+
 /**
  * Dynamically recreate/upsert raw tables safely without DROP TABLE downtime
  */
 async function upsertTableData(db, tableName, pkField, records) {
-    if (!records || records.length === 0) return;
-
-    // Collect ALL unique column names across all records (prevents sparse column omission)
-    const allColsSet = new Set();
-    for (const row of records) {
-        for (const k of Object.keys(row)) {
-            allColsSet.add(k);
-        }
-    }
-    const cols = Array.from(allColsSet);
-    const createCols = cols.map(c => `"${c}" TEXT`).join(', ');
-
-    // Ensure table exists without dropping it so active readers are never interrupted
-    await dbRun(db, `CREATE TABLE IF NOT EXISTS "${tableName}" (${createCols});`);
-
-    // Ensure all columns exist in the table (in case schema expanded)
-    try {
-        const existingInfo = await dbAll(db, `PRAGMA table_info("${tableName}");`);
-        const existingColNames = new Set(existingInfo.map(i => (i.name || '').toLowerCase()));
-        for (const col of cols) {
-            if (!existingColNames.has((col || '').toLowerCase())) {
-                await dbRun(db, `ALTER TABLE "${tableName}" ADD COLUMN "${col}" TEXT;`).catch(() => {});
-                existingColNames.add((col || '').toLowerCase());
-            }
-        }
-    } catch (e) {}
-
-    const placeholders = cols.map(() => '?').join(', ');
-    const quotedCols = cols.map(c => `"${c}"`).join(', ');
-    const insertSql = `INSERT INTO "${tableName}" (${quotedCols}) VALUES (${placeholders});`;
-
-    // Atomic replace in single transaction (zero downtime, WAL snapshot safe)
-    await dbRun(db, 'BEGIN TRANSACTION;');
-    try {
-        await dbRun(db, `DELETE FROM "${tableName}";`);
-        const stmt = db.prepare(insertSql);
-        for (const row of records) {
-            const vals = cols.map(c => {
-                const val = row[c];
-                if (val === null || val === undefined) return '';
-                if (typeof val === 'object') return JSON.stringify(val);
-                return String(val);
-            });
-            stmt.run(vals);
-        }
-        await new Promise(resolve => stmt.finalize(resolve));
-        await dbRun(db, 'COMMIT;');
-    } catch (err) {
-        await dbRun(db, 'ROLLBACK;');
-        throw err;
-    }
+    return applyTableAndOutbox(db, tableName, pkField, records, []);
 }
 
 let isRebuildingDomainEntities = false;
@@ -1544,7 +1615,7 @@ async function performFullSync(db) {
                     console.log(`[SYNC] ${cfg.table}: +${diffResult.inserted} ~${diffResult.updated} -${diffResult.deleted} (Total: ${diffResult.total})`);
 
                     if (records.length > 0 && (changesInTable > 0 || !diffResult.hadExistingRows)) {
-                        await upsertTableData(db, cfg.table, cfg.pk, records);
+                        await applyTableAndOutbox(db, cfg.table, cfg.pk, records, diffResult.deltaList);
                     }
                 } catch (e) {
                     console.error(`[SYNC ERROR] Error processing ${cfg.file}:`, e.message);
@@ -1556,10 +1627,10 @@ async function performFullSync(db) {
         setProgress(85, 'إعادة بناء ومطابقة الكيانات', 'تحديث وتوزيع المخابز، الماكينات، والشرائح، وبلاغات الصيانة...', 'merchants & devices', 4);
         await syncHighLevelDomainEntities(db);
 
-        // Step 4: Incremental Cloud Delta Sync (Push delta directly to Cloud VPS in milliseconds)
+        // Step 4: Incremental Cloud Delta Sync: Flush committed outbox items
         if (allDeltaChanges.length > 0) {
             setProgress(90, 'مزامنة السحابة التلقائية', `إرسال ${allDeltaChanges.length} تعديلاً فورياً إلى السيرفر السحابي...`, 'cloud_delta_sync', 4);
-            await pushDeltaToCloud(db, allDeltaChanges);
+            await flushDeltaOutbox(db);
         }
 
         setProgress(95, 'تحديث الإحصائيات والمؤشرات', 'إعادة حساب إحصائيات لوحة القيادة والتقارير...', 'dashboard_kpis', 5);
@@ -1907,5 +1978,6 @@ module.exports = {
     isAllowedSyncTable,
     isValidSqlIdentifier,
     escapeSqlIdentifier,
-    archiveOutboxItemToDlq
+    archiveOutboxItemToDlq,
+    applyTableAndOutbox
 };
