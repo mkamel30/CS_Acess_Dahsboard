@@ -844,15 +844,16 @@ function readJsonSafely(filePath) {
 }
 
 /**
- * Enrich spare parts and failure points records with deterministic unique sync_key
+ * Enrich spare parts and failure points records with deterministic unique sync_key (F-18)
  */
 function enrichRecordsWithSyncKey(tableName, records) {
     if (!records || !Array.isArray(records)) return records;
     if (tableName !== 'store_sp_raw' && tableName !== 'store_sp_maintenance_raw' && tableName !== 'failure_points_raw' && tableName !== 'temp_transfer_raw') {
         return records;
     }
-    const occurrenceMap = new Map();
-    for (const row of records) {
+    const groups = new Map();
+    for (let i = 0; i < records.length; i++) {
+        const row = records[i];
         let sig = '';
         if (tableName === 'store_sp_raw') {
             sig = [row.Serial, row.type, row.in_date, row.out_date, row.notes, row.count_in, row.count_out, row.faulty_detils].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
@@ -868,10 +869,22 @@ function enrichRecordsWithSyncKey(tableName, records) {
             }
             sig = [row.POSCode, row.OldPOS, row.NewPOS, row.Transfer_Date, row.procedure, row.bkCode].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
         }
-        const occ = (occurrenceMap.get(sig) || 0) + 1;
-        occurrenceMap.set(sig, occ);
-        const fullSig = occ > 1 ? `${sig}#${occ}` : sig;
-        row.sync_key = crypto.createHash('md5').update(fullSig).digest('hex');
+
+        if (!groups.has(sig)) groups.set(sig, []);
+        groups.get(sig).push({ row, originalIndex: i, fullJson: JSON.stringify(row) });
+    }
+
+    for (const [sig, items] of groups.entries()) {
+        if (items.length === 1) {
+            items[0].row.sync_key = crypto.createHash('md5').update(sig).digest('hex');
+        } else {
+            // Sort duplicates deterministically so export order differences do not reassign keys
+            items.sort((a, b) => a.fullJson.localeCompare(b.fullJson) || (a.originalIndex - b.originalIndex));
+            for (let occ = 0; occ < items.length; occ++) {
+                const fullSig = occ > 0 ? `${sig}#${occ + 1}` : sig;
+                items[occ].row.sync_key = crypto.createHash('md5').update(fullSig).digest('hex');
+            }
+        }
     }
     return records;
 }
@@ -981,6 +994,56 @@ function getRowIdentifier(tableName, primaryKey, row) {
 }
 
 /**
+ * Canonical typed equality check preserving NULL, numbers, and dates (F-17)
+ */
+function areValuesEqual(v1, v2) {
+    // 1. Both null or undefined
+    const isV1Null = v1 === null || v1 === undefined;
+    const isV2Null = v2 === null || v2 === undefined;
+    if (isV1Null && isV2Null) return true;
+    if (isV1Null !== isV2Null) return false;
+
+    // 2. Exact primitive match
+    if (v1 === v2) return true;
+
+    // 3. String representation match
+    const s1 = String(v1).trim();
+    const s2 = String(v2).trim();
+    if (s1 === s2) return true;
+
+    // 4. Numeric equality (avoids "10.0" vs 10 false diffs)
+    if (!isNaN(v1) && !isNaN(v2) && s1 !== '' && s2 !== '') {
+        const n1 = Number(v1);
+        const n2 = Number(v2);
+        if (Number.isFinite(n1) && Number.isFinite(n2) && n1 === n2) {
+            return true;
+        }
+    }
+
+    // 5. Date comparison (ISO vs standard Access dates)
+    if (typeof v1 === 'string' && typeof v2 === 'string' && (s1.includes('-') || s1.includes('/')) && (s2.includes('-') || s2.includes('/'))) {
+        const t1 = Date.parse(s1);
+        const t2 = Date.parse(s2);
+        if (!isNaN(t1) && !isNaN(t2) && t1 === t2) {
+            return true;
+        }
+    }
+
+    // 6. Boolean comparison (Access -1/1/true vs boolean true)
+    const boolValues = {
+        'true': true, '1': true, '-1': true,
+        'false': false, '0': false
+    };
+    const b1 = boolValues[s1.toLowerCase()];
+    const b2 = boolValues[s2.toLowerCase()];
+    if (b1 !== undefined && b2 !== undefined && b1 === b2) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
  * Generic Table Diff & Sync Function
  */
 async function syncTableWithDiff(db, tableName, primaryKey, jsonRecords) {
@@ -1038,9 +1101,7 @@ async function syncTableWithDiff(db, tableName, primaryKey, jsonRecords) {
                     ? oldRow[prop]
                     : oldRowLower[prop.toLowerCase()];
                 const newVal = item[prop];
-                const oldStr = (oldVal !== null && oldVal !== undefined) ? String(oldVal).trim() : '';
-                const newStr = (newVal !== null && newVal !== undefined) ? String(newVal).trim() : '';
-                if (oldStr !== newStr) {
+                if (!areValuesEqual(oldVal, newVal)) {
                     diffFields.push({ field: prop, old: oldVal, new: newVal });
                 }
             }
@@ -2152,6 +2213,8 @@ module.exports = {
     applyTableAndOutbox,
     validateExportManifest,
     syncTableWithDiff,
+    areValuesEqual,
+    enrichRecordsWithSyncKey,
     DATA_SYNC_DIR,
     DATA_SYNC_STAGING_DIR
 };
