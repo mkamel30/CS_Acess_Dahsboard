@@ -11,6 +11,12 @@ const { Pool } = require('pg');
 const crypto = require('crypto');
 
 let pgPool = null;
+function setSharedPgPool(pool) {
+    if (pool) pgPool = pool;
+}
+function isPgPoolSafe() {
+    return Boolean(pgPool && !pgPool.ended && !pgPool._ending);
+}
 function initPgPool() {
     const config = readConfigSafely();
     if (config.isCloudServer && !pgPool) {
@@ -20,17 +26,33 @@ function initPgPool() {
             database: config.pgDatabase || process.env.PGDATABASE || 'smartcs_db',
             host: config.pgHost || process.env.PGHOST || '127.0.0.1',
             port: config.pgPort || process.env.PGPORT || 5432,
-            max: 20,
+            max: 3, // Conservative limit if standalone
             connectionTimeoutMillis: 5000,
-            idleTimeoutMillis: 30000,
-            statement_timeout: 60000,
+            idleTimeoutMillis: 10000,
+            statement_timeout: 30000,
         });
         pgPool.on('error', (err) => {
-            console.error('[PG POOL ERROR] Unexpected error on idle client:', err.message);
+            console.error('[PG POOL ERROR in SYNC_ENGINE]:', err.message);
         });
     }
 }
 initPgPool();
+
+let debouncedRebuildTimer = null;
+function scheduleDebouncedDomainRebuild(db, delayMs = 30 * 60 * 1000) {
+    if (debouncedRebuildTimer) {
+        clearTimeout(debouncedRebuildTimer);
+    }
+    const mins = Math.round(delayMs / 60000);
+    console.log(`[SYNC ENGINE] Debouncing domain entities rebuild for ${mins} minutes to protect CPU...`);
+    debouncedRebuildTimer = setTimeout(() => {
+        debouncedRebuildTimer = null;
+        console.log('[SYNC ENGINE] Executing debounced domain entities rebuild...');
+        syncHighLevelDomainEntities(db).catch(e => {
+            console.error('[DEBOUNCED REBUILD ERROR]', e.message);
+        });
+    }, delayMs);
+}
 
 const DATA_SYNC_DIR = path.join(__dirname, 'data_sync');
 const CONFIG_FILE_PATH = path.join(__dirname, 'config.json');
@@ -295,7 +317,10 @@ function dbRun(db, sql, params = []) {
     return new Promise(async (resolve, reject) => {
         initPgPool();
         const appCfgSync = readConfigSafely();
-        if (appCfgSync.isCloudServer && pgPool) {
+        if (appCfgSync.isCloudServer) {
+            if (!isPgPoolSafe()) {
+                return reject(new Error('PostgreSQL pool is not available or has ended'));
+            }
             try {
                 const { pgSql, pgParams } = translateSqliteToPostgres(sql, params);
                 const res = await pgPool.query(pgSql, pgParams);
@@ -316,7 +341,10 @@ function dbAll(db, sql, params = []) {
     return new Promise(async (resolve, reject) => {
         initPgPool();
         const appCfgSync = readConfigSafely();
-        if (appCfgSync.isCloudServer && pgPool) {
+        if (appCfgSync.isCloudServer) {
+            if (!isPgPoolSafe()) {
+                return reject(new Error('PostgreSQL pool is not available or has ended'));
+            }
             try {
                 const { pgSql, pgParams } = translateSqliteToPostgres(sql, params);
                 const res = await pgPool.query(pgSql, pgParams);
@@ -996,8 +1024,19 @@ async function syncHighLevelDomainEntities(db) {
         GROUP BY merchant_code;
     `);
 
-    // 2. Devices (POS)
-    await dbRun(db, `DELETE FROM devices;`);
+    // Ensure indexes exist before any heavy domain processing
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_assets_pos ON assets_raw("POS");`).catch(() => {});
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_assets_pos_2 ON assets_raw("POS_2");`).catch(() => {});
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_assets_bkcode ON assets_raw(bkcode);`).catch(() => {});
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_assets_id ON assets_raw("ID");`).catch(() => {});
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_trans_posn ON transactions_raw("POSN");`).catch(() => {});
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_trans_id ON transactions_raw("ID");`).catch(() => {});
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_maint_serial ON maintenance_raw("Unit Serial");`).catch(() => {});
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_maint_id ON maintenance_raw("ID");`).catch(() => {});
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_store_pos_serial ON store_pos_raw("Serial");`).catch(() => {});
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_store_sim_serial ON store_sim_raw(sim_serial);`).catch(() => {});
+
+    // 2. Devices (POS) - Upsert without dropping existing data
     await dbRun(db, `
         INSERT OR REPLACE INTO devices (
             serial, manufacturer, model, status, faulty_details, solder_bridges
@@ -1060,8 +1099,7 @@ async function syncHighLevelDomainEntities(db) {
         GROUP BY serial;
     `);
 
-    // 3. SIM Cards
-    await dbRun(db, `DELETE FROM sim_cards;`);
+    // 3. SIM Cards - Upsert without dropping existing data
     await dbRun(db, `
         INSERT OR REPLACE INTO sim_cards (
             serial, carrier, status
@@ -1219,8 +1257,7 @@ async function syncHighLevelDomainEntities(db) {
         WHERE t."ID" IS NOT NULL AND t."ID" != '';
     `);
 
-    // 6. Payments
-    await dbRun(db, `DELETE FROM payments;`);
+    // 6. Payments - Upsert without dropping existing data
     await dbRun(db, `
         INSERT OR REPLACE INTO payments (
             id, merchant_code, payment_date, amount, ref_num, reason, payment_place
@@ -1730,6 +1767,8 @@ module.exports = {
     getSyncStatus: () => ({ ...lastSyncResult, isSyncInProgress, progress: syncProgress }),
     initSyncDatabase,
     syncHighLevelDomainEntities,
+    scheduleDebouncedDomainRebuild,
+    setSharedPgPool,
     pushDeltaToCloud,
     flushDeltaOutbox,
     getAccessFilePath,

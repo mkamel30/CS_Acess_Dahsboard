@@ -146,6 +146,9 @@ function readAppConfig() {
 }
 const appCfg = readAppConfig();
 let pgPool = null;
+function isPgPoolSafe() {
+    return Boolean(pgPool && !pgPool.ended && !pgPool._ending);
+}
 if (appCfg.isCloudServer) {
     pgPool = new Pool({
         user: appCfg.pgUser || process.env.PGUSER || 'smartcs_user',
@@ -153,14 +156,17 @@ if (appCfg.isCloudServer) {
         database: appCfg.pgDatabase || process.env.PGDATABASE || 'smartcs_db',
         host: appCfg.pgHost || process.env.PGHOST || '127.0.0.1',
         port: appCfg.pgPort || process.env.PGPORT || 5432,
-        max: 30,
-        connectionTimeoutMillis: 10000,
+        max: 5, // Strict low connection limit (5) for 1GB RAM micro VPS
+        connectionTimeoutMillis: 5000,
         idleTimeoutMillis: 10000,
-        statement_timeout: 60000,
+        statement_timeout: 30000,
     });
     pgPool.on('error', (err) => {
         console.error('[PG POOL ERROR] Unexpected error on idle client:', err.message);
     });
+    if (syncEngine && typeof syncEngine.setSharedPgPool === 'function') {
+        syncEngine.setSharedPgPool(pgPool);
+    }
 }
 const SYNC_SECRET   = appCfg.syncSecret   || process.env.SYNC_SECRET   || 'smartcs-cloud-secret-2026';
 const WEBHOOK_SECRET = appCfg.webhookSecret || process.env.WEBHOOK_SECRET || '';
@@ -234,18 +240,22 @@ async function logSystemError(module, endpoint, err, req = null, severity = 'ERR
         console.error(`[SYSTEM ERROR - ${module}] [${endpoint}]:`, errMsg);
 
         // Guard against recursive connection pool exhaustion during database outages
-        if (errMsg.includes('timeout exceeded') || errMsg.includes('ECONNREFUSED') || errMsg.includes('Connection terminated')) {
+        if (errMsg.includes('timeout exceeded') || 
+            errMsg.includes('ECONNREFUSED') || 
+            errMsg.includes('Connection terminated') ||
+            errMsg.includes('Cannot use a pool after calling end') ||
+            errMsg.includes('pool has ended')) {
             return;
         }
         
-        if (appCfg.isCloudServer && pgPool) {
+        if (appCfg.isCloudServer && isPgPoolSafe()) {
             await pgPool.query(`
                 INSERT INTO system_error_logs (severity, module, endpoint, error_message, stack_trace, request_data, client_ip)
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
             `, [severity, module, endpoint || '-', errMsg, stack, reqData, clientIp]).catch(pgErr => {
                 console.error('[FAILED TO LOG SYSTEM ERROR TO PG]', pgErr.message);
             });
-        } else {
+        } else if (!appCfg.isCloudServer) {
             db.run(`
                 INSERT INTO system_error_logs (severity, module, endpoint, error_message, stack_trace, request_data, client_ip)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -272,7 +282,11 @@ const { translateSqliteToPostgres } = require('./db_translator');
 
 function runQuery(sql, params = []) {
     return new Promise(async (resolve, reject) => {
-        if (appCfg.isCloudServer && pgPool) {
+        if (appCfg.isCloudServer) {
+            if (!isPgPoolSafe()) {
+                const poolErr = new Error('PostgreSQL pool is closed or ending');
+                return reject(poolErr);
+            }
             try {
                 const { pgSql, pgParams } = translateSqliteToPostgres(sql, params);
                 const res = await pgPool.query(pgSql, pgParams);
@@ -296,7 +310,11 @@ function runQuery(sql, params = []) {
 
 function getQuery(sql, params = []) {
     return new Promise(async (resolve, reject) => {
-        if (appCfg.isCloudServer && pgPool) {
+        if (appCfg.isCloudServer) {
+            if (!isPgPoolSafe()) {
+                const poolErr = new Error('PostgreSQL pool is closed or ending');
+                return reject(poolErr);
+            }
             try {
                 const { pgSql, pgParams } = translateSqliteToPostgres(sql, params);
                 const res = await pgPool.query(pgSql, pgParams);
@@ -320,7 +338,11 @@ function getQuery(sql, params = []) {
 
 function allQuery(sql, params = []) {
     return new Promise(async (resolve, reject) => {
-        if (appCfg.isCloudServer && pgPool) {
+        if (appCfg.isCloudServer) {
+            if (!isPgPoolSafe()) {
+                const poolErr = new Error('PostgreSQL pool is closed or ending');
+                return reject(poolErr);
+            }
             try {
                 const { pgSql, pgParams } = translateSqliteToPostgres(sql, params);
                 const res = await pgPool.query(pgSql, pgParams);
@@ -621,6 +643,24 @@ async function initAppSchema() {
         await runQuery(`CREATE INDEX IF NOT EXISTS idx_sims_status ON sim_cards(status);`).catch(() => {});
         await runQuery(`CREATE INDEX IF NOT EXISTS idx_merchants_gov ON merchants(government);`).catch(() => {});
         await runQuery(`CREATE INDEX IF NOT EXISTS idx_payments_date ON payments(payment_date);`).catch(() => {});
+
+        // Critical Foreign Key & Join indexes on RAW tables (Eliminates full table scans & Cartesian joins)
+        await runQuery(`CREATE INDEX IF NOT EXISTS idx_assets_pos ON assets_raw("POS");`).catch(() => {});
+        await runQuery(`CREATE INDEX IF NOT EXISTS idx_assets_pos_2 ON assets_raw("POS_2");`).catch(() => {});
+        await runQuery(`CREATE INDEX IF NOT EXISTS idx_assets_bkcode ON assets_raw(bkcode);`).catch(() => {});
+        await runQuery(`CREATE INDEX IF NOT EXISTS idx_assets_id ON assets_raw("ID");`).catch(() => {});
+        await runQuery(`CREATE INDEX IF NOT EXISTS idx_trans_posn ON transactions_raw("POSN");`).catch(() => {});
+        await runQuery(`CREATE INDEX IF NOT EXISTS idx_trans_id ON transactions_raw("ID");`).catch(() => {});
+        await runQuery(`CREATE INDEX IF NOT EXISTS idx_maint_serial ON maintenance_raw("Unit Serial");`).catch(() => {});
+        await runQuery(`CREATE INDEX IF NOT EXISTS idx_maint_id ON maintenance_raw("ID");`).catch(() => {});
+        await runQuery(`CREATE INDEX IF NOT EXISTS idx_store_pos_serial ON store_pos_raw("Serial");`).catch(() => {});
+        await runQuery(`CREATE INDEX IF NOT EXISTS idx_store_sim_serial ON store_sim_raw(sim_serial);`).catch(() => {});
+        await runQuery(`CREATE INDEX IF NOT EXISTS idx_payments_raw_id ON payments_raw("ID");`).catch(() => {});
+
+        // Domain Entity unique / lookup indexes
+        await runQuery(`CREATE INDEX IF NOT EXISTS idx_devices_serial ON devices(serial);`).catch(() => {});
+        await runQuery(`CREATE INDEX IF NOT EXISTS idx_sims_serial ON sim_cards(serial);`).catch(() => {});
+        await runQuery(`CREATE INDEX IF NOT EXISTS idx_merchants_code ON merchants(merchant_code);`).catch(() => {});
 
         console.log("[DB INIT] App Database Schema Verified and Ready.");
     } catch(err) {
@@ -5280,11 +5320,10 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
         // IMPORTANT: Send response FIRST so client (and Nginx) doesn't timeout!
         res.json({ success: true, applied: appliedCount, timestamp: new Date().toISOString() });
 
-        // Re-align high level domain entities ASYNCHRONOUSLY after response is safely flushed
-        if (syncEngine && typeof syncEngine.syncHighLevelDomainEntities === 'function') {
-            setTimeout(() => {
-                syncEngine.syncHighLevelDomainEntities(db).catch(e => console.error('[SYNC REBUILD ERROR]', e));
-            }, 100);
+        // Optimized: DO NOT rebuild domain entities synchronously or immediately on each delta batch!
+        // Schedule debounced reconciliation (30 minutes of idle time) to protect VPS CPU from starvation
+        if (syncEngine && typeof syncEngine.scheduleDebouncedDomainRebuild === 'function') {
+            syncEngine.scheduleDebouncedDomainRebuild(db, 30 * 60 * 1000);
         }
     } catch (err) {
         console.error('[CLOUD DELTA SYNC ERROR]', err);
@@ -6036,8 +6075,10 @@ app.listen(PORT, '0.0.0.0', () => {
 async function gracefulShutdown(signal) {
     console.log(`\n[SHUTDOWN] ${signal} received. Cleaning up...`);
     try {
-        if (pgPool) {
-            await pgPool.end();
+        if (pgPool && !pgPool.ended) {
+            const closingPool = pgPool;
+            pgPool = null; // Mark null immediately so ongoing handlers reject gracefully
+            await closingPool.end();
             console.log('[SHUTDOWN] PostgreSQL pool closed.');
         }
     } catch (e) { console.error('[SHUTDOWN] pgPool close error:', e.message); }
@@ -6051,14 +6092,27 @@ async function gracefulShutdown(signal) {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
-// Auto-cleanup logs older than 90 days to prevent infinite growth
+// Off-peak daily maintenance and domain reconciliation at 03:00 AM (Cairo Time) / 01:00 AM (UTC)
+let lastOffPeakReconcileDay = '';
 setInterval(async () => {
     try {
-        console.log('[MAINTENANCE] Running log cleanup job...');
-        await runQuery(`DELETE FROM audit_change_logs WHERE timestamp < datetime('now', '-90 days')`).catch(() => {});
-        await runQuery(`DELETE FROM sync_history WHERE sync_time < datetime('now', '-90 days')`).catch(() => {});
-        await runQuery(`DELETE FROM system_error_logs WHERE timestamp < datetime('now', '-90 days')`).catch(() => {});
+        const now = new Date();
+        const currentHour = now.getUTCHours(); // 01:00 UTC corresponds to 03:00 Cairo
+        const dateStr = now.toISOString().split('T')[0];
+        
+        if (currentHour === 1 && lastOffPeakReconcileDay !== dateStr) {
+            lastOffPeakReconcileDay = dateStr;
+            console.log(`[OFF-PEAK MAINTENANCE] Starting scheduled off-peak domain reconciliation for ${dateStr}...`);
+            if (syncEngine && typeof syncEngine.syncHighLevelDomainEntities === 'function') {
+                await syncEngine.syncHighLevelDomainEntities(db).catch(e => console.error('[OFF-PEAK REBUILD ERROR]', e.message));
+            }
+            console.log('[OFF-PEAK MAINTENANCE] Cleaning up logs older than 90 days...');
+            await runQuery(`DELETE FROM audit_change_logs WHERE timestamp < datetime('now', '-90 days')`).catch(() => {});
+            await runQuery(`DELETE FROM sync_history WHERE sync_time < datetime('now', '-90 days')`).catch(() => {});
+            await runQuery(`DELETE FROM system_error_logs WHERE timestamp < datetime('now', '-90 days')`).catch(() => {});
+            console.log('[OFF-PEAK MAINTENANCE] Completed successfully.');
+        }
     } catch (e) {
-        console.error('[LOG CLEANUP ERROR]', e.message);
+        console.error('[OFF-PEAK MAINTENANCE ERROR]', e.message);
     }
-}, 24 * 60 * 60 * 1000); // Run daily
+}, 30 * 60 * 1000); // Check every 30 minutes

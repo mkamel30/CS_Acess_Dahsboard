@@ -1,0 +1,29 @@
+[Unit]
+Description=SmartCS Cloud Web Application & Sync Receiver
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/var/www/smartcs
+Environment=NODE_ENV=production
+Environment=IS_CLOUD_SERVER=true
+ExecStart=/usr/bin/node --max-old-space-size=450 server.js
+Restart=always
+RestartSec=10
+
+# CPU & Scheduling Priority (Protects sales-followup.service & Nginx from CPU starvation)
+Nice=15
+CPUWeight=30
+
+# Memory Constraints (Protects 1GB RAM VPS from swap thrashing & kswapd0 lockups)
+MemoryHigh=380M
+MemoryMax=500M
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=smartcs
+
+[Install]
+WantedBy=multi-user.target
