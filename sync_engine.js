@@ -2040,16 +2040,24 @@ async function wipeDatabase(db) {
         'assets_raw', 'transactions_raw', 'maintenance_raw', 'payments_raw',
         'store_pos_raw', 'store_sim_raw', 'store_sp_raw', 'store_sp_maintenance_raw',
         'installments_raw', 'tblfaults_raw', 'tblstaff_raw', 'tblfixes_raw', 'failure_points_raw',
+        'temp_transfer_raw', 'trade_raw',
         'merchants', 'devices', 'sim_cards', 'merchant_assets', 'tickets',
         'maintenance_records', 'payments', 'spare_parts', 'spare_parts_ledger',
         'tblinstallments', 'tblfaults', 'tblstaff', 'tblfixes', 'failure_points',
-        'audit_change_logs', 'sync_history'
+        'delta_outbox', 'delta_outbox_dlq', 'sync_applied_batches',
+        'audit_change_logs', 'sync_history', 'system_error_logs'
     ];
 
-    for (const tbl of allTables) {
-        try {
-            await dbRun(db, `DELETE FROM "${tbl}";`);
-        } catch (e) {}
+    // Transactional explicit wipe including outbox and DLQ (F-24)
+    await dbRun(db, 'BEGIN IMMEDIATE');
+    try {
+        for (const tbl of allTables) {
+            await dbRun(db, `DELETE FROM "${tbl}";`).catch(() => {});
+        }
+        await dbRun(db, 'COMMIT');
+    } catch (wipeErr) {
+        await dbRun(db, 'ROLLBACK').catch(() => {});
+        throw wipeErr;
     }
 
     try {

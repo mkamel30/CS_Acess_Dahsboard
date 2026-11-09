@@ -5316,8 +5316,9 @@ app.post('/api/system/auto-update', requireAdmin, async (req, res) => {
 
             res.json({ success: true, ...result });
 
-            setTimeout(() => {
+            setTimeout(async () => {
                 console.log('[AUTO-UPDATER] Restarting application process after update...');
+                await closeDatabasesGracefully();
                 process.exit(0);
             }, 1000);
         } else {
@@ -6535,7 +6536,42 @@ app.use((err, req, res, next) => {
     });
 });
 
+// Graceful shutdown helper: WAL checkpoint & clean database close (F-24)
+async function closeDatabasesGracefully(signal = 'SHUTDOWN') {
+    console.log(`[SHUTDOWN] Executing graceful database shutdown (${signal})...`);
+    try {
+        if (syncEngine && typeof syncEngine.stopFileWatcher === 'function') {
+            syncEngine.stopFileWatcher();
+        }
+        if (db) {
+            await new Promise((resolve) => {
+                db.run('PRAGMA wal_checkpoint(TRUNCATE);', () => {
+                    db.close((err) => {
+                        if (err) console.error('[SHUTDOWN] SQLite close error:', err.message);
+                        else console.log('[SHUTDOWN] SQLite database checkpointed and closed cleanly.');
+                        resolve();
+                    });
+                });
+            });
+        }
+        if (typeof isPgPoolSafe === 'function' && isPgPoolSafe() && pgPool) {
+            await pgPool.end().catch(() => {});
+        }
+    } catch (e) {
+        console.error('[SHUTDOWN] Error during graceful shutdown:', e.message);
+    }
+}
+
 if (require.main === module) {
+    process.once('SIGINT', async () => {
+        await closeDatabasesGracefully('SIGINT');
+        process.exit(0);
+    });
+    process.once('SIGTERM', async () => {
+        await closeDatabasesGracefully('SIGTERM');
+        process.exit(0);
+    });
+
     app.listen(PORT, '0.0.0.0', () => {
         const localIp = getLocalIpAddress();
         console.log(`================================================================`);
