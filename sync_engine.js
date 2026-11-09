@@ -39,19 +39,48 @@ function initPgPool() {
 initPgPool();
 
 let debouncedRebuildTimer = null;
-function scheduleDebouncedDomainRebuild(db, delayMs = 30 * 60 * 1000) {
+let firstRebuildDirtyAt = 0;
+
+/**
+ * Schedule domain entities rebuild with trailing debounce AND bounded max-wait (F-10)
+ * Prevents starvation under continuous stream of delta changes
+ */
+function scheduleDebouncedDomainRebuild(db, delayMs = 30 * 60 * 1000, maxWaitMs = 60 * 60 * 1000) {
+    const now = Date.now();
+    if (!firstRebuildDirtyAt) {
+        firstRebuildDirtyAt = now;
+    }
+
+    const dueAt = Math.min(now + delayMs, firstRebuildDirtyAt + maxWaitMs);
+    const timeToWait = Math.max(0, dueAt - now);
+
     if (debouncedRebuildTimer) {
         clearTimeout(debouncedRebuildTimer);
     }
-    const mins = Math.round(delayMs / 60000);
-    console.log(`[SYNC ENGINE] Debouncing domain entities rebuild for ${mins} minutes to protect CPU...`);
-    debouncedRebuildTimer = setTimeout(() => {
+
+    const mins = Math.round(timeToWait / 60000);
+    console.log(`[SYNC ENGINE] Debouncing domain entities rebuild: due in ~${mins}m (max-wait remaining: ${Math.round((firstRebuildDirtyAt + maxWaitMs - now) / 60000)}m)...`);
+
+    debouncedRebuildTimer = setTimeout(async () => {
         debouncedRebuildTimer = null;
+        firstRebuildDirtyAt = 0;
         console.log('[SYNC ENGINE] Executing debounced domain entities rebuild...');
-        syncHighLevelDomainEntities(db).catch(e => {
+        try {
+            await syncHighLevelDomainEntities(db);
+        } catch (e) {
             console.error('[DEBOUNCED REBUILD ERROR]', e.message);
-        });
-    }, delayMs);
+            // On failure, reschedule with 5-minute retry capped by original max-wait
+            scheduleDebouncedDomainRebuild(db, Math.min(delayMs, 5 * 60 * 1000), maxWaitMs);
+        }
+    }, timeToWait);
+}
+
+function cancelDebouncedRebuild() {
+    if (debouncedRebuildTimer) {
+        clearTimeout(debouncedRebuildTimer);
+        debouncedRebuildTimer = null;
+    }
+    firstRebuildDirtyAt = 0;
 }
 
 const DATA_SYNC_DIR = path.join(__dirname, 'data_sync');
@@ -2318,6 +2347,7 @@ module.exports = {
     initSyncDatabase,
     syncHighLevelDomainEntities,
     scheduleDebouncedDomainRebuild,
+    cancelDebouncedRebuild,
     setSharedPgPool,
     pushDeltaToCloud,
     flushDeltaOutbox,
