@@ -71,6 +71,17 @@ $settings = New-ScheduledTaskSettingsSet `
     -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) `
     -MultipleInstances IgnoreNew
 
+# 5.1 Open Windows Defender Firewall for Port 8970 (LAN Sharing)
+Write-Host ""
+Write-Host "[*] Configuring Windows Firewall to allow incoming LAN traffic on port $Port..."
+try {
+    netsh advfirewall firewall delete rule name="SmartCS Dashboard Server (Port $Port)" >$null 2>&1
+    netsh advfirewall firewall add rule name="SmartCS Dashboard Server (Port $Port)" dir=in action=allow protocol=TCP localport=$Port profile=any | Out-Null
+    Write-Host "[OK] Inbound Firewall Rule added for Port $Port (LAN Access Enabled)." -ForegroundColor Green
+} catch {
+    Write-Host "[!] Could not configure firewall automatically: $($_.Exception.Message)" -ForegroundColor Yellow
+}
+
 try {
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings `
