@@ -232,22 +232,6 @@ async function performUpdate() {
             console.warn('[AUTO-UPDATER] Failed to write .version.json:', vErr.message);
         }
 
-        // Determine configured port
-        let activePort = 8970;
-        try {
-            const cfgPath = path.join(__dirname, 'config.json');
-            if (fs.existsSync(cfgPath)) {
-                const c = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-                if (c.port) activePort = parseInt(c.port, 10);
-            }
-        } catch(e) {}
-
-        // Guarantee clean run_smartcs.bat launcher with resilient loop matching active port
-        try {
-            const cleanBat = `@echo off\r\nset "PATH=%SystemRoot%\\System32;%SystemRoot%\\System32\\WindowsPowerShell\\v1.0;%ProgramFiles%\\nodejs;%ProgramFiles(x86)%\\nodejs;%LOCALAPPDATA%\\Programs\\nodejs;%APPDATA%\\npm;%ProgramFiles%\\Git\\cmd;%PATH%"\r\ntitle SmartCS Dashboard - Operations Server\r\ncolor 0a\r\ncd /d "%~dp0"\r\nfor /f "tokens=5" %%a in ('netstat -aon ^| findstr ":${activePort}" ^| findstr "LISTENING"') do taskkill /F /PID %%a >nul 2>nul\r\nstart "" "http://localhost:${activePort}"\r\n:loop\r\necho.\r\necho =======================================================================\r\necho   SmartCS Dashboard Server Running on Port ${activePort}\r\necho   Keep this window OPEN. Press Ctrl+C to stop.\r\necho =======================================================================\r\necho.\r\nnode server.js\r\necho.\r\necho [WARNING] Server stopped or exited with code %errorlevel%!\r\necho Restarting in 3 seconds... (Press Ctrl+C to abort)\r\ntimeout /t 3 /nobreak >nul\r\ngoto loop\r\n`;
-            fs.writeFileSync(path.join(__dirname, 'run_smartcs.bat'), cleanBat, 'utf8');
-        } catch(e) {}
-
         await runCommand('npm install --omit=dev');
         const newVersion = await getVersionInfo();
         console.log('[AUTO-UPDATER] Update completed successfully! New Version:', newVersion.version, newVersion.commit);

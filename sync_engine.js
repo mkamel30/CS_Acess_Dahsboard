@@ -133,23 +133,32 @@ function startFileWatcher(db) {
     }
 
     let lastHeartbeatSync = Date.now();
+    let lastSyncFinishedAt = 0;
 
     const triggerAutoSync = (reason) => {
         clearTimeout(watcherDebounceTimer);
         watcherDebounceTimer = setTimeout(async () => {
             if (isSyncInProgress) {
-                pendingResync = true;
-                console.log(`[FILE WATCHER] Sync in progress, deferring resync for: ${reason}`);
+                if (!reason.startsWith('detected modification')) {
+                    pendingResync = true;
+                    console.log(`[FILE WATCHER] Sync in progress, deferring resync for: ${reason}`);
+                }
                 return;
             }
             try {
                 const curAccessPath = getAccessFilePath();
                 if (fs.existsSync(curAccessPath)) {
-                    const curMtime = fs.statSync(curAccessPath).mtimeMs;
-                    lastKnownMtime = curMtime;
+                    lastKnownMtime = fs.statSync(curAccessPath).mtimeMs;
                     lastHeartbeatSync = Date.now();
                     console.log(`[FILE WATCHER] Auto-triggering sync (${reason})...`);
                     const result = await performFullSync(db);
+                    // Refresh mtime AFTER export_accdb_tables.vbs closes the .accdb file so we don't self-trigger!
+                    try {
+                        if (fs.existsSync(curAccessPath)) {
+                            lastKnownMtime = fs.statSync(curAccessPath).mtimeMs;
+                        }
+                    } catch (e) {}
+                    lastSyncFinishedAt = Date.now();
                     if (onSyncCompleteCallback && typeof onSyncCompleteCallback === 'function') {
                         onSyncCompleteCallback(result);
                     }
@@ -177,6 +186,8 @@ function startFileWatcher(db) {
 
             fileWatcher = fs.watch(dir, { persistent: true }, (eventType, triggerFile) => {
                 if (!isAutoSyncEnabled() || isSyncInProgress) return;
+                // Ignore fs.watch events within 10 seconds of finishing our own ADODB export
+                if (Date.now() - lastSyncFinishedAt < 10000) return;
                 if (!triggerFile) return;
 
                 const lower = triggerFile.toLowerCase();
@@ -529,6 +540,7 @@ async function initSyncDatabase(db) {
     await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_temp_transfer_oldpos ON temp_transfer_raw (OldPOS);`).catch(() => {});
     await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_temp_transfer_newpos ON temp_transfer_raw (NewPOS);`).catch(() => {});
     await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_temp_transfer_bkcode ON temp_transfer_raw (bkCode);`).catch(() => {});
+    await dbRun(db, `CREATE UNIQUE INDEX IF NOT EXISTS idx_temp_transfer_sync_key ON temp_transfer_raw (sync_key);`).catch(() => {});
 
     await dbRun(db, `
         CREATE TABLE IF NOT EXISTS temp_transfer (
@@ -682,6 +694,9 @@ function enrichRecordsWithSyncKey(tableName, records) {
  */
 function getRowIdentifier(tableName, primaryKey, row) {
     if (!row) return '';
+    if (row.sync_key !== undefined && row.sync_key !== null && String(row.sync_key).trim() !== '') {
+        return String(row.sync_key).trim();
+    }
     if (tableName === 'temp_transfer_raw') {
         const pkVal = row.TransferID || row.transfer_id;
         if (pkVal !== undefined && pkVal !== null && String(pkVal).trim() !== '') {
@@ -700,7 +715,6 @@ function getRowIdentifier(tableName, primaryKey, row) {
             return String(pkVal).trim();
         }
     }
-    if (row.sync_key) return row.sync_key;
     if (tableName === 'store_sp_raw') {
         const sig = [row.Serial, row.type, row.in_date, row.out_date, row.notes, row.count_in, row.count_out, row.faulty_detils].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
         return crypto.createHash('md5').update(sig).digest('hex');
@@ -720,10 +734,6 @@ function getRowIdentifier(tableName, primaryKey, row) {
         }
     }
     if (tableName === 'temp_transfer_raw') {
-        const pkVal = row.TransferID || row.transfer_id;
-        if (pkVal !== undefined && pkVal !== null && String(pkVal).trim() !== '') {
-            return String(pkVal).trim();
-        }
         const sig = [row.POSCode, row.OldPOS, row.NewPOS, row.Transfer_Date, row.procedure, row.bkCode].map(v => v !== null && v !== undefined ? String(v).trim() : '').join('|');
         return crypto.createHash('md5').update(sig).digest('hex');
     }
@@ -738,7 +748,7 @@ function getRowIdentifier(tableName, primaryKey, row) {
  * Generic Table Diff & Sync Function
  */
 async function syncTableWithDiff(db, tableName, primaryKey, jsonRecords) {
-    if (!jsonRecords || !Array.isArray(jsonRecords)) return { inserted: 0, updated: 0, deleted: 0, total: 0 };
+    if (!jsonRecords || !Array.isArray(jsonRecords)) return { inserted: 0, updated: 0, deleted: 0, total: 0, hadExistingRows: false, deltaList: [] };
 
     let existingRows = [];
     try {
@@ -779,14 +789,21 @@ async function syncTableWithDiff(db, tableName, primaryKey, jsonRecords) {
                 source: 'MS_ACCESS_SYNC'
             });
         } else {
-            // CHECK FOR MODIFICATIONS
+            // CHECK FOR MODIFICATIONS (Case-Insensitive Column Lookup to prevent SQLite column casing false diffs)
             const oldRow = existingMap.get(key);
+            const oldRowLower = {};
+            for (const [k, v] of Object.entries(oldRow)) {
+                oldRowLower[k.toLowerCase()] = v;
+            }
             const diffFields = [];
             for (const prop of Object.keys(item)) {
-                const oldVal = oldRow[prop];
+                if (prop === 'sync_key') continue;
+                const oldVal = Object.prototype.hasOwnProperty.call(oldRow, prop)
+                    ? oldRow[prop]
+                    : oldRowLower[prop.toLowerCase()];
                 const newVal = item[prop];
-                const oldStr = (oldVal !== null && oldVal !== undefined) ? String(oldVal) : '';
-                const newStr = (newVal !== null && newVal !== undefined) ? String(newVal) : '';
+                const oldStr = (oldVal !== null && oldVal !== undefined) ? String(oldVal).trim() : '';
+                const newStr = (newVal !== null && newVal !== undefined) ? String(newVal).trim() : '';
                 if (oldStr !== newStr) {
                     diffFields.push({ field: prop, old: oldVal, new: newVal });
                 }
@@ -826,18 +843,20 @@ async function syncTableWithDiff(db, tableName, primaryKey, jsonRecords) {
         }
     }
 
-    // Save change logs (limit batch per sync to avoid huge payload on first run)
-    const logsToInsert = changeLogs.slice(0, 500); // cap initial sync log batch
+    // Save change logs inside a single transaction (limit batch per sync to avoid huge payload on first run)
+    const logsToInsert = changeLogs.slice(0, 500);
     if (logsToInsert.length > 0) {
-        for (const log of logsToInsert) {
-            try {
+        try {
+            await dbRun(db, 'BEGIN TRANSACTION');
+            for (const log of logsToInsert) {
                 await dbRun(db, `
                     INSERT INTO audit_change_logs (table_name, record_id, change_type, summary, old_data, new_data, source)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 `, [log.table_name, log.record_id, log.change_type, log.summary, log.old_data, log.new_data, log.source]);
-            } catch (e) {
-                // ignore duplicate log error
             }
+            await dbRun(db, 'COMMIT');
+        } catch (e) {
+            try { await dbRun(db, 'ROLLBACK'); } catch (rbErr) {}
         }
     }
 
@@ -846,6 +865,7 @@ async function syncTableWithDiff(db, tableName, primaryKey, jsonRecords) {
         updated: updatedCount,
         deleted: deletedCount,
         total: jsonRecords.length,
+        hadExistingRows: existingRows.length > 0,
         deltaList: changeLogs
     };
 }
@@ -1404,7 +1424,7 @@ async function performFullSync(db) {
             { file: 'tblFixes.json', table: 'tblfixes_raw', pk: 'FixID', arabicName: 'أنواع الإصلاحات (tblFixes)' },
             { file: 'failure_points.json', table: 'failure_points_raw', pk: 'sync_key', arabicName: 'نقاط الأعطال (failure_points)' },
             { file: 'Trade.json', table: 'trade_raw', pk: 'ID', arabicName: 'حركات اللوجستيات والمخازن (Trade)' },
-            { file: 'temp_transfer.json', table: 'temp_transfer_raw', pk: 'TransferID', arabicName: 'استبدال ونقل الماكينات والشرائح (temp_transfer)' }
+            { file: 'temp_transfer.json', table: 'temp_transfer_raw', pk: 'sync_key', arabicName: 'استبدال ونقل الماكينات والشرائح (temp_transfer)' }
         ];
 
         setProgress(30, 'مقارنة وفحص التغييرات', 'بدء فحص وتتبع التغييرات ومقارنة الفروقات...', '', 3);
@@ -1419,8 +1439,8 @@ async function performFullSync(db) {
             const filePath = path.join(DATA_SYNC_DIR, cfg.file);
             let records = readJsonSafely(filePath);
             if (records && Array.isArray(records)) {
-                records = records.filter(r => getRowIdentifier(cfg.table, cfg.pk, r));
                 records = enrichRecordsWithSyncKey(cfg.table, records);
+                records = records.filter(r => getRowIdentifier(cfg.table, cfg.pk, r));
                 try {
                     const diffResult = await syncTableWithDiff(db, cfg.table, cfg.pk, records);
                     const changesInTable = diffResult.inserted + diffResult.updated + diffResult.deleted;
@@ -1434,7 +1454,7 @@ async function performFullSync(db) {
 
                     console.log(`[SYNC] ${cfg.table}: +${diffResult.inserted} ~${diffResult.updated} -${diffResult.deleted} (Total: ${diffResult.total})`);
 
-                    if (records.length > 0) {
+                    if (records.length > 0 && (changesInTable > 0 || !diffResult.hadExistingRows)) {
                         await upsertTableData(db, cfg.table, cfg.pk, records);
                     }
                 } catch (e) {

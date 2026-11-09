@@ -359,7 +359,7 @@ const RAW_TABLE_PK_MAP = {
     'tblfixes_raw': 'FixID',
     'failure_points_raw': 'sync_key',
     'trade_raw': 'ID',
-    'temp_transfer_raw': 'TransferID'
+    'temp_transfer_raw': 'sync_key'
 };
 
 let _pgConstraintCache = new Map();
@@ -374,7 +374,15 @@ async function getPgValidConstraintCol(tbl, cols) {
                   ON ccu.constraint_name = tc.constraint_name 
                  AND ccu.table_name = tc.table_name
                 WHERE tc.table_name = '${tbl}' 
-                  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE');
+                  AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')
+                UNION
+                SELECT a.attname AS column_name
+                FROM pg_index i
+                JOIN pg_class c ON c.oid = i.indrelid
+                JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = ANY(i.indkey)
+                WHERE c.relname = '${tbl}'
+                  AND i.indisunique = true
+                  AND i.indnatts = 1;
             `);
             const validSet = new Set(res.map(r => r.column_name));
             _pgConstraintCache.set(tbl, validSet);
@@ -383,6 +391,10 @@ async function getPgValidConstraintCol(tbl, cols) {
         if (Object.prototype.hasOwnProperty.call(RAW_TABLE_PK_MAP, tbl)) {
             const pk = RAW_TABLE_PK_MAP[tbl];
             if (pk && validCols && validCols.has(pk) && cols.includes(pk)) return pk;
+            if (pk) {
+                const ciMatch = cols.find(c => c.toLowerCase() === pk.toLowerCase() && validCols && validCols.has(c));
+                if (ciMatch) return ciMatch;
+            }
         }
         if (cols.includes('sync_key') && validCols && validCols.has('sync_key')) return 'sync_key';
         return cols.find(c => validCols && validCols.has(c)) || null;
@@ -5157,6 +5169,7 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
 
         if (changes && Array.isArray(changes) && changes.length > 0) {
             for (const change of changes) {
+                let rowApplied = false;
                 if (change.table_name && ALLOWED_SYNC_TABLES.has(change.table_name) && change.new_data) {
                     try {
                         const parsed = typeof change.new_data === 'string' ? JSON.parse(change.new_data) : change.new_data;
@@ -5185,6 +5198,7 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
                             
                             await runQuery(insertSql, values);
                             appliedCount++;
+                            rowApplied = true;
                         }
                     } catch(e) {
                         console.error(`[DELTA APPLY ERROR on ${change.table_name}]:`, e.message);
@@ -5200,27 +5214,30 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
                         if (matchedPk) {
                             await runQuery(`DELETE FROM "${change.table_name}" WHERE "${matchedPk}" = ?`, [change.record_id]);
                             appliedCount++;
+                            rowApplied = true;
                         }
                     } catch(e) {
                         console.error(`[DELTA DELETE ERROR on ${change.table_name}]:`, e.message);
                     }
                 }
 
-                // Also persist in cloud audit_change_logs
-                try {
-                    await runQuery(`
-                        INSERT INTO audit_change_logs (table_name, record_id, change_type, summary, old_data, new_data, source)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    `, [
-                        change.table_name,
-                        change.record_id,
-                        change.change_type || 'UPDATE',
-                        change.summary || '',
-                        typeof change.old_data === 'object' ? JSON.stringify(change.old_data) : (change.old_data || null),
-                        typeof change.new_data === 'object' ? JSON.stringify(change.new_data) : (change.new_data || null),
-                        change.source || 'MS_ACCESS_SYNC'
-                    ]);
-                } catch(e) {}
+                // Persist in cloud audit_change_logs ONLY if the row change was actually applied
+                if (rowApplied) {
+                    try {
+                        await runQuery(`
+                            INSERT INTO audit_change_logs (table_name, record_id, change_type, summary, old_data, new_data, source)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        `, [
+                            change.table_name,
+                            change.record_id,
+                            change.change_type || 'UPDATE',
+                            change.summary || '',
+                            typeof change.old_data === 'object' ? JSON.stringify(change.old_data) : (change.old_data || null),
+                            typeof change.new_data === 'object' ? JSON.stringify(change.new_data) : (change.new_data || null),
+                            change.source || 'MS_ACCESS_SYNC'
+                        ]);
+                    } catch(e) {}
+                }
             }
         }
 
