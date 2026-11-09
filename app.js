@@ -6440,15 +6440,32 @@ async function loadCustomerDirectory(page = 1) {
 window.loadCustomerDirectory = loadCustomerDirectory;
 
 function returnToCustomerDirectory() {
-    const directorySection = document.getElementById('cust-directory-section');
     const profileContainer = document.getElementById('cust-profile-container');
+    const emptyPrompt = document.getElementById('cust-empty-prompt');
+    const searchResults = document.getElementById('cust-search-results-container');
+    const suggestionsBox = document.getElementById('cust-search-suggestions');
+    const input = document.getElementById('cust-search-input');
+
     if (profileContainer) profileContainer.style.display = 'none';
-    if (directorySection) {
-        directorySection.style.display = 'block';
-        directorySection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (suggestionsBox) {
+        suggestionsBox.style.display = 'none';
+        suggestionsBox.innerHTML = '';
+    }
+
+    if (searchResults && searchResults.dataset.hasResults === 'true') {
+        searchResults.style.display = 'block';
+        if (emptyPrompt) emptyPrompt.style.display = 'none';
+    } else {
+        if (emptyPrompt) emptyPrompt.style.display = 'block';
+        if (searchResults) searchResults.style.display = 'none';
+    }
+
+    if (input) {
+        input.focus();
     }
 }
 window.returnToCustomerDirectory = returnToCustomerDirectory;
+window.returnToCustomerSearch = returnToCustomerDirectory;
 
 async function exportCustomerDirectoryToExcel() {
     if (!customerDirectoryState.data || customerDirectoryState.data.length === 0) {
@@ -6486,16 +6503,20 @@ window.exportCustomerDirectoryToExcel = exportCustomerDirectoryToExcel;
 function initCustomerManagement() {
     initCustomerSearch();
     initDeviceDeepdiveModal();
-    // Load directory if profile container is not active
+
     const profileContainer = document.getElementById('cust-profile-container');
-    if (!profileContainer || profileContainer.style.display === 'none') {
-        loadCustomerDirectory(1);
+    const emptyPrompt = document.getElementById('cust-empty-prompt');
+    const searchResults = document.getElementById('cust-search-results-container');
+
+    // Search-only architecture: do NOT load all customers automatically
+    if (profileContainer && profileContainer.style.display !== 'none' && activeCustomerProfile) {
+        if (emptyPrompt) emptyPrompt.style.display = 'none';
+        if (searchResults) searchResults.style.display = 'none';
+    } else {
+        if (profileContainer) profileContainer.style.display = 'none';
+        if (searchResults) searchResults.style.display = 'none';
+        if (emptyPrompt) emptyPrompt.style.display = 'block';
     }
-    // Bind gov filter
-    document.getElementById('cust-dir-gov-filter')?.addEventListener('change', (e) => {
-        customerDirectoryState.government = e.target.value;
-        loadCustomerDirectory(1);
-    });
 }
 window.initCustomerManagement = initCustomerManagement;
 
@@ -6503,6 +6524,7 @@ function initCustomerSearch() {
     const input = document.getElementById('cust-search-input');
     const suggestionsBox = document.getElementById('cust-search-suggestions');
     const clearBtn = document.getElementById('btn-clear-cust-search');
+    const submitBtn = document.getElementById('btn-cust-search-submit');
 
     if (!input || input.dataset.bound) return;
     input.dataset.bound = "true";
@@ -6528,13 +6550,35 @@ function initCustomerSearch() {
     clearBtn?.addEventListener('click', () => {
         input.value = '';
         clearBtn.style.display = 'none';
-        if (suggestionsBox) suggestionsBox.style.display = 'none';
+        if (suggestionsBox) {
+            suggestionsBox.style.display = 'none';
+            suggestionsBox.innerHTML = '';
+        }
+        const searchResults = document.getElementById('cust-search-results-container');
+        if (searchResults) {
+            searchResults.style.display = 'none';
+            searchResults.dataset.hasResults = 'false';
+        }
+        const profileContainer = document.getElementById('cust-profile-container');
+        if (profileContainer) profileContainer.style.display = 'none';
+        const emptyPrompt = document.getElementById('cust-empty-prompt');
+        if (emptyPrompt) emptyPrompt.style.display = 'block';
         input.focus();
     });
 
+    const triggerSearch = async () => {
+        const val = input.value.trim();
+        if (val.length < 2) return;
+        clearTimeout(custSearchDebounceTimer);
+        if (suggestionsBox) suggestionsBox.style.display = 'none';
+        await executeCustomerSearch(val);
+    };
+
+    submitBtn?.addEventListener('click', triggerSearch);
+
     ['click', 'touchstart', 'pointerdown'].forEach(evt => {
         document.addEventListener(evt, (e) => {
-            if (!input.contains(e.target) && !suggestionsBox?.contains(e.target)) {
+            if (!input.contains(e.target) && !suggestionsBox?.contains(e.target) && !submitBtn?.contains(e.target)) {
                 if (suggestionsBox) suggestionsBox.style.display = 'none';
             }
         }, { passive: true });
@@ -6548,13 +6592,123 @@ function initCustomerSearch() {
 
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
-            const firstItem = suggestionsBox?.querySelector('.cust-suggestion-item');
-            if (firstItem) {
-                firstItem.click();
-            }
+            e.preventDefault();
+            triggerSearch();
         }
     });
 }
+
+let lastCustomerSearchResults = [];
+
+async function executeCustomerSearch(q) {
+    const val = (q || '').trim();
+    if (!val || val.length < 2) return;
+
+    const suggestionsBox = document.getElementById('cust-search-suggestions');
+    if (suggestionsBox) suggestionsBox.style.display = 'none';
+
+    try {
+        const res = await fetch(`/api/customers/search?q=${encodeURIComponent(val)}`);
+        const data = await res.json();
+        const results = (data && data.success && data.results) ? data.results : [];
+        lastCustomerSearchResults = results;
+
+        if (results.length === 1) {
+            await selectCustomerResult(results[0].merchant_code);
+        } else {
+            renderCustomerResultsGrid(results, val);
+        }
+    } catch (err) {
+        console.error("Execute customer search error:", err);
+        renderCustomerResultsGrid([], val);
+    }
+}
+window.executeCustomerSearch = executeCustomerSearch;
+
+function renderCustomerResultsGrid(results, query = '') {
+    const container = document.getElementById('cust-search-results-container');
+    const grid = document.getElementById('cust-search-results-grid');
+    const badge = document.getElementById('cust-results-count-badge');
+    const emptyPrompt = document.getElementById('cust-empty-prompt');
+    const profileContainer = document.getElementById('cust-profile-container');
+
+    if (profileContainer) profileContainer.style.display = 'none';
+    if (emptyPrompt) emptyPrompt.style.display = 'none';
+    if (!container || !grid) return;
+
+    container.style.display = 'block';
+    container.dataset.hasResults = results && results.length > 0 ? 'true' : 'false';
+
+    if (badge) {
+        badge.textContent = `${results ? results.length : 0} نتيجة`;
+    }
+
+    if (!results || results.length === 0) {
+        grid.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align:center; padding:36px 20px; color:var(--text-muted);">
+                <i data-lucide="alert-circle" style="width:36px; height:36px; color:#f59e0b; margin-bottom:8px; display:inline-block;"></i>
+                <div style="font-size:14px; font-weight:700; color:var(--text-primary); margin-bottom:4px;">لم يتم العثور على أي مخبز أو عميل يطابق "${query}"</div>
+                <div style="font-size:12px; color:var(--text-secondary);">يرجى التأكد من كتابة كود المخبز، اسم العميل، سيريال الماكينة أو الشريحة بشكل صحيح</div>
+            </div>
+        `;
+        SmartUI.icons.refresh(grid);
+        return;
+    }
+
+    grid.innerHTML = results.map(item => {
+        let posBadges = '';
+        if (item.pos_serials && item.pos_serials.length > 0) {
+            posBadges = item.pos_serials.map(p => `
+                <span class="badge inmerchant" style="font-family:var(--font-en); font-size:10.5px; padding:2px 7px;">
+                    <i data-lucide="boxes" style="width:11px; height:11px; vertical-align:middle; margin-left:3px;"></i>
+                    POS: ${p}
+                </span>
+            `).join('');
+        }
+
+        let simBadges = '';
+        if (item.sim_serials && item.sim_serials.length > 0) {
+            simBadges = item.sim_serials.map(s => `
+                <span class="badge" style="background:rgba(16,185,129,0.12); color:#10b981; border:1px solid rgba(16,185,129,0.3); font-family:var(--font-en); font-size:10.5px; padding:2px 7px;">
+                    <i data-lucide="cpu" style="width:11px; height:11px; vertical-align:middle; margin-left:3px;"></i>
+                    SIM: ${s}
+                </span>
+            `).join('');
+        }
+
+        return `
+            <div class="card" style="padding:16px; border-radius:14px; background:var(--surface-2); border:1px solid var(--border-subtle); display:flex; flex-direction:column; justify-content:space-between; gap:12px; transition:transform 0.15s ease, box-shadow 0.15s ease;" onmouseover="this.style.borderColor='var(--accent-primary)'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='var(--border-subtle)'; this.style.transform='none'">
+                <div>
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:8px;">
+                        <div style="min-width:0;">
+                            <h4 style="margin:0 0 4px 0; font-size:14.5px; font-weight:800; color:var(--text-primary);">${item.merchant_name}</h4>
+                            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                <span class="badge inmerchant" style="font-family:var(--font-en); font-weight:800; font-size:11px; padding:2px 8px;">#${item.merchant_code}</span>
+                                <span class="badge" style="background:rgba(245,158,11,0.12); color:#f59e0b; border:1px solid rgba(245,158,11,0.25); font-size:10.5px;">${item.government}</span>
+                                <span style="font-size:10.5px; color:var(--text-muted);">مطابقة: ${item.matched_field}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="font-size:11.5px; color:var(--text-secondary); display:flex; flex-direction:column; gap:4px; margin-bottom:10px;">
+                        ${item.phone && item.phone !== '-' ? `<div><i data-lucide="phone" style="width:12px; height:12px; vertical-align:middle; margin-left:4px; color:var(--text-muted);"></i><span class="mono-ltr">${item.phone}</span></div>` : ''}
+                        ${item.address && item.address !== '-' ? `<div style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${item.address}"><i data-lucide="map-pin" style="width:12px; height:12px; vertical-align:middle; margin-left:4px; color:var(--text-muted);"></i>${item.address}</div>` : ''}
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        ${posBadges}
+                        ${simBadges}
+                    </div>
+                </div>
+                <button type="button" class="btn btn-primary btn-sm" onclick="selectCustomerResult('${item.merchant_code}')" style="width:100%; display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:8px 14px; font-weight:700; border-radius:10px;">
+                    <i data-lucide="user-check" style="width:14px; height:14px;"></i>
+                    <span>فتح ملف العميل (360°)</span>
+                </button>
+            </div>
+        `;
+    }).join('');
+
+    SmartUI.icons.refresh(grid);
+}
+window.renderCustomerResultsGrid = renderCustomerResultsGrid;
 
 async function fetchCustomerSuggestions(q) {
     const suggestionsBox = document.getElementById('cust-search-suggestions');
@@ -6642,7 +6796,7 @@ async function selectCustomerResult(merchantCode) {
         suggestionsBox.innerHTML = '';
     }
 
-    const input = document.getElementById('cust-smart-search-input');
+    const input = document.getElementById('cust-search-input');
     if (input) {
         input.blur(); // Hide virtual keyboard on mobile
     }
@@ -6652,8 +6806,8 @@ async function selectCustomerResult(merchantCode) {
 window.selectCustomerResult = selectCustomerResult;
 
 async function loadCustomerProfile(merchantCode) {
-    const directorySection = document.getElementById('cust-directory-section');
     const emptyPrompt = document.getElementById('cust-empty-prompt');
+    const searchResults = document.getElementById('cust-search-results-container');
     const profileContainer = document.getElementById('cust-profile-container');
     const suggestionsBox = document.getElementById('cust-search-suggestions');
     if (suggestionsBox) {
@@ -6663,8 +6817,8 @@ async function loadCustomerProfile(merchantCode) {
 
     if (!profileContainer) return;
 
-    if (directorySection) directorySection.style.display = 'none';
     if (emptyPrompt) emptyPrompt.style.display = 'none';
+    if (searchResults) searchResults.style.display = 'none';
     profileContainer.style.display = 'block';
 
     // Show loading state in header
@@ -6679,7 +6833,7 @@ async function loadCustomerProfile(merchantCode) {
         const data = await res.json();
 
         if (!data.success) {
-            alert(data.error || "تعذر جلب ملف العميل");
+            SmartUI.Toast.show(data.error || "تعذر جلب ملف العميل", 'danger');
             return;
         }
 
@@ -6688,7 +6842,7 @@ async function loadCustomerProfile(merchantCode) {
 
     } catch (err) {
         console.error("Error loading customer profile:", err);
-        alert("حدث خطأ أثناء تحميل بيانات العميل");
+        SmartUI.Toast.show("حدث خطأ أثناء تحميل بيانات العميل", 'danger');
     }
 }
 window.loadCustomerProfile = loadCustomerProfile;

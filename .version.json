@@ -1,7 +1,7 @@
 {
-  "version": "5.0.0",
-  "commit": "9db44cf",
-  "date": "2026-11-05 13:03",
-  "message": "fix(vps): cache sync table columns to prevent lock contention, fix retry-dlq 403, and harden diagnostics error query",
+  "version": "5.0.1",
+  "commit": "custom-crm-search-only",
+  "date": "2026-11-09 14:50",
+  "message": "feat(crm): switch Customer 360 to search-only architecture without automatic table loading",
   "branch": "main"
 }
