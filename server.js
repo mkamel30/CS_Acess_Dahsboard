@@ -5956,10 +5956,44 @@ app.post('/api/diagnostics/sync-table', requireAdmin, async (req, res) => {
     }
 });
 
-// 4. Get Table Counts on Current Node
+// Compute deterministic content checksum for a table to detect row-level divergence (F-01, F-02)
+async function computeTableChecksum(table, pk) {
+    try {
+        if (!isValidSqlIdentifier(table)) return null;
+        const pkCol = pk && isValidSqlIdentifier(pk) ? `"${pk.replace(/"/g, '""')}"` : null;
+        let orderClause = '';
+        if (pkCol) {
+            orderClause = `ORDER BY ${pkCol}`;
+        } else if (!appCfg.isCloudServer) {
+            orderClause = 'ORDER BY rowid';
+        }
+        const sql = `SELECT * FROM "${table}" ${orderClause} LIMIT 10000`;
+        const rows = await allQuery(sql);
+        if (!rows || rows.length === 0) return 'empty';
+
+        const hash = crypto.createHash('sha256');
+        for (const r of rows) {
+            const sortedKeys = Object.keys(r).sort();
+            const rowArr = sortedKeys.map(k => {
+                const val = r[k];
+                if (val === null || val === undefined) return '';
+                if (typeof val === 'number') return String(val);
+                if (val instanceof Date) return val.toISOString();
+                return String(val).trim();
+            });
+            hash.update(JSON.stringify(rowArr));
+        }
+        return hash.digest('hex').slice(0, 16);
+    } catch (e) {
+        return null;
+    }
+}
+
+// 4. Get Table Counts and Checksums on Current Node (F-01, F-02)
 app.get('/api/diagnostics/table-counts', async (req, res) => {
     try {
         const counts = {};
+        const checksums = {};
         for (const item of CORE_RECONCILIATION_TABLES) {
             try {
                 const r = await getQuery(`SELECT COUNT(*) as c FROM "${item.table}"`);
@@ -5967,19 +6001,26 @@ app.get('/api/diagnostics/table-counts', async (req, res) => {
             } catch (e) {
                 counts[item.table] = -1; // table might not exist
             }
+            try {
+                const pk = RAW_TABLE_PK_MAP[item.table] || null;
+                checksums[item.table] = await computeTableChecksum(item.table, pk);
+            } catch (e) {
+                checksums[item.table] = null;
+            }
         }
-        res.json({ success: true, counts, timestamp: new Date().toISOString() });
+        res.json({ success: true, counts, checksums, timestamp: new Date().toISOString() });
     } catch (err) {
         logSystemError('DIAGNOSTICS', '/api/diagnostics/table-counts', err, req);
         res.status(500).json({ success: false, error: err.message });
     }
 });
 
-// 5. Database Reconciliation Matrix (Local vs Cloud VPS)
+// 5. Database Reconciliation Matrix (Local vs Cloud VPS) with Checksum Reconciliation (F-01, F-02)
 app.get('/api/diagnostics/reconciliation', async (req, res) => {
     try {
-        // 1. Gather Local Counts
+        // 1. Gather Local Counts and Checksums
         const localCounts = {};
+        const localChecksums = {};
         for (const item of CORE_RECONCILIATION_TABLES) {
             try {
                 const r = await getQuery(`SELECT COUNT(*) as c FROM "${item.table}"`);
@@ -5987,27 +6028,35 @@ app.get('/api/diagnostics/reconciliation', async (req, res) => {
             } catch (e) {
                 localCounts[item.table] = 0;
             }
+            try {
+                const pk = RAW_TABLE_PK_MAP[item.table] || null;
+                localChecksums[item.table] = await computeTableChecksum(item.table, pk);
+            } catch (e) {
+                localChecksums[item.table] = null;
+            }
         }
 
         const config = readAppConfig();
         const isCloud = !!config.isCloudServer;
         let cloudCounts = null;
+        let cloudChecksums = null;
         let cloudFetchError = null;
 
-        // 2. Fetch Cloud VPS Counts if on local server
+        // 2. Fetch Cloud VPS Counts & Checksums if on local server
         if (!isCloud) {
             const cloudUrl = (config.cloudEndpoint || 'https://smartcs.m-kamel.workers.dev/api/sync/delta').replace(/\/api\/sync\/delta.*$/, '/api/diagnostics/table-counts');
             const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
             try {
                 const cloudResp = await fetchFn(cloudUrl, {
                     headers: { 'x-sync-secret': SYNC_SECRET },
-                    signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined
+                    signal: AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined
                 });
                 const text = await cloudResp.text();
                 try {
                     const cloudData = JSON.parse(text);
                     if (cloudData.success && cloudData.counts) {
                         cloudCounts = cloudData.counts;
+                        cloudChecksums = cloudData.checksums || null;
                     } else {
                         cloudFetchError = cloudData.error || 'Invalid cloud response';
                     }
@@ -6028,24 +6077,33 @@ app.get('/api/diagnostics/reconciliation', async (req, res) => {
         const tableMatrix = CORE_RECONCILIATION_TABLES.map(item => {
             const lCount = parseInt(localCounts[item.table] ?? 0, 10);
             totalLocalRecords += (lCount >= 0 ? lCount : 0);
+            const lChecksum = localChecksums[item.table] || null;
 
             let cCount = null;
+            let cChecksum = null;
             let diff = 0;
             let status = 'UNKNOWN';
 
             if (isCloud) {
                 cCount = lCount; // We are on cloud
+                cChecksum = lChecksum;
                 status = 'MATCHED';
             } else if (cloudCounts) {
                 cCount = parseInt(cloudCounts[item.table] ?? 0, 10);
+                cChecksum = cloudChecksums ? (cloudChecksums[item.table] || null) : null;
                 totalCloudRecords += (cCount >= 0 ? cCount : 0);
                 diff = lCount - cCount;
-                if (diff === 0) {
-                    status = 'MATCHED';
-                } else {
+                if (diff !== 0) {
                     status = 'MISMATCH';
                     allMatched = false;
                     mismatchedCount++;
+                } else if (lChecksum && cChecksum && lChecksum !== cChecksum) {
+                    // Row counts match but row content has diverged! (F-01, F-02)
+                    status = 'CONTENT_MISMATCH';
+                    allMatched = false;
+                    mismatchedCount++;
+                } else {
+                    status = 'MATCHED';
                 }
             }
 
@@ -6054,6 +6112,8 @@ app.get('/api/diagnostics/reconciliation', async (req, res) => {
                 name_ar: item.name_ar,
                 local_count: lCount,
                 cloud_count: cCount,
+                local_checksum: lChecksum,
+                cloud_checksum: cChecksum,
                 diff: diff,
                 status: status
             };

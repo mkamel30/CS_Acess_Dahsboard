@@ -7667,9 +7667,14 @@ async function loadReconciliationMatrix() {
         tbody.innerHTML = tables.map((t, idx) => {
             const isMatched = t.status === 'MATCHED';
             
-            const statusBadge = isMatched
-                ? `<span class="badge inmerchant" style="font-size:11px; font-weight:700;"><i data-lucide="check-circle" style="width:12px;height:12px;vertical-align:middle;"></i> متطابق 100%</span>`
-                : `<span class="badge faulty" style="font-size:11px; font-weight:700;"><i data-lucide="alert-triangle" style="width:12px;height:12px;vertical-align:middle;"></i> فارق (${Math.abs(t.diff)})</span>`;
+            let statusBadge = '';
+            if (isMatched) {
+                statusBadge = `<span class="badge inmerchant" style="font-size:11px; font-weight:700;"><i data-lucide="check-circle" style="width:12px;height:12px;vertical-align:middle;"></i> متطابق 100%</span>`;
+            } else if (t.status === 'CONTENT_MISMATCH') {
+                statusBadge = `<span class="badge faulty" style="font-size:11px; font-weight:700;" title="Checksum Local: ${t.local_checksum || '-'} vs Cloud: ${t.cloud_checksum || '-'}"><i data-lucide="alert-triangle" style="width:12px;height:12px;vertical-align:middle;"></i> تباين في المحتوى (Checksum)</span>`;
+            } else {
+                statusBadge = `<span class="badge faulty" style="font-size:11px; font-weight:700;"><i data-lucide="alert-triangle" style="width:12px;height:12px;vertical-align:middle;"></i> فارق (${Math.abs(t.diff)})</span>`;
+            }
 
             const diffBadge = t.diff === 0
                 ? `<span class="mono-ltr" style="color:var(--status-success); font-weight:800; font-size:13px;">0</span>`
