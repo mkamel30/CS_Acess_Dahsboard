@@ -869,7 +869,7 @@ async function triggerAccessSync(btn, icon) {
                 refreshIcons();
             }
         } catch (e) {}
-    }, 350);
+    }, 800);
 
     try {
         const response = await fetch('/api/sync/run', {

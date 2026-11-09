@@ -85,7 +85,33 @@ app.use(express.static(path.join(__dirname), {
 // Global API rate limit
 const apiLimiter = rateLimit({
     windowMs: 60 * 1000, // 1 minute
-    max: 100, // limit each IP to 100 requests per windowMs
+    max: 1000, // Generous limit for high-throughput single-page operations
+    skip: (req) => {
+        // 1. Skip rate limiting completely for Localhost and Office LAN clients
+        const clientIp = req.ip || req.socket?.remoteAddress || '';
+        if (
+            clientIp === '127.0.0.1' || 
+            clientIp === '::1' || 
+            clientIp.includes('127.0.0.1') ||
+            clientIp === 'localhost' ||
+            clientIp.startsWith('192.168.') ||
+            clientIp.startsWith('10.') ||
+            clientIp.startsWith('172.') ||
+            clientIp.startsWith('::ffff:192.168.') ||
+            clientIp.startsWith('::ffff:10.') ||
+            clientIp.startsWith('::ffff:172.')
+        ) {
+            return true;
+        }
+
+        // 2. Always skip lightweight polling and SSE streams
+        const p = req.path || '';
+        if (p.includes('/sync/status') || p.includes('/sync/events') || p.includes('/tunnel/status')) {
+            return true;
+        }
+
+        return false;
+    },
     standardHeaders: true,
     legacyHeaders: false,
     message: { success: false, error: 'Too many requests from this IP, please try again after a minute' }
