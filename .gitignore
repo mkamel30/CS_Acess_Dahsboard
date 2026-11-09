@@ -15,7 +15,8 @@ scratch/
 patch*.js
 fix_*.js
 clean_patch*.js
-test_*.js
+/test_*.js
+!tests/**
 import_*.js
 safe_*.js
 trigger_*.js

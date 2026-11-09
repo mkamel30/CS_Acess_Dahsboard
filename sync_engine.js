@@ -717,11 +717,31 @@ function enrichRecordsWithSyncKey(tableName, records) {
     return records;
 }
 
+// Canonical Primary Key map for Access raw replica tables (shared with server.js)
+const RAW_TABLE_PK_MAP = {
+    'assets_raw': 'ID',
+    'transactions_raw': 'ID',
+    'maintenance_raw': 'ID',
+    'payments_raw': 'ID',
+    'store_pos_raw': 'Serial',
+    'store_sim_raw': 'sim_serial',
+    'store_sp_raw': 'sync_key',
+    'store_sp_maintenance_raw': 'sync_key',
+    'installments_raw': 'id',
+    'tblfaults_raw': 'faultid',
+    'tblstaff_raw': 'id',
+    'tblfixes_raw': 'FixID',
+    'failure_points_raw': 'sync_key',
+    'trade_raw': 'ID',
+    'temp_transfer_raw': 'sync_key'
+};
+
 /**
  * Generate unique record identifier supporting single PK and composite signatures
  */
 function getRowIdentifier(tableName, primaryKey, row) {
     if (!row) return '';
+    const effectivePk = primaryKey || RAW_TABLE_PK_MAP[tableName];
     if (row.sync_key !== undefined && row.sync_key !== null && String(row.sync_key).trim() !== '') {
         return String(row.sync_key).trim();
     }
@@ -732,13 +752,13 @@ function getRowIdentifier(tableName, primaryKey, row) {
         }
     }
     if (tableName === 'store_pos_raw') {
-        const pkVal = row.store_ID || row.store_id;
+        const pkVal = row.Serial || row.serial || row.store_ID || row.store_id;
         if (pkVal !== undefined && pkVal !== null && String(pkVal).trim() !== '') {
             return String(pkVal).trim();
         }
     }
     if (tableName === 'store_sim_raw') {
-        const pkVal = row.id || row.ID || row.sim_id;
+        const pkVal = row.sim_serial || row.sim_Serial || row.serial || row.Serial || row.id || row.ID || row.sim_id;
         if (pkVal !== undefined && pkVal !== null && String(pkVal).trim() !== '') {
             return String(pkVal).trim();
         }
@@ -769,7 +789,7 @@ function getRowIdentifier(tableName, primaryKey, row) {
     if (val !== undefined && val !== null && String(val).trim() !== '') {
         return String(val).trim();
     }
-    return String(row.id || row.ID || row.Serial || row.bkCode || row.bkcode || row.merchant_code || '');
+    return String(row.id || row.ID || row.sim_serial || row.Serial || row.bkCode || row.bkcode || row.merchant_code || '');
 }
 
 /**
@@ -1451,8 +1471,8 @@ async function performFullSync(db) {
             { file: 'TransAction.json', table: 'transactions_raw', pk: 'ID', arabicName: 'حركات وصيانة الماكينات (TransAction)' },
             { file: 'Maintenance.json', table: 'maintenance_raw', pk: 'ID', arabicName: 'بلاغات الصيانة (Maintenance)' },
             { file: 'payments.json', table: 'payments_raw', pk: 'ID', arabicName: 'المدفوعات والتحصيلات (Payments)' },
-            { file: 'Store_POS.json', table: 'store_pos_raw', pk: 'store_ID', arabicName: 'مخزن ماكينات الـ POS (Store_POS)' },
-            { file: 'Store_Sim.json', table: 'store_sim_raw', pk: 'id', arabicName: 'مخزن شرائح الاتصال (Store_Sim)' },
+            { file: 'Store_POS.json', table: 'store_pos_raw', pk: 'Serial', arabicName: 'مخزن ماكينات الـ POS (Store_POS)' },
+            { file: 'Store_Sim.json', table: 'store_sim_raw', pk: 'sim_serial', arabicName: 'مخزن شرائح الاتصال (Store_Sim)' },
             { file: 'Store_SP.json', table: 'store_sp_raw', pk: 'sync_key', arabicName: 'مخزن وحركات قطع غيار الفرع (Store_SP)' },
             { file: 'Store_SP_maintenance.json', table: 'store_sp_maintenance_raw', pk: 'sync_key', arabicName: 'قطع غيار مركز الصيانة الرئيسي (Store_SP_maintenance)' },
             { file: 'tblInstallments.json', table: 'installments_raw', pk: 'ID', arabicName: 'عقود وأقساط الماكينات (tblInstallments)' },
@@ -1788,5 +1808,7 @@ module.exports = {
     isAutoSyncEnabled,
     setAutoSyncEnabled,
     setOnSyncCompleteCallback,
-    wipeDatabase
+    wipeDatabase,
+    getRowIdentifier,
+    RAW_TABLE_PK_MAP
 };

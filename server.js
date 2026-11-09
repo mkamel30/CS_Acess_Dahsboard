@@ -365,14 +365,14 @@ function allQuery(sql, params = []) {
 }
 
 // Canonical Primary Key map for Access raw replica tables
-// Tables mapped to null have no unique single column in incoming Access data (e.g. composite signature or auto-id)
-const RAW_TABLE_PK_MAP = {
+// Canonical Primary Key map for Access raw replica tables (shared with sync_engine.js)
+const RAW_TABLE_PK_MAP = (syncEngine && syncEngine.RAW_TABLE_PK_MAP) ? syncEngine.RAW_TABLE_PK_MAP : {
     'assets_raw': 'ID',
     'transactions_raw': 'ID',
     'maintenance_raw': 'ID',
     'payments_raw': 'ID',
-    'store_pos_raw': 'store_ID',
-    'store_sim_raw': 'id',
+    'store_pos_raw': 'Serial',
+    'store_sim_raw': 'sim_serial',
     'store_sp_raw': 'sync_key',
     'store_sp_maintenance_raw': 'sync_key',
     'installments_raw': 'id',
@@ -6057,62 +6057,45 @@ app.use((err, req, res, next) => {
     });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-    const localIp = getLocalIpAddress();
-    console.log(`================================================================`);
-    console.log(`  CS DASHBOARD - CUSTOMER SUPPORT CENTRAL OPERATIONS`);
-    console.log(`================================================================`);
-    console.log(`  [+] Local Host Access   : http://localhost:${PORT}`);
-    console.log(`  [+] Network LAN Access  : http://${localIp}:${PORT}`);
-    console.log(`  [+] Oracle Cloud VPS    : https://smartcs.m-kamel.workers.dev`);
-    console.log(`  [+] Access DB Connected : ${syncEngine.getAccessFilePath()}`);
-    console.log(`  [+] Mode                : READ-ONLY Safe Engine | Multi-User LAN Ready`);
-    console.log(`================================================================`);
-    syncEngine.startFileWatcher(db);
-});
+if (require.main === module) {
+    app.listen(PORT, '0.0.0.0', () => {
+        const localIp = getLocalIpAddress();
+        console.log(`================================================================`);
+        console.log(`  CS DASHBOARD - CUSTOMER SUPPORT CENTRAL OPERATIONS`);
+        console.log(`================================================================`);
+        console.log(`  [+] Local Host Access   : http://localhost:${PORT}`);
+        console.log(`  [+] Network LAN Access  : http://${localIp}:${PORT}`);
+        console.log(`  [+] Oracle Cloud VPS    : https://smartcs.m-kamel.workers.dev`);
+        console.log(`  [+] Access DB Connected : ${syncEngine.getAccessFilePath()}`);
+        console.log(`  [+] Mode                : READ-ONLY Safe Engine | Multi-User LAN Ready`);
+        console.log(`================================================================`);
+        syncEngine.startFileWatcher(db);
+    });
 
-// Graceful shutdown handler
-async function gracefulShutdown(signal) {
-    console.log(`\n[SHUTDOWN] ${signal} received. Cleaning up...`);
-    try {
-        if (pgPool && !pgPool.ended) {
-            const closingPool = pgPool;
-            pgPool = null; // Mark null immediately so ongoing handlers reject gracefully
-            await closingPool.end();
-            console.log('[SHUTDOWN] PostgreSQL pool closed.');
-        }
-    } catch (e) { console.error('[SHUTDOWN] pgPool close error:', e.message); }
-    try {
-        db.close();
-        console.log('[SHUTDOWN] SQLite database closed.');
-    } catch (e) { console.error('[SHUTDOWN] SQLite close error:', e.message); }
-    console.log('[SHUTDOWN] Cleanup complete. Exiting.');
-    process.exit(0);
-}
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-
-// Off-peak daily maintenance and domain reconciliation at 03:00 AM (Cairo Time) / 01:00 AM (UTC)
-let lastOffPeakReconcileDay = '';
-setInterval(async () => {
-    try {
-        const now = new Date();
-        const currentHour = now.getUTCHours(); // 01:00 UTC corresponds to 03:00 Cairo
-        const dateStr = now.toISOString().split('T')[0];
-        
-        if (currentHour === 1 && lastOffPeakReconcileDay !== dateStr) {
-            lastOffPeakReconcileDay = dateStr;
-            console.log(`[OFF-PEAK MAINTENANCE] Starting scheduled off-peak domain reconciliation for ${dateStr}...`);
-            if (syncEngine && typeof syncEngine.syncHighLevelDomainEntities === 'function') {
-                await syncEngine.syncHighLevelDomainEntities(db).catch(e => console.error('[OFF-PEAK REBUILD ERROR]', e.message));
+    // Off-peak daily maintenance and domain reconciliation at 03:00 AM (Cairo Time) / 01:00 AM (UTC)
+    let lastOffPeakReconcileDay = '';
+    setInterval(async () => {
+        try {
+            const now = new Date();
+            const currentHour = now.getUTCHours(); // 01:00 UTC corresponds to 03:00 Cairo
+            const dateStr = now.toISOString().split('T')[0];
+            
+            if (currentHour === 1 && lastOffPeakReconcileDay !== dateStr) {
+                lastOffPeakReconcileDay = dateStr;
+                console.log(`[OFF-PEAK MAINTENANCE] Starting scheduled off-peak domain reconciliation for ${dateStr}...`);
+                if (syncEngine && typeof syncEngine.syncHighLevelDomainEntities === 'function') {
+                    await syncEngine.syncHighLevelDomainEntities(db).catch(e => console.error('[OFF-PEAK REBUILD ERROR]', e.message));
+                }
+                console.log('[OFF-PEAK MAINTENANCE] Cleaning up logs older than 90 days...');
+                await runQuery(`DELETE FROM audit_change_logs WHERE timestamp < datetime('now', '-90 days')`).catch(() => {});
+                await runQuery(`DELETE FROM sync_history WHERE sync_time < datetime('now', '-90 days')`).catch(() => {});
+                await runQuery(`DELETE FROM system_error_logs WHERE timestamp < datetime('now', '-90 days')`).catch(() => {});
+                console.log('[OFF-PEAK MAINTENANCE] Completed successfully.');
             }
-            console.log('[OFF-PEAK MAINTENANCE] Cleaning up logs older than 90 days...');
-            await runQuery(`DELETE FROM audit_change_logs WHERE timestamp < datetime('now', '-90 days')`).catch(() => {});
-            await runQuery(`DELETE FROM sync_history WHERE sync_time < datetime('now', '-90 days')`).catch(() => {});
-            await runQuery(`DELETE FROM system_error_logs WHERE timestamp < datetime('now', '-90 days')`).catch(() => {});
-            console.log('[OFF-PEAK MAINTENANCE] Completed successfully.');
+        } catch (e) {
+            console.error('[OFF-PEAK MAINTENANCE ERROR]', e.message);
         }
-    } catch (e) {
-        console.error('[OFF-PEAK MAINTENANCE ERROR]', e.message);
-    }
-}, 30 * 60 * 1000); // Check every 30 minutes
+    }, 30 * 60 * 1000); // Check every 30 minutes
+}
+
+
