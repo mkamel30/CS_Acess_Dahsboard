@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 
 const CONFIG_FILE = path.join(__dirname, 'config.json');
+const TRAINING_FILE = path.join(__dirname, 'AI_TRAINING_KNOWLEDGE.md');
 
 function readConfigSafely() {
     try {
@@ -15,6 +16,24 @@ function readConfigSafely() {
         }
     } catch (e) {}
     return {};
+}
+
+// Verified training knowledge is loaded per question so the .md file stays the single source of truth.
+// {TOKENS} inside it are replaced with the real current date at build time.
+function readVerifiedTraining(dates) {
+    try {
+        if (fs.existsSync(TRAINING_FILE)) {
+            const text = fs.readFileSync(TRAINING_FILE, 'utf8').trim();
+            return text
+                .replace(/\{TODAY_ACCESS\}/g, dates.accessDate)
+                .replace(/\{TODAY_ISO\}/g, dates.isoDate)
+                .replace(/\{MONTH_ACCESS\}/g, dates.accessMonth)
+                .replace(/\{MONTH_ISO\}/g, dates.isoMonth)
+                .replace(/\{YEAR2\}/g, String(dates.year).slice(-2))
+                .replace(/\{YEAR\}/g, dates.year);
+        }
+    } catch (e) {}
+    return '';
 }
 
 function getFormattedSystemDates() {
@@ -46,7 +65,7 @@ Your task is to translate user questions written in Arabic (Egyptian dialect or 
   * ISO text format: '${dates.isoDate}' (e.g. '2026-09-17')
   * Current Month: '${dates.accessMonth}' or '${dates.isoMonth}'
   * Current Year: '${dates.year}'
-- In the database, dates are stored as TEXT strings and can exist in EITHER Access format ('${dates.accessDate}') OR ISO format ('${dates.isoDate}'), often with timestamps attached (e.g. '${dates.accessDate} 11:22:19 AM' or '${dates.isoDate} 11:22:19 م').
+- In the database, dates are stored as TEXT strings. Access-mirror (_raw) tables plus tickets.issue_date/close_date use Access format ('${dates.accessDate}'), often with an ENGLISH time suffix (e.g. '${dates.accessDate} 11:22:19 AM' — always AM/PM, never Arabic ص/م). System/normalized tables (tickets.entry_time, temp_transfer, sync_history, audit_change_logs...) use ISO format ('${dates.isoDate} 11:22:19'). Some tickets rows carry ISO timestamps, so ALWAYS check BOTH formats with OR + LIKE.
 - For questions about "اليوم" or "النهاردة" or "خلال اليوم" (today): ALWAYS check BOTH formats using OR with LIKE:
   \`("col" LIKE '%${dates.accessDate}%' OR "col" LIKE '%${dates.isoDate}%')\`
   Example for today's spare parts:
@@ -63,13 +82,14 @@ Your task is to translate user questions written in Arabic (Egyptian dialect or 
 1. **assets_raw** (All installed POS machines, bakeries & merchants):
    - "ID" (TEXT): Record ID
    - "POS" (TEXT): Machine Hardware Serial Number (سيريال الماكينة الفعلي مثل 2330123394، 3H248698 - وهو الذي يربط مع "Unit Serial" في الصيانة ومع Serial في المخزن)
-   - "POSID" (TEXT): Bakery Code / Merchant ID (كود المخبز مثل 010001)
+   - "POSID" (TEXT): Terminal ID on the system (معرّف الترمنال — لكل POS معرّف ثابت يبقى كما هو عند استبدال الماكينة، مثل 010001)
+   - "bkcode" (TEXT): Merchant/Client Code (كود العميل/المخبز — يطابق merchants.merchant_code و transactions_raw.GrocerName؛ استخدمه للربط مع التجار وليس POSID)
    - "Model" (TEXT): Device Model (e.g. 'Pax S900', 'Verifone VX520', 'Newland', 'Nexgo')
    - "Manufacturer" (TEXT): Manufacturer name
-   - "Condition" (TEXT): Machine status ('WORKING', 'FAULTY', 'شغال', 'معطل', 'NEW')
+   - "Condition" (TEXT): Constant '(2) Good' in ALL rows — DO NOT use it to find faulty machines (use devices.status='faulty', store_pos_raw.faulty='True', or maintenance records instead)
    - "SupplyOffice" (TEXT): Supply office name (مكتب التموين)
    - "Address" (TEXT): Address or governorate name (المحافظة / المركز / العنوان)
-   - "GrocerNumber" (TEXT): Merchant / Grocer Code (رقم التاجر)
+   - "GrocerNumber" (TEXT): "Damen ID" (رقم الضامن) — NOT the merchant code; almost always empty, do not join on it
    - "Contact_person" (TEXT): Merchant / Bakery Owner Name (اسم صاحب المخبز أو المسؤول)
    - "telephone_1", "telephone_2" (TEXT): Contact phone numbers
    - "Cell_Serial" (TEXT): SIM Card Serial installed in the device
@@ -80,7 +100,7 @@ Your task is to translate user questions written in Arabic (Egyptian dialect or 
    - "ID" (TEXT): Maintenance Record ID
    - "Unit Serial" (TEXT): Serial number of device being repaired (سيريال الجهاز)
    - "Model" (TEXT): Machine Model
-   - "Checked Out To" (TEXT): Technician Name who took or repaired the machine (اسم الفني)
+   - "Checked Out To" (TEXT): Technician Name (اسم الفني) — often EMPTY in recent rows; always use COALESCE(NULLIF(TRIM("Checked Out To"),''), TRIM("Procedure")) for the technician
    - "Checked Out Date" (TEXT): Date sent to maintenance (تاريخ الخروج للصيانة)
    - "Checked In Date" (TEXT): Date returned/fixed (تاريخ الدخول/الإصلاح)
    - "Notes" (TEXT): PRIMARY FAULT / REPAIR DESCRIPTION entered by technicians (وصف العطل الأساسي مثل: بورده رئيسيه، قارئ بطاقات، مدخل باور، شاشة، بطارية). *CRITICAL: When the user asks about faults (الأعطال) or repair issues, query the "Notes" column (or COALESCE(NULLIF(Notes, ''), NULLIF(Procedure, '')))*!
@@ -88,13 +108,16 @@ Your task is to translate user questions written in Arabic (Egyptian dialect or 
    - "Checked Out Condition" (TEXT): Often empty in legacy data; always fallback to Notes
    - "Checked In Condition" (TEXT): Repair status / outcome (حالة الجهاز بعد الإصلاح)
 
-3. **transactions_raw** (Administrative transactions & field actions):
-   - "GrocerName" (TEXT): Bakery / Merchant Name
-   - "POSN" (TEXT): Machine code / Serial
-   - "Place" (TEXT): Governorate / Location (المحافظة أو الإدارة)
-   - "ActionType" (TEXT): Action Type (استبدال، تركيب، إيقاف، سحب، فحص...)
-   - "ActionDate" (TEXT): Transaction Date
-   - "FeesAmount" (TEXT): Fees / Cost in EGP
+3. **transactions_raw** (Client VISITS to the branch — سجل زيارات العملاء للفرع؛ every row = one visit, currently all maintenance visits):
+   - "GrocerName" (TEXT): Client/Bakery CODE (كود العميل وليس اسماً — يطابق merchants.merchant_code و assets_raw.bkcode)
+   - "POSN" (TEXT): Machine hardware serial (سيريال الماكينة)
+   - "Place" (TEXT): Visit location ('فرع الشركة' = the branch)
+   - "ActionType" (TEXT): Visit purpose. ACTUAL values in this DB: 'اصلاح عطل', 'صيانة أولية', 'مسارات القارئ - البوردة', 'تحتاج قارئ', 'مسارات قديمة - البوردة'
+   - "IssueDate" (TEXT): Visit registration date — ALWAYS populated
+   - "ActionDate" (TEXT): Execution date — empty in ~1273 rows; use COALESCE(NULLIF(TRIM("ActionDate"),''), "IssueDate")
+   - "NoteG" (TEXT): Faulty part category (الجزء المتعطل), "NoteD" (TEXT): Action performed (الإجراء المتبع)
+   - "Procedure" (TEXT): Branch technician (الفني — أسماء بمسافة زائدة، TRIM قبل المقارنة)
+   - "FeesAmount" (TEXT): Fees / Cost in EGP; "Fees"/"Paid" (TEXT): 'True'/'False' flags
 
 4. **payments_raw** (Financial receipts, post office & bank deposits):
    - "payment_amount" (TEXT): Paid amount in EGP (المبلغ المدفوع بالجنيه)
@@ -108,16 +131,18 @@ Your task is to translate user questions written in Arabic (Egyptian dialect or 
 5. **store_pos_raw** (Warehouse POS Machines stock):
    - "Serial" (TEXT): Device Serial
    - "Model" (TEXT): POS Model
-   - "faulty" (TEXT): Is faulty? ('نعم', 'لا', '1', '0')
-   - "pos_status" (TEXT): Stock status ('متاح', 'محجوز', 'كهنة', 'صيانة', 'جديد')
+   - "faulty" (TEXT): Is faulty? ACTUAL values: 'True' / 'False' (English)
+   - "pos_status" (TEXT): Mostly EMPTY (174/207) or 'Branch' — do not rely on it for stock status
 
-6. **store_sp_raw** (قطع غيار ومخزن الفرع - Branch Spare Parts):
+6. **store_sp_raw** (قطع الغيار المسحوبة من مخزن الفرع - Spare parts taken from the Branch warehouse):
    - يمثل قطع الغيار التي تم تغييرها أو استهلاكها أو صرفها في **الفرع** (Branch Local Store).
-   - "type" (TEXT): اسم قطعة الغيار (شاشة، طابعة، بوردة، بطارية...)
-   - "Model" (TEXT): موديل الماكينة
-   - "count_in" (TEXT): الكميات الواردة لمخزن الفرع
-   - "count_out" (TEXT): الكميات المنصرفة / المستهلكة في الفرع
-   - "in_date" (TEXT), "out_date" (TEXT): تواريخ الدخول والصرف
+   - "type" (TEXT): اسم قطعة الغيار (بطارية داخلية، قارئ بطاقات، مجموعة تروس...)
+   - "notes" (TEXT): سيريال الماكينة التي رُكبت فيها القطعة (يرتبط مع assets_raw.POS و transactions_raw.POSN)
+   - "Serial" (TEXT): نص مركب (رقم الإيصال - اسم القطعة - كود العميل - مجاني/مدفوع). القطعة المجانية: "Serial" LIKE '%مجاني%'
+   - ⚠️ "count_out" (TEXT): ALWAYS '0' in EVERY row — NEVER use it for branch consumption!
+   - "count_in" (TEXT): NEGATIVE = parts consumed/taken out (-1, -2, -8...), POSITIVE = parts received into stock.
+     Parts consumed = SUM(CASE WHEN CAST("count_in" AS INTEGER) < 0 THEN -CAST("count_in" AS INTEGER) ELSE 0 END)
+   - "out_date" (TEXT): تاريخ الصرف (العمود الزمني الأساسي), "in_date" (TEXT): تاريخ التوريد (فارغ في 97% من الصفوف)
 
 7. **store_sp_maintenance_raw** (قطع غيار مركز الصيانة الرئيسي - Central HQ Maintenance Spare Parts):
    - يمثل قطع الغيار التي تم تغييرها أو صرفها لعمليات الإصلاح في **مركز الصيانة الرئيسي / المقر** (HQ Maintenance).
@@ -129,9 +154,9 @@ Your task is to translate user questions written in Arabic (Egyptian dialect or 
 
 8. **store_sim_raw** (SIM cards warehouse stock):
    - "sim_serial" (TEXT): SIM Serial
-   - "network" (TEXT): Carrier ('فودافون', 'أورنج', 'اتصالات', 'وي')
-   - "faulty" (TEXT): Is faulty?
-   - "sim_type" (TEXT): Type
+   - "network" (TEXT): 100% EMPTY — do not use. Carrier is in "sim_type" (e.g. 'Orange') or sim_cards.carrier ('Vodafone'/'Orange'/'Etisalat' — mixed case, use COLLATE NOCASE)
+   - "faulty" (TEXT): Is faulty? ('True' / 'False')
+   - "sim_type" (TEXT): Carrier / card type (الناقل فعلياً هنا)
 
 9. **installments_raw** / **tblinstallments** (عقود وأقساط الماكينات):
    - "pos" (TEXT): كود الماكينة/المخبز (يرتبط مع assets_raw.POS)
@@ -150,7 +175,7 @@ Your task is to translate user questions written in Arabic (Egyptian dialect or 
 11. **failure_points_raw** (لائحة أسعار قطع الغيار ورسوم الصيانة):
     - "type" (TEXT): اسم قطعة الغيار
     - "model" (TEXT): موديل الجهاز المتوافق
-    - "fees" (TEXT/REAL): رسوم الصيانة والمصنعية
+    - "fees" (TEXT): PAYMENT CODE, not a number! '$' = paid, 'F' = free, '$-F' = both. "price" is the EGP amount. "model" may list multiple models ('S90;D210') → use LIKE not =
     - "price" (TEXT/REAL): سعر بيع القطعة
 
 12. **tblfaults_raw** (قاموس الأعطال):
@@ -177,13 +202,13 @@ Your task is to translate user questions written in Arabic (Egyptian dialect or 
 - **الصيانة مع قطع غيار مركز الصيانة (HQ)**:
   \`maintenance_raw.FormNo = store_sp_maintenance_raw.formNo\` (رقم نموذج الصيانة يربط الجهاز بالقطع المصروفة له)
 - **الأصول مع الأقساط**:
-  \`assets_raw.POS = installments_raw.pos\` أو \`assets_raw.POSID = installments_raw.pos\`
+  \`assets_raw.POS = installments_raw.pos\` (السيريال فقط — POSID لا يطابق أبداً)
 - **الأقساط مع المدفوعات**:
   \`installments_raw.pos = payments_raw.pos_number\` (مع تصفية: \`payments_raw.payment_reason LIKE '%قسط%'\`)
 - **الأصول مع الشريحة**:
   \`assets_raw.Cell_Serial = store_sim_raw.sim_serial\`
 - **الماكينات المستبدلة مؤقتاً**:
-  \`temp_transfer_raw.OldPOS = assets_raw.POS\` أو \`temp_transfer_raw.OldPOS = store_pos_raw.Serial\`
+  \`REPLACE(temp_transfer_raw.OldPOS,'M-','') = assets_raw.POS\` (السيريالات قد تحمل بادئة M- — جرّدها عند المطابقة)
 - **أسعار قطع الغيار**:
   \`store_sp_raw.type = failure_points_raw.type\` و \`store_sp_maintenance_raw.type = failure_points_raw.type\`
 - **الفنيين مع الصيانة**:
@@ -247,9 +272,14 @@ Your task is to translate user questions written in Arabic (Egyptian dialect or 
 3. The SQL query MUST be a pure read-only \`SELECT\` statement.
 4. If column names have spaces, quote them with double quotes, e.g. "Unit Serial", "Checked Out To", "Checked Out Date", "Acquired Date".
 5. Use SQLite string functions when searching Arabic text: \`LIKE '%...%'\` or \`COLLATE NOCASE\`.
-6. For numeric calculations on TEXT columns (e.g. payment_amount, count_out, FeesAmount), use \`CAST(NULLIF("payment_amount", '') AS REAL)\` or \`SUM(CAST("count_out" AS INTEGER))\`.
+6. For numeric calculations on TEXT columns (e.g. payment_amount, count_in, FeesAmount), use \`CAST(NULLIF("payment_amount", '') AS REAL)\`. HQ parts: \`SUM(CAST("count_out" AS INTEGER))\` on store_sp_maintenance_raw ONLY. Branch parts (store_sp_raw): sum NEGATIVE count_in as described above — count_out there is always 0.
 7. Always append \`LIMIT 100\` unless an explicit smaller limit or an aggregate (like single row \`COUNT(*)\`) is requested.
 8. NEVER execute or generate \`INSERT\`, \`UPDATE\`, \`DELETE\`, \`DROP\`, \`ALTER\`, \`CREATE\`, \`REPLACE\`, \`PRAGMA\`, \`ATTACH\`, \`DETACH\`, \`VACUUM\`.`;
+
+    const training = readVerifiedTraining(dates);
+    if (training) {
+        prompt += `\n\n---\n\n### VERIFIED SCHEMA & BUSINESS KNOWLEDGE (تم التحقق من البيانات الفعلية — THESE RULES OVERRIDE ANY CONFLICTING INSTRUCTIONS ABOVE):\n${training}\n`;
+    }
 
     const config = readConfigSafely();
     const customKnowledge = (config.customKnowledge || '').trim();
