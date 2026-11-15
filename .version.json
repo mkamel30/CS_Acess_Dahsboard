@@ -1,7 +1,7 @@
 {
-  "version": "5.0.1",
-  "commit": "custom-crm-search-only",
-  "date": "2026-11-09 14:50",
-  "message": "feat(crm): switch Customer 360 to search-only architecture without automatic table loading",
+  "version": "5.1.0",
+  "commit": "spare-parts-dynamic-recalc",
+  "date": "2026-11-15 08:58",
+  "message": "feat(store_sp): dynamic on-demand recalculation, periodic ledger, and stock valuation alerts (T-27)",
   "branch": "main"
 }
