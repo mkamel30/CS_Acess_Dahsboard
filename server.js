@@ -2668,42 +2668,102 @@ app.get('/api/inventory/spare-parts-dashboard', async (req, res) => {
         // Precision Date Parser & Filter Range
         const { startTimestamp, endTimestamp } = UniversalDateEngine.parsePrecisionRange(date_from, date_to);
 
-        // 1. Calculate All-Time Stock Balances for every part
+        // 1. Calculate All-Time Stock Balances & Periodic Opening/Closing Ledger for every part
         const stockBalanceMap = new Map();
-        let grandWarehouseStock = 0;
+        const openingStockMap = new Map();
+        const periodInMap = new Map();
+        const periodOutMap = new Map();
+        const criticalLimitMap = new Map();
+
         allPartsDef.forEach(p => {
-            stockBalanceMap.set(p.part_name, 0);
+            const pName = (p.part_name || '').trim();
+            stockBalanceMap.set(pName, 0);
+            openingStockMap.set(pName, 0);
+            periodInMap.set(pName, 0);
+            periodOutMap.set(pName, 0);
+            criticalLimitMap.set(pName, parseInt(p.critical_limit, 10) || 5);
         });
 
         for (const row of allMovementsRaw) {
-            const partName = row.type || 'أخرى';
+            const partName = (row.type || 'أخرى').trim();
             const countInVal = parseInt(row.count_in) || 0;
             const countOutVal = parseInt(row.count_out) || 0;
             const isStockIn = countInVal > 0;
             const qty = isStockIn ? countInVal : (countInVal < 0 ? Math.abs(countInVal) : (countOutVal > 0 ? countOutVal : 1));
             
             if (!stockBalanceMap.has(partName)) stockBalanceMap.set(partName, 0);
+            if (!openingStockMap.has(partName)) openingStockMap.set(partName, 0);
+            if (!periodInMap.has(partName)) periodInMap.set(partName, 0);
+            if (!periodOutMap.has(partName)) periodOutMap.set(partName, 0);
+            if (!criticalLimitMap.has(partName)) criticalLimitMap.set(partName, 5);
+
+            // All-Time running stock
             const cur = stockBalanceMap.get(partName);
-            if (isStockIn) {
-                stockBalanceMap.set(partName, cur + qty);
-            } else {
-                stockBalanceMap.set(partName, cur - qty);
+            stockBalanceMap.set(partName, isStockIn ? (cur + qty) : (cur - qty));
+
+            // Movement timestamp for dynamic periodic ledger
+            const rawDateStr = row.out_date || row.in_date || '';
+            const mDateObj = UniversalDateEngine.parsePrecisionDate(rawDateStr);
+            const mTs = mDateObj ? mDateObj.getTime() : null;
+
+            if (startTimestamp && mTs && mTs < startTimestamp) {
+                // Movement happened before period start -> accumulates into Opening Balance
+                const op = openingStockMap.get(partName);
+                openingStockMap.set(partName, isStockIn ? (op + qty) : (op - qty));
+            } else if ((!startTimestamp || (mTs && mTs >= startTimestamp)) && (!endTimestamp || (mTs && mTs <= endTimestamp))) {
+                // Movement within period
+                if (isStockIn) {
+                    periodInMap.set(partName, periodInMap.get(partName) + qty);
+                } else {
+                    periodOutMap.set(partName, periodOutMap.get(partName) + qty);
+                }
             }
         }
 
-        for (const [_, val] of stockBalanceMap) {
-            grandWarehouseStock += Math.max(0, val);
+        let grandWarehouseStock = 0;
+        let grandOpeningStock = 0;
+        let grandClosingStock = 0;
+        let grandWarehouseValuation = 0;
+        let criticalPartsCount = 0;
+        let outOfStockCount = 0;
+        const criticalPartsList = [];
+
+        for (const [pName, val] of stockBalanceMap) {
+            const currentStock = Math.max(0, val);
+            grandWarehouseStock += currentStock;
+            const uPrice = partPricesMap.get(pName)?.price || 0;
+            grandWarehouseValuation += (currentStock * uPrice);
+
+            const opStock = openingStockMap.get(pName) || 0;
+            const pIn = periodInMap.get(pName) || 0;
+            const pOut = periodOutMap.get(pName) || 0;
+            const clStock = Math.max(0, opStock + pIn - pOut);
+            grandOpeningStock += Math.max(0, opStock);
+            grandClosingStock += clStock;
+
+            const cLimit = criticalLimitMap.get(pName) || 5;
+            if (currentStock <= 0) {
+                outOfStockCount++;
+                criticalPartsList.push({ part_name: pName, current_stock: 0, critical_limit: cLimit, status: 'OUT_OF_STOCK' });
+            } else if (currentStock <= cLimit) {
+                criticalPartsCount++;
+                criticalPartsList.push({ part_name: pName, current_stock: currentStock, critical_limit: cLimit, status: 'CRITICAL_LOW' });
+            }
         }
 
         // 2. Initialize Period / Filter Aggregation Structures
         const periodPartStatsMap = new Map();
         allPartsDef.forEach(p => {
-            periodPartStatsMap.set(p.part_name, {
-                part_name: p.part_name,
+            const pName = (p.part_name || '').trim();
+            periodPartStatsMap.set(pName, {
+                part_name: pName,
                 unit_price: parseFloat(p.price) || 100,
                 total_in: 0,
                 total_out: 0,
-                current_stock: stockBalanceMap.get(p.part_name) || 0,
+                current_stock: stockBalanceMap.get(pName) || 0,
+                opening_balance: openingStockMap.get(pName) || 0,
+                closing_balance: stockBalanceMap.get(pName) || 0,
+                critical_limit: criticalLimitMap.get(pName) || 5,
                 paid_count: 0,
                 free_count: 0,
                 deferred_count: 0,
@@ -3008,11 +3068,28 @@ app.get('/api/inventory/spare-parts-dashboard', async (req, res) => {
             return (b.id || 0) - (a.id || 0);
         });
 
-        // Parts breakdown sorted by activity in the filtered period
+        // Parts breakdown with dynamic periodic ledger, valuation, and critical alerts
         const isFilterActive = Boolean(startTimestamp || endTimestamp || payment_status !== 'all' || (part_type && part_type !== 'all') || search);
         const partsBreakdownList = Array.from(periodPartStatsMap.values()).map(p => {
+            const pName = p.part_name;
+            const currentStock = stockBalanceMap.get(pName) || 0;
+            const opBalance = startTimestamp ? (openingStockMap.get(pName) || 0) : 0;
+            const clBalance = startTimestamp ? Math.max(0, opBalance + (p.total_in || 0) - (p.total_out || 0)) : currentStock;
+            const cLimit = criticalLimitMap.get(pName) || 5;
+            const stockValuation = Math.max(0, currentStock) * (p.unit_price || 0);
+
+            let stockStatus = 'HEALTHY';
+            if (currentStock <= 0) stockStatus = 'OUT_OF_STOCK';
+            else if (currentStock <= cLimit) stockStatus = 'CRITICAL_LOW';
+
             return {
                 ...p,
+                current_stock: currentStock,
+                opening_balance: opBalance,
+                closing_balance: clBalance,
+                critical_limit: cLimit,
+                stock_valuation: stockValuation,
+                stock_status: stockStatus,
                 consumption_rate_pct: p.total_in > 0 ? Math.min(100, Math.round((p.total_out / p.total_in) * 100)) : (p.total_out > 0 ? 100 : 0)
             };
         }).sort((a, b) => {
@@ -3039,6 +3116,13 @@ app.get('/api/inventory/spare-parts-dashboard', async (req, res) => {
             total_stock_in: totalPiecesIn,
             total_stock_out: totalPiecesOut,
             current_stock_balance: grandWarehouseStock,
+            opening_warehouse_stock: grandOpeningStock,
+            closing_warehouse_stock: grandClosingStock,
+            total_stock_valuation: grandWarehouseValuation,
+            consumed_valuation: totalPiecesOut > 0 ? Array.from(periodPartStatsMap.values()).reduce((sum, p) => sum + (p.total_out * p.unit_price), 0) : 0,
+            critical_parts_count: criticalPartsCount,
+            out_of_stock_count: outOfStockCount,
+            critical_parts_list: criticalPartsList,
             total_paid_amount: totalPaidAmount,
             total_paid_pieces: totalPaidPieces,
             total_free_pieces: totalFreePieces,
@@ -3076,6 +3160,27 @@ app.get('/api/inventory/spare-parts-dashboard', async (req, res) => {
     } catch (err) {
         console.error('Spare Parts Dashboard error:', err);
         res.status(500).json({ error: err.message });
+    }
+});
+
+// On-Demand Recalculation API for Branch Spare Parts Inventory (Store_SP)
+app.post('/api/inventory/spare-parts/recalculate', async (req, res) => {
+    try {
+        const result = await syncEngine.recalculateSparePartsStock(db);
+        if (typeof broadcastSseEvent === 'function') {
+            broadcastSseEvent('spare_parts_recalculated', {
+                timestamp: result.recalculated_at,
+                totalUnits: result.total_stock_units,
+                totalValuation: result.total_stock_valuation,
+                criticalCount: result.critical_count
+            });
+        }
+        res.json(result);
+    } catch (err) {
+        if (typeof logSystemError === 'function') {
+            logSystemError('SPARE_PARTS', '/api/inventory/spare-parts/recalculate', err, req);
+        }
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 

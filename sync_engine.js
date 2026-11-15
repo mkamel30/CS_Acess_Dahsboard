@@ -1417,6 +1417,112 @@ async function upsertTableData(db, tableName, pkField, records) {
     return applyTableAndOutbox(db, tableName, pkField, records, []);
 }
 
+/**
+ * Dynamic On-Demand Recalculation of Branch Spare Parts Inventory (Store_SP)
+ * Handles dual-direction counts:
+ * - Inflow: count_in > 0
+ * - Outflow: count_in < 0 (ABS) OR count_out > 0
+ * - Net Stock: Inflow - Outflow
+ * Updates prices, critical limits, and quantities atomically in spare_parts
+ */
+async function recalculateSparePartsStock(db) {
+    if (!db) throw new Error('Database instance is required for spare parts recalculation');
+
+    // 1. Ensure all distinct types from store_sp_raw exist in spare_parts
+    await dbRun(db, `
+        INSERT OR IGNORE INTO spare_parts (part_name, compatible_models, critical_limit, price, quantity_in_stock)
+        SELECT 
+            DISTINCT TRIM(type) AS part_name,
+            '["PAX S90"]' AS compatible_models,
+            5 AS critical_limit,
+            0 AS price,
+            0 AS quantity_in_stock
+        FROM store_sp_raw
+        WHERE type IS NOT NULL AND TRIM(type) != '';
+    `);
+
+    // 2. Sync / update prices from failure_points_raw where available
+    const fpPrices = await dbAll(db, `
+        SELECT TRIM(type) as type, price, model 
+        FROM failure_points_raw 
+        WHERE price IS NOT NULL AND price != ''
+    `).catch(() => []);
+
+    if (fpPrices && fpPrices.length > 0) {
+        for (const fp of fpPrices) {
+            const pName = (fp.type || '').trim();
+            const pPrice = parseFloat(fp.price) || 0;
+            const pModel = (fp.model || 'PAX S90').trim();
+            if (!pName) continue;
+            await dbRun(db, `
+                UPDATE spare_parts 
+                SET price = ?,
+                    compatible_models = CASE 
+                        WHEN compatible_models IS NULL OR compatible_models = '' THEN ?
+                        ELSE compatible_models 
+                    END
+                WHERE TRIM(part_name) = ?;
+            `, [pPrice, JSON.stringify([pModel]), pName]).catch(() => {});
+        }
+    }
+
+    // 3. Atomically recalculate physical inventory count from store_sp_raw
+    const nowIso = new Date().toISOString();
+    await dbRun(db, `
+        UPDATE spare_parts 
+        SET quantity_in_stock = COALESCE((
+            SELECT 
+                SUM(CASE WHEN CAST(count_in AS INTEGER) > 0 THEN CAST(count_in AS INTEGER) ELSE 0 END) -
+                SUM(CASE WHEN CAST(count_in AS INTEGER) < 0 THEN ABS(CAST(count_in AS INTEGER)) ELSE CAST(COALESCE(NULLIF(TRIM(count_out), ''), '0') AS INTEGER) END)
+            FROM store_sp_raw
+            WHERE TRIM(type) = TRIM(spare_parts.part_name)
+        ), 0);
+    `);
+
+    // 4. Query fresh summary metrics
+    const partsSummary = await dbAll(db, `
+        SELECT 
+            id,
+            TRIM(part_name) as part_name,
+            quantity_in_stock,
+            critical_limit,
+            price,
+            (quantity_in_stock * price) as stock_valuation,
+            CASE 
+                WHEN quantity_in_stock <= 0 THEN 'OUT_OF_STOCK'
+                WHEN quantity_in_stock <= critical_limit THEN 'CRITICAL_LOW'
+                ELSE 'HEALTHY'
+            END as stock_status
+        FROM spare_parts
+        ORDER BY quantity_in_stock ASC, part_name ASC;
+    `);
+
+    let totalUnits = 0;
+    let totalValuation = 0;
+    let criticalCount = 0;
+    let outOfStockCount = 0;
+
+    for (const p of partsSummary) {
+        const qty = p.quantity_in_stock || 0;
+        if (qty > 0) totalUnits += qty;
+        totalValuation += (qty * (p.price || 0));
+        if (p.stock_status === 'OUT_OF_STOCK') outOfStockCount++;
+        else if (p.stock_status === 'CRITICAL_LOW') criticalCount++;
+    }
+
+    return {
+        success: true,
+        message: 'تمت إعادة احتساب رصيد مخزن قطع الغيار وتحديث الجداول بنجاح ⚡',
+        total_parts: partsSummary.length,
+        total_stock_units: totalUnits,
+        total_stock_valuation: totalValuation,
+        critical_count: criticalCount,
+        out_of_stock_count: outOfStockCount,
+        parts: partsSummary,
+        recalculated_at: nowIso
+    };
+}
+
 let isRebuildingDomainEntities = false;
 
 /**
@@ -1835,28 +1941,8 @@ async function syncHighLevelDomainEntities(db) {
         `, [partName, JSON.stringify([model]), newPrice]);
     }
 
-    // Insert any remaining types from store_sp_raw if not present
-    await dbRun(db, `
-        INSERT OR IGNORE INTO spare_parts (part_name, compatible_models, critical_limit, price, quantity_in_stock)
-        SELECT 
-            DISTINCT type AS part_name,
-            '["PAX S90"]' AS compatible_models,
-            5 AS critical_limit,
-            0 AS price,
-            0 AS quantity_in_stock
-        FROM store_sp_raw
-        WHERE type IS NOT NULL AND TRIM(type) != '';
-    `);
-
-    // Recalculate physical inventory count from store_sp_raw (Inflow minus Outflow)
-    await dbRun(db, `
-        UPDATE spare_parts 
-        SET quantity_in_stock = COALESCE((
-            SELECT SUM(CAST(COALESCE(NULLIF(TRIM(count_in), ''), '0') AS INTEGER)) - SUM(CAST(COALESCE(NULLIF(TRIM(count_out), ''), '0') AS INTEGER))
-            FROM store_sp_raw
-            WHERE type = spare_parts.part_name
-        ), 0);
-    `);
+    // Dynamic on-demand recalculation of branch spare parts inventory & catalog sync
+    await recalculateSparePartsStock(db);
 
     // Atomically commit entire domain rebuild
     await dbRun(db, 'COMMIT;');
@@ -2411,6 +2497,7 @@ module.exports = {
     syncTableWithDiff,
     areValuesEqual,
     enrichRecordsWithSyncKey,
+    recalculateSparePartsStock,
     DATA_SYNC_DIR,
     DATA_SYNC_STAGING_DIR
 };

@@ -1365,6 +1365,10 @@
                             <p>متابعة حركة منصرف ووارد قطع الغيار، حصر الرصيد بالمخزن، وتدقيق التحصيلات بمقابل والصيانة المجانية (بدون مقابل) مع فلترة دقيقة بالثانية</p>
                         </div>
                         <div class="header-actions" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                            <button type="button" class="btn btn-primary" id="btn-recalculate-sp-stock" onclick="recalculateSparePartsStock()" style="display:inline-flex; align-items:center; gap:8px;" title="إعادة احتساب وتحديث رصيد وجرد المخزن بالكامل من واقع كافة الحركات الفردية">
+                                <i data-lucide="calculator" id="icon-sp-recalc"></i>
+                                <span>إعادة احتساب الرصيد ⚡</span>
+                            </button>
                             <button type="button" class="btn btn-secondary" id="btn-open-price-history" style="display:inline-flex; align-items:center; gap:8px; border-color: rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.08); color: #f59e0b;">
                                 <i data-lucide="history"></i>
                                 <span>سجل تغير أسعار قطع الغيار</span>
@@ -1435,9 +1439,17 @@
                                 <input type="text" id="sp-search-input" placeholder="سيريال، كود مخبز، رقم إيصال، فني...">
                             </div>
                         </div>
+
+                        <!-- Dynamic Periodic Ledger Bar (Active when date filter is applied) -->
+                        <div id="sp-periodic-ledger-bar" style="margin-top:14px; padding:10px 16px; background:rgba(56,189,248,0.08); border:1px solid rgba(56,189,248,0.25); border-radius:12px; font-size:12px; color:var(--text-secondary); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                            <span><i data-lucide="book-open" style="width:14px;height:14px;vertical-align:middle;color:var(--md-sys-color-primary);"></i> <strong>كشف حساب رصيد الفترة:</strong> رصيد البداية: <strong id="sp-ledger-opening" style="color:var(--text-primary); font-family:var(--font-en);">0</strong> قطعة</span>
+                            <span>وارد الفترة: <strong id="sp-ledger-in" style="color:#10b981; font-family:var(--font-en);">+0</strong> قطعة</span>
+                            <span>منصرف الفترة: <strong id="sp-ledger-out" style="color:#a855f7; font-family:var(--font-en);">-0</strong> قطعة</span>
+                            <span>رصيد نهاية الفترة: <strong id="sp-ledger-closing" style="color:var(--md-sys-color-primary); font-family:var(--font-en);">0</strong> قطعة</span>
+                        </div>
                     </div>
 
-                    <!-- Top 6 KPI Summary Cards Row -->
+                    <!-- Top 8 KPI Summary Cards Row (Dynamic Stock, Ledger & Valuation) -->
                     <div class="warehouse-kpi-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 16px; margin-bottom: 24px;">
                         <!-- Current Stock Balance -->
                         <div class="wh-stat-card wh-card-total" onclick="openAvailableSparePartsModal()" title="انقر لعرض بيان وجرد قطع الغيار المتوفرة بالمخزن فقط (الرصيد > 0)" style="background: linear-gradient(135deg, rgba(56,189,248,0.12), rgba(14,165,233,0.05)); border: 1px solid rgba(56,189,248,0.3); border-radius: 16px; padding: 18px; position: relative; overflow: hidden; box-shadow: var(--md-elevation-1); cursor:pointer;">
@@ -1469,6 +1481,38 @@
                             </div>
                             <div style="margin-top:10px; font-size:11px; color:var(--md-sys-color-on-surface-variant);">
                                 <span>إجمالي الحركات: <strong id="sp-kpi-sub-total-tx" style="font-family:var(--font-en); color:#a855f7;">0</strong></span>
+                            </div>
+                        </div>
+
+                        <!-- Total Stock Valuation (Financial Valuation of Physical Inventory) -->
+                        <div class="wh-stat-card" style="background: linear-gradient(135deg, rgba(14,165,233,0.12), rgba(2,132,199,0.05)); border: 1px solid rgba(14,165,233,0.3); border-radius: 16px; padding: 18px; position: relative; overflow: hidden; box-shadow: var(--md-elevation-1);">
+                            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                                <div>
+                                    <span style="font-size:11px; font-weight:700; color:var(--md-sys-color-on-surface-variant); display:block; margin-bottom:4px;">تقييم المخزون المالي</span>
+                                    <h2 id="sp-kpi-stock-valuation" style="font-size:26px; font-weight:800; font-family:var(--font-en); color:#0284c7; margin:0;">0 جم</h2>
+                                </div>
+                                <div style="width:40px; height:40px; border-radius:12px; background:rgba(14,165,233,0.2); display:flex; align-items:center; justify-content:center; color:#0284c7;">
+                                    <i data-lucide="coins" style="width:22px; height:22px;"></i>
+                                </div>
+                            </div>
+                            <div style="margin-top:10px; font-size:11px; color:var(--md-sys-color-on-surface-variant);">
+                                <span>تكلفة المنصرف بالفترة: <strong id="sp-kpi-sub-consumed-val" style="color:#0284c7; font-family:var(--font-en);">0 جم</strong></span>
+                            </div>
+                        </div>
+
+                        <!-- Critical Low Stock Alerts -->
+                        <div class="wh-stat-card wh-card-faulty" id="sp-card-critical-alerts" onclick="filterSparePartsCritical()" title="انقر لعرض الأصناف الحرجة والنواقص فقط" style="background: linear-gradient(135deg, rgba(239,68,68,0.12), rgba(185,28,28,0.05)); border: 1px solid rgba(239,68,68,0.3); border-radius: 16px; padding: 18px; position: relative; overflow: hidden; box-shadow: var(--md-elevation-1); cursor:pointer;">
+                            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                                <div>
+                                    <span style="font-size:11px; font-weight:700; color:var(--md-sys-color-on-surface-variant); display:block; margin-bottom:4px;">أصناف حرجة ونواقص ⚠️</span>
+                                    <h2 id="sp-kpi-critical-count" style="font-size:28px; font-weight:800; font-family:var(--font-en); color:#ef4444; margin:0;">0</h2>
+                                </div>
+                                <div style="width:40px; height:40px; border-radius:12px; background:rgba(239,68,68,0.2); display:flex; align-items:center; justify-content:center; color:#ef4444;">
+                                    <i data-lucide="alert-triangle" style="width:22px; height:22px;"></i>
+                                </div>
+                            </div>
+                            <div style="margin-top:10px; font-size:11px; color:var(--md-sys-color-on-surface-variant);">
+                                <span>نافد بالكامل: <strong id="sp-kpi-sub-out-of-stock" style="color:#ef4444; font-family:var(--font-en);">0</strong> صنف</span>
                             </div>
                         </div>
 

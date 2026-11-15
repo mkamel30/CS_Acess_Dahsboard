@@ -2893,6 +2893,7 @@ function exportInstallmentsToExcel() {
 let sparePartsDataCache = null;
 let sparePartsListenersBound = false;
 let spFilterExplicitlyAll = false;
+let spFilterOnlyCritical = false;
 
 const SparePartsTableState = {
     page: 1,
@@ -2964,6 +2965,10 @@ async function loadSparePartsInventory() {
         const elDeferredAmt = document.getElementById('sp-kpi-deferred-amount');
         const elSubDefPieces = document.getElementById('sp-kpi-sub-deferred-pieces');
         const elPaidRatio = document.getElementById('sp-kpi-paid-ratio');
+        const elValuation = document.getElementById('sp-kpi-stock-valuation');
+        const elSubConsumedVal = document.getElementById('sp-kpi-sub-consumed-val');
+        const elCriticalCount = document.getElementById('sp-kpi-critical-count');
+        const elSubOutOfStock = document.getElementById('sp-kpi-sub-out-of-stock');
 
         if (elInStock) elInStock.textContent = Number(s.current_stock_balance || 0).toLocaleString('ar-EG');
         if (elSubIn) elSubIn.textContent = Number(s.total_stock_in || 0).toLocaleString('ar-EG');
@@ -2976,6 +2981,20 @@ async function loadSparePartsInventory() {
         if (elDeferredAmt) elDeferredAmt.textContent = Number(s.total_deferred_amount || 0).toLocaleString('ar-EG') + ' جم';
         if (elSubDefPieces) elSubDefPieces.textContent = Number(s.total_deferred_pieces || 0).toLocaleString('ar-EG');
         if (elPaidRatio) elPaidRatio.textContent = (s.paid_ratio_pct || 0) + '%';
+        if (elValuation) elValuation.textContent = Number(s.total_stock_valuation || 0).toLocaleString('ar-EG') + ' جم';
+        if (elSubConsumedVal) elSubConsumedVal.textContent = Number(s.consumed_valuation || 0).toLocaleString('ar-EG') + ' جم';
+        if (elCriticalCount) elCriticalCount.textContent = Number(s.critical_parts_count || 0).toLocaleString('ar-EG');
+        if (elSubOutOfStock) elSubOutOfStock.textContent = Number(s.out_of_stock_count || 0).toLocaleString('ar-EG');
+
+        // Dynamic Periodic Ledger Bar
+        const ledgerOp = document.getElementById('sp-ledger-opening');
+        const ledgerIn = document.getElementById('sp-ledger-in');
+        const ledgerOut = document.getElementById('sp-ledger-out');
+        const ledgerCl = document.getElementById('sp-ledger-closing');
+        if (ledgerOp) ledgerOp.textContent = Number(isAll ? 0 : (s.opening_warehouse_stock || 0)).toLocaleString('ar-EG');
+        if (ledgerIn) ledgerIn.textContent = '+' + Number(s.total_stock_in || 0).toLocaleString('ar-EG');
+        if (ledgerOut) ledgerOut.textContent = '-' + Number(s.total_stock_out || 0).toLocaleString('ar-EG');
+        if (ledgerCl) ledgerCl.textContent = Number(isAll ? (s.current_stock_balance || 0) : (s.closing_warehouse_stock || 0)).toLocaleString('ar-EG');
 
         // 2. Render Column 1: Parts Aggregation Breakdown
         const partsListEl = document.getElementById('sp-parts-breakdown-list');
@@ -2985,32 +3004,56 @@ async function loadSparePartsInventory() {
         }
 
         if (partsListEl && data.parts_breakdown) {
-            const maxPieces = Math.max(...data.parts_breakdown.map(p => Math.max(p.total_in, p.total_out)), 1);
-            partsListEl.innerHTML = data.parts_breakdown.map(p => {
-                const barPct = Math.min(100, Math.round((p.total_out / maxPieces) * 100));
-                const isSelected = partType === p.part_name;
-                return `
-                    <div class="breakdown-item" style="cursor:pointer; padding:10px 14px; border-radius:10px; background:${isSelected ? 'var(--md-sys-color-primary-container)' : 'var(--md-sys-color-surface-container-low)'}; border:1px solid ${isSelected ? 'var(--md-sys-color-primary)' : 'var(--md-sys-color-outline-variant)'}; transition: all 0.15s ease;" onclick="filterSparePartsByType('${p.part_name}')" title="اضغط للتصفية وعرض حركات ${p.part_name}">
-                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:6px;">
-                            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-                                <strong style="font-size:13px; color:var(--md-sys-color-on-surface); font-weight:800;">${p.part_name}</strong>
-                                <span style="font-size:11px; color:var(--text-muted); font-family:var(--font-en); font-weight:600;">(${p.unit_price} جم)</span>
+            let list = data.parts_breakdown;
+            if (spFilterOnlyCritical) {
+                list = list.filter(p => p.stock_status === 'OUT_OF_STOCK' || p.stock_status === 'CRITICAL_LOW');
+            }
+            if (list.length === 0 && spFilterOnlyCritical) {
+                partsListEl.innerHTML = `<div style="padding:24px 16px; text-align:center; color:var(--text-muted); font-size:12px;"><i data-lucide="check-circle" style="width:24px; height:24px; color:#10b981; display:block; margin:0 auto 8px;"></i>🎉 لا توجد أصناف حرجة أو نواقص حالياً بالمخزن! جميع الأصناف بحالة جيدة.</div>`;
+            } else {
+                const maxPieces = Math.max(...list.map(p => Math.max(p.total_in, p.total_out)), 1);
+                partsListEl.innerHTML = list.map(p => {
+                    const barPct = Math.min(100, Math.round((p.total_out / maxPieces) * 100));
+                    const isSelected = partType === p.part_name;
+
+                    let statusBadge = `<span class="badge inmerchant" style="font-size:10px; font-family:var(--font-en); font-weight:700; white-space:nowrap;">${p.current_stock} بالمخزن</span>`;
+                    if (p.stock_status === 'OUT_OF_STOCK') {
+                        statusBadge = `<span class="badge faulty" style="font-size:10px; font-weight:700; white-space:nowrap; background:rgba(239,68,68,0.18); color:#ef4444; border:1px solid rgba(239,68,68,0.35);">نفد (0) ❌</span>`;
+                    } else if (p.stock_status === 'CRITICAL_LOW') {
+                        statusBadge = `<span class="badge" style="font-size:10px; font-weight:700; white-space:nowrap; background:rgba(245,158,11,0.18); color:#f59e0b; border:1px solid rgba(245,158,11,0.35);">حرج (${p.current_stock}) ⚠️</span>`;
+                    }
+
+                    const ledgerSnippet = !isAll ? `
+                        <div style="font-size:10px; color:var(--text-muted); font-family:var(--font-en); margin-top:3px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:4px;">
+                            <span>رصيد أول: <strong style="color:var(--text-primary);">${p.opening_balance}</strong> | وارد: <strong style="color:#10b981;">+${p.total_in}</strong></span>
+                            <span>منصرف: <strong style="color:#a855f7;">-${p.total_out}</strong> | رصيد آخر: <strong style="color:var(--md-sys-color-primary);">${p.closing_balance}</strong></span>
+                        </div>
+                    ` : '';
+
+                    return `
+                        <div class="breakdown-item" style="cursor:pointer; padding:10px 14px; border-radius:10px; background:${isSelected ? 'var(--md-sys-color-primary-container)' : 'var(--md-sys-color-surface-container-low)'}; border:1px solid ${isSelected ? 'var(--md-sys-color-primary)' : 'var(--md-sys-color-outline-variant)'}; transition: all 0.15s ease;" onclick="filterSparePartsByType('${p.part_name}')" title="اضغط للتصفية وعرض حركات ${p.part_name}">
+                            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:6px;">
+                                <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                                    <strong style="font-size:13px; color:var(--md-sys-color-on-surface); font-weight:800;">${p.part_name}</strong>
+                                    <span style="font-size:11px; color:var(--text-muted); font-family:var(--font-en); font-weight:600;">(${p.unit_price} جم)</span>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                    <span style="font-size:12px; font-weight:800; color:#10b981; font-family:var(--font-en); white-space:nowrap;">${Number(p.total_revenue).toLocaleString('ar-EG')} جم</span>
+                                    ${statusBadge}
+                                </div>
                             </div>
-                            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                                <span style="font-size:12px; font-weight:800; color:#10b981; font-family:var(--font-en); white-space:nowrap;">${Number(p.total_revenue).toLocaleString('ar-EG')} جم</span>
-                                <span class="badge ${p.current_stock > 0 ? 'inmerchant' : 'faulty'}" style="font-size:10px; font-family:var(--font-en); font-weight:700; white-space:nowrap;">${p.current_stock} بالمخزن</span>
+                            <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:var(--text-secondary); margin-bottom:4px; flex-wrap:wrap; gap:4px;">
+                                <span>منصرف: <strong style="font-family:var(--font-en); color:#a855f7; font-weight:700;">${p.total_out}</strong> قطعة (${p.paid_count} بمقابل / ${p.free_count} مجاني)</span>
+                                <span style="font-family:var(--font-en); font-size:11px; color:#0284c7;">قيمة الرصيد: <strong>${Number(p.stock_valuation || 0).toLocaleString('ar-EG')} جم</strong></span>
+                            </div>
+                            ${ledgerSnippet}
+                            <div style="height:5px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden; margin-top:6px;">
+                                <div style="width:${barPct}%; height:100%; border-radius:3px; background:linear-gradient(90deg, #38bdf8, #818cf8);"></div>
                             </div>
                         </div>
-                        <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:var(--text-secondary); margin-bottom:6px; flex-wrap:wrap; gap:4px;">
-                            <span>منصرف: <strong style="font-family:var(--font-en); color:#a855f7; font-weight:700;">${p.total_out}</strong> قطعة (${p.paid_count} بمقابل / ${p.free_count} مجاني)</span>
-                            <span style="font-family:var(--font-en); font-weight:700; color:var(--md-sys-color-primary);">${p.consumption_rate_pct}% استهلاك</span>
-                        </div>
-                        <div style="height:5px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden;">
-                            <div style="width:${barPct}%; height:100%; border-radius:3px; background:linear-gradient(90deg, #38bdf8, #818cf8);"></div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
+                    `;
+                }).join('');
+            }
         }
 
         // 3. Populate Part Type Dropdown
@@ -3189,6 +3232,65 @@ function filterSparePartsBySearch(term) {
     if (tableEl) tableEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 window.filterSparePartsBySearch = filterSparePartsBySearch;
+
+function filterSparePartsCritical() {
+    spFilterOnlyCritical = !spFilterOnlyCritical;
+    const cardEl = document.getElementById('sp-card-critical-alerts');
+    if (cardEl) {
+        if (spFilterOnlyCritical) {
+            cardEl.style.boxShadow = '0 0 0 2px #ef4444, var(--md-elevation-2)';
+            if (typeof SmartUI !== 'undefined' && SmartUI.Toast) {
+                SmartUI.Toast.show('تم تفعيل تصفية الأصناف الحرجة والنواقص فقط', 'warning', 2500);
+            }
+        } else {
+            cardEl.style.boxShadow = 'var(--md-elevation-1)';
+            if (typeof SmartUI !== 'undefined' && SmartUI.Toast) {
+                SmartUI.Toast.show('تم إلغاء تصفية الأصناف الحرجة', 'info', 2000);
+            }
+        }
+    }
+    loadSparePartsInventory();
+}
+window.filterSparePartsCritical = filterSparePartsCritical;
+
+async function recalculateSparePartsStock() {
+    const btn = document.getElementById('btn-recalculate-sp-stock');
+    const icon = document.getElementById('icon-sp-recalc');
+    if (btn) btn.disabled = true;
+    if (icon) icon.classList.add('spin-animation');
+
+    try {
+        if (typeof SmartUI !== 'undefined' && SmartUI.Toast) {
+            SmartUI.Toast.show('جاري إعادة احتساب جرد ورصيد قطع الغيار من واقع الحركات...', 'info', 2000);
+        }
+        const res = await fetch('/api/inventory/spare-parts/recalculate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const result = await res.json();
+        if (!res.ok || !result.success) {
+            throw new Error(result.error || 'فشلت عملية إعادة احتساب الرصيد');
+        }
+
+        if (typeof SmartUI !== 'undefined' && SmartUI.Toast) {
+            SmartUI.Toast.show(`تم بنجاح تحديث الرصيد (${result.total_stock_units} قطعة بقيمة ${Number(result.total_stock_valuation || 0).toLocaleString('ar-EG')} جم)`, 'success', 4000);
+        }
+
+        sparePartsDataCache = null;
+        await loadSparePartsInventory();
+    } catch (err) {
+        console.error('Recalculate spare parts error:', err);
+        if (typeof SmartUI !== 'undefined' && SmartUI.Toast) {
+            SmartUI.Toast.show(err.message, 'danger', 4000);
+        } else {
+            alert('خطأ أثناء إعادة الاحتساب: ' + err.message);
+        }
+    } finally {
+        if (btn) btn.disabled = false;
+        if (icon) icon.classList.remove('spin-animation');
+    }
+}
+window.recalculateSparePartsStock = recalculateSparePartsStock;
 
 function sortSparePartsTable(key) {
     if (SparePartsTableState.sortKey === key) {
@@ -4839,6 +4941,18 @@ function initLiveSyncStream() {
         };
 
         sse.addEventListener('sync_completed', (e) => handleSyncEvent(e.data));
+        sse.addEventListener('spare_parts_recalculated', (e) => {
+            try {
+                const data = JSON.parse(e.data);
+                sparePartsDataCache = null;
+                if (typeof SmartUI !== 'undefined' && SmartUI.Toast) {
+                    SmartUI.Toast.show(`⚡ تم تحديث رصيد قطع الغيار: ${data.totalUnits || 0} قطعة بقيمة ${Number(data.totalValuation || 0).toLocaleString('ar-EG')} جم`, 'info', 3500);
+                }
+                if (AppState.currentTab === 'spare-parts-inventory') {
+                    loadSparePartsInventory();
+                }
+            } catch (err) {}
+        });
         sse.addEventListener('app_updated', (e) => {
             try {
                 const data = JSON.parse(e.data);
