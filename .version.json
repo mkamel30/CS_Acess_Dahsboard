@@ -1,7 +1,7 @@
 {
-  "version": "5.1.0",
-  "commit": "spare-parts-dynamic-recalc",
-  "date": "2026-11-15 08:58",
-  "message": "feat(store_sp): dynamic on-demand recalculation, periodic ledger, and stock valuation alerts (T-27)",
+  "version": "5.1.1",
+  "commit": "sync-secret-durable-reseed",
+  "date": "2026-11-15 12:30",
+  "message": "fix(sync): restore syncSecret provisioning and read it fresh in cloud reseed; add safe dead-queue purge tool and post-VACUUM WAL checkpoint (T-28)",
   "branch": "main"
 }

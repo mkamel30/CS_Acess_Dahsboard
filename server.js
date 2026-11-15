@@ -6665,12 +6665,12 @@ app.post('/api/diagnostics/reseed-vps', requireAdmin, async (req, res) => {
         const jobId = `reseed_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
         if (req.query.sync === 'true') {
-            const result = await executeCloudReseed(config, SYNC_SECRET);
+            const result = await executeCloudReseed(config, config.syncSecret || SYNC_SECRET);
             return res.json(result);
         }
 
         // Return 202 Accepted immediately and execute in background
-        executeCloudReseed(config, SYNC_SECRET).catch(err => {
+        executeCloudReseed(config, config.syncSecret || SYNC_SECRET).catch(err => {
             logSystemError('RESEED_VPS', '/api/diagnostics/reseed-vps', err, req);
         });
 
