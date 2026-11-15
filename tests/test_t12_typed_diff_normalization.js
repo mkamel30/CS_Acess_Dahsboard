@@ -19,13 +19,16 @@ function createTempDb() {
 }
 
 test('T-12 / F-17: Typed equality preserves NULL and normalizes numbers, dates, and booleans', (t) => {
-    // 1. NULL preservation
+    // 1. Empty normalization: Access yields null for empty text while the replica stores '' (applyTableAndOutbox), so null/undefined/''/whitespace must compare equal to avoid phantom diffs every sync cycle.
     assert.equal(areValuesEqual(null, null), true, 'null === null');
     assert.equal(areValuesEqual(undefined, undefined), true, 'undefined === undefined');
     assert.equal(areValuesEqual(null, undefined), true, 'null === undefined');
-    assert.equal(areValuesEqual(null, ''), false, 'null !== empty string');
-    assert.equal(areValuesEqual('', null), false, 'empty string !== null');
+    assert.equal(areValuesEqual(null, ''), true, 'null === empty string (both empty)');
+    assert.equal(areValuesEqual('', null), true, 'empty string === null (both empty)');
+    assert.equal(areValuesEqual(' ', null), true, 'whitespace === null (both empty)');
     assert.equal(areValuesEqual(null, '0'), false, 'null !== 0 string');
+    assert.equal(areValuesEqual(null, 'Cairo'), false, 'null !== real value');
+    assert.equal(areValuesEqual('', 'Cairo'), false, 'empty !== real value');
 
     // 2. Numeric normalization (avoids false diffs across SQLite and Access)
     assert.equal(areValuesEqual(10, '10.0'), true, '10 === 10.0');

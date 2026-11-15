@@ -1050,9 +1050,9 @@ function getRowIdentifier(tableName, primaryKey, row) {
  * Canonical typed equality check preserving NULL, numbers, and dates (F-17)
  */
 function areValuesEqual(v1, v2) {
-    // 1. Both null or undefined
-    const isV1Null = v1 === null || v1 === undefined;
-    const isV2Null = v2 === null || v2 === undefined;
+    // 1. null/undefined/empty/whitespace are all "empty": Access yields null for empty text but the replica stores '' (applyTableAndOutbox), so comparing them unequal flags phantom diffs every sync cycle.
+    const isV1Null = v1 === null || v1 === undefined || String(v1).trim() === '';
+    const isV2Null = v2 === null || v2 === undefined || String(v2).trim() === '';
     if (isV1Null && isV2Null) return true;
     if (isV1Null !== isV2Null) return false;
 
