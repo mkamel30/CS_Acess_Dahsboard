@@ -305,6 +305,9 @@ const dbPath = path.join(__dirname, 'branch_database.db');
 const db = new sqlite3.Database(dbPath);
 db.run("PRAGMA journal_mode = WAL;");
 db.run("PRAGMA busy_timeout = 10000;");
+// Only takes effect on the pre-existing file after the first full VACUUM (scheduled weekly off-peak);
+// once converted, PRAGMA incremental_vacuum reclaims freed pages cheaply after each retention pass.
+db.run("PRAGMA auto_vacuum = INCREMENTAL;");
 db.run(`
     CREATE TABLE IF NOT EXISTS system_error_logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -6693,6 +6696,19 @@ app.post('/api/diagnostics/reseed-vps', requireAdmin, async (req, res) => {
     }
 });
 
+// On-demand data-retention / auto-debloat maintenance (same engine as the off-peak job).
+// Add ?vacuum=true for a one-off SQLite full VACUUM (heavy; use off-peak on Share).
+app.post('/api/diagnostics/maintenance', requireAdmin, async (req, res) => {
+    try {
+        const fullVacuum = req.query.vacuum === 'true' || (req.body && req.body.fullVacuum === true);
+        const report = await runDataRetentionAndVacuum({ fullVacuum });
+        res.json({ success: true, report });
+    } catch (err) {
+        logSystemError('MAINTENANCE', '/api/diagnostics/maintenance', err, req);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // Start Server (Listen on 0.0.0.0 for LAN / Network Sharing)
 
 // Global Express Centralized Error Handler
@@ -6741,6 +6757,87 @@ async function closeDatabasesGracefully(signal = 'SHUTDOWN') {
     }
 }
 
+// --- Durable data-retention / auto-debloat engine -------------------------
+// Age pruning uses a JS-computed 'YYYY-MM-DD HH:MM:SS' cutoff passed as a bound
+// parameter so the comparison is TEXT<TEXT on BOTH SQLite and Postgres. The
+// db_translator only special-cases the literal datetime('now','-90 days'); any
+// other window would be rewritten to a timestamptz that errors against these
+// TEXT columns and gets swallowed, so we must not rely on it here.
+const RETENTION_TABLES = {
+    audit_change_logs: { timeCol: 'timestamp' },
+    sync_history: { timeCol: 'sync_time' },
+    system_error_logs: { timeCol: 'timestamp' },
+    delta_outbox_dlq: { timeCol: 'archived_at' },
+};
+const RETENTION_DEFAULTS = {
+    auditDays: 30, auditMaxRows: 50000,
+    syncHistoryDays: 30, syncHistoryMaxRows: 5000,
+    errorLogDays: 30, errorLogMaxRows: 5000,
+    dlqDays: 30, dlqMaxRows: 3000,
+};
+
+function _pad2(n) { return String(n).padStart(2, '0'); }
+function _cutoffText(days) {
+    const d = new Date(Date.now() - Math.max(0, Number(days) || 0) * 864e5);
+    return `${d.getUTCFullYear()}-${_pad2(d.getUTCMonth() + 1)}-${_pad2(d.getUTCDate())} ${_pad2(d.getUTCHours())}:${_pad2(d.getUTCMinutes())}:${_pad2(d.getUTCSeconds())}`;
+}
+
+async function _pruneByAge(table, timeCol, days) {
+    if (!RETENTION_TABLES[table] || RETENTION_TABLES[table].timeCol !== timeCol) return 0; // guard col allowlist
+    try {
+        const res = await runQuery(`DELETE FROM ${table} WHERE ${timeCol} < ?`, [_cutoffText(days)]);
+        return (res && res.changes) || 0;
+    } catch (e) { return 0; }
+}
+
+async function _pruneByCap(table, maxRows) {
+    if (!RETENTION_TABLES[table]) return 0;
+    try {
+        const cap = Number(maxRows) || 0;
+        if (cap <= 0) return 0;
+        const row = await getQuery(`SELECT MAX(id) AS m FROM ${table}`);
+        const m = row ? Number(row.m) : 0;
+        if (!m || m <= cap) return 0;
+        const res = await runQuery(`DELETE FROM ${table} WHERE id <= ?`, [m - cap]);
+        return (res && res.changes) || 0;
+    } catch (e) { return 0; }
+}
+
+async function _reclaimSpace(fullVacuum) {
+    const reclaimed = [];
+    if (appCfg.isCloudServer) {
+        // VACUUM must run outside a transaction; runQuery issues each as its own autocommit statement.
+        for (const t of Object.keys(RETENTION_TABLES)) {
+            try { await runQuery(`VACUUM (ANALYZE) ${t}`); reclaimed.push(t); } catch (e) {}
+        }
+    } else {
+        try { await runQuery('PRAGMA incremental_vacuum'); reclaimed.push('incremental'); } catch (e) {}
+        if (fullVacuum) {
+            try { await runQuery('PRAGMA auto_vacuum = INCREMENTAL'); await runQuery('VACUUM'); reclaimed.push('full-vacuum'); } catch (e) {}
+        }
+    }
+    return reclaimed;
+}
+
+async function runDataRetentionAndVacuum(opts = {}) {
+    const fullVacuum = !!opts.fullVacuum;
+    const cfg = Object.assign({}, RETENTION_DEFAULTS, (appCfg && appCfg.retention) || {});
+    const deleted = {
+        audit_age: await _pruneByAge('audit_change_logs', 'timestamp', cfg.auditDays),
+        audit_cap: await _pruneByCap('audit_change_logs', cfg.auditMaxRows),
+        sync_history_age: await _pruneByAge('sync_history', 'sync_time', cfg.syncHistoryDays),
+        sync_history_cap: await _pruneByCap('sync_history', cfg.syncHistoryMaxRows),
+        error_logs_age: await _pruneByAge('system_error_logs', 'timestamp', cfg.errorLogDays),
+        error_logs_cap: await _pruneByCap('system_error_logs', cfg.errorLogMaxRows),
+        dlq_age: await _pruneByAge('delta_outbox_dlq', 'archived_at', cfg.dlqDays),
+        dlq_cap: await _pruneByCap('delta_outbox_dlq', cfg.dlqMaxRows),
+    };
+    const reclaimed = await _reclaimSpace(fullVacuum);
+    const report = { ts: new Date().toISOString(), isCloudServer: !!appCfg.isCloudServer, fullVacuum, cfg, deleted, reclaimed };
+    console.log(`[DATA-RETENTION] ${report.isCloudServer ? 'VPS/Postgres' : 'Share/SQLite'} purged ${JSON.stringify(deleted)} | reclaimed ${JSON.stringify(reclaimed)}`);
+    return report;
+}
+
 if (require.main === module) {
     process.once('SIGINT', async () => {
         await closeDatabasesGracefully('SIGINT');
@@ -6772,17 +6869,16 @@ if (require.main === module) {
             const now = new Date();
             const currentHour = now.getUTCHours(); // 01:00 UTC corresponds to 03:00 Cairo
             const dateStr = now.toISOString().split('T')[0];
-            
+
             if (currentHour === 1 && lastOffPeakReconcileDay !== dateStr) {
                 lastOffPeakReconcileDay = dateStr;
                 console.log(`[OFF-PEAK MAINTENANCE] Starting scheduled off-peak domain reconciliation for ${dateStr}...`);
                 if (syncEngine && typeof syncEngine.syncHighLevelDomainEntities === 'function') {
                     await syncEngine.syncHighLevelDomainEntities(db).catch(e => console.error('[OFF-PEAK REBUILD ERROR]', e.message));
                 }
-                console.log('[OFF-PEAK MAINTENANCE] Cleaning up logs older than 90 days...');
-                await runQuery(`DELETE FROM audit_change_logs WHERE timestamp < datetime('now', '-90 days')`).catch(() => {});
-                await runQuery(`DELETE FROM sync_history WHERE sync_time < datetime('now', '-90 days')`).catch(() => {});
-                await runQuery(`DELETE FROM system_error_logs WHERE timestamp < datetime('now', '-90 days')`).catch(() => {});
+                // Weekly (Sunday) full VACUUM on SQLite reclaims/defrags; daily runs use incremental vacuum.
+                const fullVacuum = now.getUTCDay() === 0 && !appCfg.isCloudServer;
+                await runDataRetentionAndVacuum({ fullVacuum });
                 console.log('[OFF-PEAK MAINTENANCE] Completed successfully.');
             }
         } catch (e) {
