@@ -1,7 +1,7 @@
 {
-  "version": "5.1.4",
-  "commit": "checksum-canonical-column-projection",
-  "date": "2026-11-16 08:20",
-  "message": "fix(reconciliation): hash raw tables over Share's canonical column projection on both engines, so replica-only columns (Postgres serial PKs + orphan all-NULL columns from historical Access field renames) no longer cause permanent CONTENT_MISMATCH despite identical data and matching counts (T-31)",
+  "version": "5.1.5-stable",
+  "commit": "sse-noop-broadcast-gate",
+  "date": "2026-11-16 10:55",
+  "message": "perf(sse): gate sync_completed (Share file-watcher/heartbeat) and cloud_delta_applied (VPS delta) broadcasts on actual changes>0 so no-op syncs stop forcing every browser to drop caches and reload its active tab; reset-database broadcast preserved (T-32)",
   "branch": "main"
 }

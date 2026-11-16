@@ -1002,6 +1002,11 @@ function broadcastSseEvent(eventType, data) {
 
 // Hook sync completion to SSE broadcast
 syncEngine.setOnSyncCompleteCallback((result) => {
+    // Gate live-client refresh on actual row-level changes. Heartbeat (10m) and mtime-touch (20s)
+    // syncs that find 0 changes must NOT force every browser to drop all caches and reload its
+    // active tab (the "SSE refresh spam"). The DB is identical, so there is nothing to re-pull.
+    const changed = (result && (result.changesDetected || 0)) > 0;
+    if (!changed) return;
     broadcastSseEvent('sync_completed', {
         type: 'sync_completed',
         changesDetected: result.changesDetected || 0,
@@ -5806,12 +5811,16 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
 
     // Phase 3: Post-commit telemetry, notifications, and response
     try {
-        broadcastSseEvent('sync_completed', {
-            type: 'cloud_delta_applied',
-            changesCount: appliedCount,
-            batchId: batchId || null,
-            timestamp: new Date().toISOString()
-        });
+        // Only notify cloud clients when this batch actually changed rows; a 0-change delta poll
+        // should not make every VPS browser tab refresh (matches the Share-side no-op gate).
+        if ((appliedCount || 0) > 0) {
+            broadcastSseEvent('sync_completed', {
+                type: 'cloud_delta_applied',
+                changesCount: appliedCount,
+                batchId: batchId || null,
+                timestamp: new Date().toISOString()
+            });
+        }
 
         // Log to sync_history for cloud telemetry
         await runQuery(`
