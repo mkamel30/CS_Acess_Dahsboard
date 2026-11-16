@@ -1,6 +1,6 @@
 {
   "name": "smartcs-operations",
-  "version": "5.1.1",
+  "version": "5.1.2",
   "description": "SmartCS Central Operations & Multi-Device Auto-Update Engine",
   "main": "server.js",
   "scripts": {

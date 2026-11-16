@@ -94,20 +94,24 @@ const FALLBACK_LOCAL_ACCESS_PATH = 'h:\\Programming\\Br_DB\\BE\\Bread_Final_be.a
 const VBS_EXPORTER_PATH = path.join(__dirname, 'export_accdb_tables.vbs');
 
 function readConfigSafely(forceReload = false) {
-    if (!forceReload && _cachedConfig) {
-        return _cachedConfig;
-    }
-    let cfg = {};
     try {
         if (fs.existsSync(CONFIG_FILE_PATH)) {
             const stat = fs.statSync(CONFIG_FILE_PATH);
             if (!forceReload && _cachedConfig && _cachedConfigMtime === stat.mtimeMs) {
                 return _cachedConfig;
             }
-            cfg = JSON.parse(fs.readFileSync(CONFIG_FILE_PATH, 'utf8')) || {};
+            const cfg = JSON.parse(fs.readFileSync(CONFIG_FILE_PATH, 'utf8')) || {};
+            if (process.platform === 'linux' || process.env.IS_CLOUD_SERVER === 'true') {
+                cfg.isCloudServer = true;
+                cfg.usePostgres = true;
+            }
+            _cachedConfig = cfg;
             _cachedConfigMtime = stat.mtimeMs;
+            return _cachedConfig;
         }
     } catch (e) {}
+    if (_cachedConfig) return _cachedConfig;
+    const cfg = {};
     if (process.platform === 'linux' || process.env.IS_CLOUD_SERVER === 'true') {
         cfg.isCloudServer = true;
         cfg.usePostgres = true;
@@ -2240,7 +2244,7 @@ async function pushDeltaToCloud(db, deltaChanges) {
     try {
         const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
         const timeoutSignal = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) 
-            ? AbortSignal.timeout(15000) 
+            ? AbortSignal.timeout(60000) 
             : undefined;
         const response = await fetchFn(cloudEndpoint, {
             method: 'POST',
@@ -2406,7 +2410,7 @@ async function flushDeltaOutbox(db) {
 
                 const changes = JSON.parse(item.payload);
                 const timeoutSignal = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) 
-                    ? AbortSignal.timeout(15000) 
+                    ? AbortSignal.timeout(60000) 
                     : undefined;
                 const response = await fetchFn(cloudEndpoint, {
                     method: 'POST',

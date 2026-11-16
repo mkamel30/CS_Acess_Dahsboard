@@ -1,7 +1,7 @@
 {
-  "version": "5.1.1",
-  "commit": "sync-secret-durable-reseed",
-  "date": "2026-11-15 12:30",
-  "message": "fix(sync): restore syncSecret provisioning and read it fresh in cloud reseed; add safe dead-queue purge tool and post-VACUUM WAL checkpoint (T-28)",
+  "version": "5.1.2",
+  "commit": "config-cache-mtime-sync-timeouts",
+  "date": "2026-11-16 07:00",
+  "message": "fix(sync): mtime-aware config cache so edits apply without restart; raise delta/reseed AbortSignal timeouts (60s/90s) to survive bloated-DB event-loop lag and complete VPS reconciliation (T-29)",
   "branch": "main"
 }

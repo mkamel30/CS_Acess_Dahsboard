@@ -21,10 +21,10 @@ test('T-14 / F-15: Static contract inspection for async 202 jobs, AbortSignal ti
         'app.post(/api/diagnostics/reseed-vps) must return HTTP 202 with status_url'
     );
 
-    // 3. AbortSignal timeouts used in reseed fetch calls
+    // 3. AbortSignal timeouts used in reseed fetch calls (90s, under the ~100s proxy ceiling)
     assert.match(
         serverSource,
-        /AbortSignal\.timeout\(30000\)/,
+        /AbortSignal\.timeout\(90000\)/,
         'Reseed outgoing fetch calls must specify AbortSignal timeout to prevent proxy-ceiling hangs'
     );
 

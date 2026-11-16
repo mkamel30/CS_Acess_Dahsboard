@@ -147,18 +147,24 @@ let _serverConfigCache = null;
 let _serverConfigMtime = 0;
 
 function readAppConfig(forceReload = false) {
-    if (!forceReload && _serverConfigCache) return _serverConfigCache;
-    let cfg = {};
     try {
         if (fs.existsSync(CONFIG_FILE)) {
             const stat = fs.statSync(CONFIG_FILE);
             if (!forceReload && _serverConfigCache && _serverConfigMtime === stat.mtimeMs) {
                 return _serverConfigCache;
             }
-            cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) || {};
+            const cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')) || {};
+            if (process.platform === 'linux' || process.env.IS_CLOUD_SERVER === 'true') {
+                cfg.isCloudServer = true;
+                cfg.usePostgres = true;
+            }
+            _serverConfigCache = cfg;
             _serverConfigMtime = stat.mtimeMs;
+            return _serverConfigCache;
         }
     } catch (e) {}
+    if (_serverConfigCache) return _serverConfigCache;
+    const cfg = {};
     if (process.platform === 'linux' || process.env.IS_CLOUD_SERVER === 'true') {
         cfg.isCloudServer = true;
         cfg.usePostgres = true;
@@ -6561,7 +6567,7 @@ async function executeCloudReseed(config, SYNC_SECRET) {
                 });
 
                 const timeoutSignal = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout)
-                    ? AbortSignal.timeout(30000)
+                    ? AbortSignal.timeout(90000)
                     : undefined;
 
                 const cloudResp = await fetchFn(cloudUrl, {
@@ -6607,7 +6613,7 @@ async function executeCloudReseed(config, SYNC_SECRET) {
         });
 
         const rebuildTimeout = (typeof AbortSignal !== 'undefined' && AbortSignal.timeout)
-            ? AbortSignal.timeout(45000)
+            ? AbortSignal.timeout(90000)
             : undefined;
 
         await fetchFn(cloudUrl, {
