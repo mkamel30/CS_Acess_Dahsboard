@@ -63,13 +63,19 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Block access to database files, environment configs and source scripts
 app.use((req, res, next) => {
-    const p = (req.path || '').toLowerCase();
-    if (
-        p.endsWith('.db') || p.endsWith('.sqlite') || p.includes('.env') ||
-        p.endsWith('.vbs') || p.endsWith('.bat') || p.endsWith('.ps1') ||
-        p.endsWith('config.json') || p.endsWith('package.json') || p.endsWith('package-lock.json') ||
-        p.endsWith('server.js') || p.endsWith('sync_engine.js') || p.endsWith('db_translator.js')
-    ) {
+    // CRITICAL: express.static decodes the path, so the block list must inspect the DECODED form too
+    // (e.g. /branch_database%2Ed%62 -> /branch_database.db) and cover WAL/SHM sidecar files.
+    let decoded = req.path || '';
+    try { decoded = decodeURIComponent(decoded); } catch (e) { decoded = req.path || ''; }
+    const candidates = [(req.path || ''), decoded]
+        .map(x => String(x).toLowerCase().split('?')[0].split('#')[0]);
+    const SENSITIVE = [
+        /\.db$/, /\.db-(wal|shm|journal|hot-journal)$/, /\.sqlite(\d+)?$/,
+        /\.env/, /(^|\/)config\.json$/, /(^|\/)package(-lock)?\.json$/, /(^|\/)\.version\.json$/,
+        /(^|\/)server\.js$/, /(^|\/)sync_engine\.js$/, /(^|\/)db_translator\.js$/,
+        /\.(key|pem|crt|p12|pfx)$/, /\.(bat|cmd|ps1|vbs)$/, /(^|\/)\.git\//
+    ];
+    if (candidates.some(p => SENSITIVE.some(re => re.test(p)))) {
         return res.status(403).json({ success: false, error: 'Access denied: sensitive resource' });
     }
     next();
@@ -6754,6 +6760,14 @@ app.use((err, req, res, next) => {
     
     if (isMalformedJsonBot || isExternalBotPath) {
         if (!res.headersSent) res.status(err.status || 400).send('Bad Request');
+        return;
+    }
+
+    // Client errors (4xx: bad request, unsupported encoding, unsatisfiable range, truncated
+    // upload) are NOT server faults — answer with the status and keep them out of the blackbox.
+    const clientStatus = err.status || err.statusCode || (err.name === 'RangeError' ? 416 : 0);
+    if (clientStatus >= 400 && clientStatus < 500) {
+        if (!res.headersSent) res.status(clientStatus).json({ success: false, error: err.message || 'Bad Request' });
         return;
     }
 

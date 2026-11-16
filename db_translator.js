@@ -11,6 +11,13 @@ function translateSqliteToPostgres(sql, params) {
     if (pragmaMatch) {
         pgSql = `SELECT column_name as name FROM information_schema.columns WHERE table_name = '${pragmaMatch[2]}'`;
     }
+
+    // SQLite table-valued function form: ... FROM pragma_table_info('table') ...
+    // (used by AI-generated introspection queries; must map to information_schema on PostgreSQL)
+    pgSql = pgSql.replace(/\bpragma_table_info\(\s*'([^']*)'\s*\)/gi,
+        "(SELECT (ordinal_position - 1) AS cid, column_name AS name, data_type AS type, " +
+        "(CASE WHEN is_nullable = 'NO' THEN 1 ELSE 0 END) AS notnull, column_default AS dflt_value " +
+        "FROM information_schema.columns WHERE table_name = '$1')");
     
     // INSERT OR REPLACE INTO tblinstallments
     if (pgSql.match(/INSERT OR REPLACE INTO tblinstallments/i)) {

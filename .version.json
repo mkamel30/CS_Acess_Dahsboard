@@ -1,7 +1,7 @@
 {
-  "version": "5.1.5-stable",
-  "commit": "sse-noop-broadcast-gate",
-  "date": "2026-11-16 10:55",
-  "message": "perf(sse): gate sync_completed (Share file-watcher/heartbeat) and cloud_delta_applied (VPS delta) broadcasts on actual changes>0 so no-op syncs stop forcing every browser to drop caches and reload its active tab; reset-database broadcast preserved (T-32)",
+  "version": "5.1.6-stable",
+  "commit": "static-server-hardening",
+  "date": "2026-11-16 11:45",
+  "message": "fix(security): block decoded/encoded sensitive static paths (%2E bypass, .db-wal/.db-shm/.sqlite3) and stop logging client 4xx (416/415/400) as ERROR; translate SQLite pragma_table_info('t') TVF to information_schema for Postgres (T-33)",
   "branch": "main"
 }
