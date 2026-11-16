@@ -1,7 +1,7 @@
 {
-  "version": "5.1.3",
-  "commit": "durable-auto-debloat-retention-vacuum",
-  "date": "2026-11-16 08:00",
-  "message": "feat(maintenance): durable auto-debloat - cross-dialect retention (JS text-cutoff prune fixes silent Postgres no-op), id row caps for audit/sync_history/error_logs, DLQ age+cap retention (was none), SQLite incremental_vacuum+weekly VACUUM, Postgres VACUUM ANALYZE, on-demand POST /api/diagnostics/maintenance (T-30)",
+  "version": "5.1.4",
+  "commit": "checksum-canonical-column-projection",
+  "date": "2026-11-16 08:20",
+  "message": "fix(reconciliation): hash raw tables over Share's canonical column projection on both engines, so replica-only columns (Postgres serial PKs + orphan all-NULL columns from historical Access field renames) no longer cause permanent CONTENT_MISMATCH despite identical data and matching counts (T-31)",
   "branch": "main"
 }

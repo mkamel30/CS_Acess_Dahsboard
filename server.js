@@ -6070,8 +6070,13 @@ app.post('/api/diagnostics/sync-table', requireAdmin, async (req, res) => {
     }
 });
 
-// Compute deterministic content checksum for a table to detect row-level divergence (F-01, F-02)
-async function computeTableChecksum(table, pk) {
+// Compute deterministic content checksum for a table to detect row-level divergence (F-01, F-02).
+// canonicalCols: optional explicit column list (the source-of-truth schema). When supplied, BOTH
+// engines hash exactly those columns in that order. This neutralizes replica-only columns
+// (Postgres serial PKs like `id`/`ID` and orphan all-NULL columns from historical Access field
+// renames) that make `SELECT *` diverge across SQLite/Postgres even when the business data is
+// identical — the chronic "counts match but content mismatches" false alarm.
+async function computeTableChecksum(table, pk, canonicalCols) {
     try {
         if (!isValidSqlIdentifier(table)) return null;
         const pkCol = pk && isValidSqlIdentifier(pk) ? `"${pk.replace(/"/g, '""')}"` : null;
@@ -6081,20 +6086,28 @@ async function computeTableChecksum(table, pk) {
         } else if (!appCfg.isCloudServer) {
             orderClause = 'ORDER BY rowid';
         }
-        const sql = `SELECT * FROM "${table}" ${orderClause} LIMIT 10000`;
+
+        let cols = null;
+        if (Array.isArray(canonicalCols) && canonicalCols.length) {
+            cols = canonicalCols.filter(c => isValidSqlIdentifier(c));
+            if (!cols.length) cols = null;
+        }
+
+        const sql = cols
+            ? `SELECT ${cols.map(c => `"${c.replace(/"/g, '""')}"`).join(', ')} FROM "${table}" ${orderClause} LIMIT 10000`
+            : `SELECT * FROM "${table}" ${orderClause} LIMIT 10000`;
         const rows = await allQuery(sql);
         if (!rows || rows.length === 0) return 'empty';
 
+        const norm = (val) => {
+            if (val === null || val === undefined) return '';
+            if (typeof val === 'number') return String(val);
+            if (val instanceof Date) return val.toISOString();
+            return String(val).trim();
+        };
         const hash = crypto.createHash('sha256');
         for (const r of rows) {
-            const sortedKeys = Object.keys(r).sort();
-            const rowArr = sortedKeys.map(k => {
-                const val = r[k];
-                if (val === null || val === undefined) return '';
-                if (typeof val === 'number') return String(val);
-                if (val instanceof Date) return val.toISOString();
-                return String(val).trim();
-            });
+            const rowArr = (cols || Object.keys(r).sort()).map(k => norm(r[k]));
             hash.update(JSON.stringify(rowArr));
         }
         return hash.digest('hex').slice(0, 16);
@@ -6106,6 +6119,10 @@ async function computeTableChecksum(table, pk) {
 // 4. Get Table Counts and Checksums on Current Node (F-01, F-02)
 app.get('/api/diagnostics/table-counts', async (req, res) => {
     try {
+        let colMap = null;
+        if (req.query.cols) {
+            try { colMap = JSON.parse(req.query.cols); } catch (e) { colMap = null; }
+        }
         const counts = {};
         const checksums = {};
         for (const item of CORE_RECONCILIATION_TABLES) {
@@ -6117,7 +6134,7 @@ app.get('/api/diagnostics/table-counts', async (req, res) => {
             }
             try {
                 const pk = RAW_TABLE_PK_MAP[item.table] || null;
-                checksums[item.table] = await computeTableChecksum(item.table, pk);
+                checksums[item.table] = await computeTableChecksum(item.table, pk, colMap && colMap[item.table]);
             } catch (e) {
                 checksums[item.table] = null;
             }
@@ -6132,9 +6149,10 @@ app.get('/api/diagnostics/table-counts', async (req, res) => {
 // 5. Database Reconciliation Matrix (Local vs Cloud VPS) with Checksum Reconciliation (F-01, F-02)
 app.get('/api/diagnostics/reconciliation', async (req, res) => {
     try {
-        // 1. Gather Local Counts and Checksums
+        // 1. Gather Local Counts and Checksums (over Share's canonical column set)
         const localCounts = {};
         const localChecksums = {};
+        const localCols = {};
         for (const item of CORE_RECONCILIATION_TABLES) {
             try {
                 const r = await getQuery(`SELECT COUNT(*) as c FROM "${item.table}"`);
@@ -6143,8 +6161,14 @@ app.get('/api/diagnostics/reconciliation', async (req, res) => {
                 localCounts[item.table] = 0;
             }
             try {
+                const info = await allQuery(`PRAGMA table_info("${item.table}")`);
+                localCols[item.table] = (info || []).map(c => c.name);
+            } catch (e) {
+                localCols[item.table] = null;
+            }
+            try {
                 const pk = RAW_TABLE_PK_MAP[item.table] || null;
-                localChecksums[item.table] = await computeTableChecksum(item.table, pk);
+                localChecksums[item.table] = await computeTableChecksum(item.table, pk, localCols[item.table]);
             } catch (e) {
                 localChecksums[item.table] = null;
             }
@@ -6158,7 +6182,8 @@ app.get('/api/diagnostics/reconciliation', async (req, res) => {
 
         // 2. Fetch Cloud VPS Counts & Checksums if on local server
         if (!isCloud) {
-            const cloudUrl = (config.cloudEndpoint || 'https://smartcs.m-kamel.workers.dev/api/sync/delta').replace(/\/api\/sync\/delta.*$/, '/api/diagnostics/table-counts');
+            const cloudUrl = (config.cloudEndpoint || 'https://smartcs.m-kamel.workers.dev/api/sync/delta').replace(/\/api\/sync\/delta.*$/, '/api/diagnostics/table-counts')
+                + '?cols=' + encodeURIComponent(JSON.stringify(localCols));
             const fetchFn = typeof fetch !== 'undefined' ? fetch : require('node-fetch');
             try {
                 const cloudResp = await fetchFn(cloudUrl, {
