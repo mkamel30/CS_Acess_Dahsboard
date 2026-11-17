@@ -290,6 +290,38 @@ Your task is to translate user questions written in Arabic (Egyptian dialect or 
     return prompt;
 }
 
+// Compact schema prompt used ONLY as a fallback when the full prompt exceeds the
+// provider's per-request token budget (Groq HTTP 413 "Request too large ... TPM").
+// It keeps the essential table/column map, the date rule and the output contract,
+// but drops the verbose business-rule prose, verified-training and custom knowledge.
+function buildSystemPromptLite() {
+    const dates = getFormattedSystemDates();
+    return `You are an elite SQLite/BI analyst for SmartCS (Egypt Smart Cards & POS Bakery system). Translate Arabic questions into read-only SQLite SELECT queries.
+
+DATES (TEXT): Access-mirror _raw tables use '${dates.accessDate}' (e.g. '17-Sep-26'); system tables (tickets, temp_transfer, sync_history) use ISO '${dates.isoDate}'. NEVER DATE(col)=DATE('now'). For "today" use: ("col" LIKE '%${dates.accessDate}%' OR "col" LIKE '%${dates.isoDate}%'). For "this month" use LIKE '%${dates.accessMonth}%' OR '%${dates.isoMonth}%'.
+
+TABLES (key cols):
+- assets_raw: ID, POS(=machine serial), POSID(=terminal id), bkcode(=merchant code), Model, Manufacturer, Condition(always '(2) Good' - ignore), SupplyOffice, Address, Contact_person, telephone_1/2, Cell_Serial, PinpadSerial, UPS.
+- maintenance_raw: ID, "Unit Serial", Model, "Checked Out To"(tech, often empty->COALESCE w/ Procedure), "Checked Out Date", "Checked In Date", Notes(PRIMARY FAULT desc), Procedure, "Checked In Condition".
+- transactions_raw (branch visits/repairs): GrocerName(=merchant CODE, matches bkcode), POSN(machine serial), Place, ActionType, IssueDate, ActionDate(maybe empty->COALESCE w/ IssueDate), NoteG(faulty part), NoteD(action), Procedure(tech), FeesAmount, Fees/Paid.
+- payments_raw: payment_amount, payment_date, payer, payment_reason, payment_place, ref_num, pos_number.
+- store_pos_raw: Serial, Model, faulty('True'/'False'), pos_status(mostly empty).
+- store_sp_raw (BRANCH spare parts): type(part name), notes(=machine serial), Serial, count_out(ALWAYS '0' ignore), count_in(NEGATIVE=consumed; consumed=-SUM(count_in<0)), out_date, in_date.
+- store_sp_maintenance_raw (HQ spare parts): type, Model, count_out, out_date, formNo.
+- store_sim_raw: sim_serial, network(empty; carrier in sim_type), faulty, sim_type.
+- installments_raw: pos(=assets.POS), installments, unitprice, monthlyinstallmentprice, finalunitprice.
+- temp_transfer_raw: POSCode, OldPOS, NewPOS, Transfer_Date, bkCode.
+- failure_points_raw (price list): type, model(LIKE not =), fees('$'paid/'F'free), price.
+- tblfaults_raw: faultid, FaultName. tblfixes_raw: FixID, FaultID, FixName. tblstaff_raw: name, jtitle.
+- merchants(merchant_code,name,type,address,government,contact_phone); devices(serial,manufacturer,model,status,faulty_details); merchant_assets(merchant_code,device_id,sim_card_id,assigned_date); tickets(id,merchant_code,device_id,status,issue_details,technician_name,issue_date,close_date,hq_debt).
+
+JOINS: assets_raw.POS=maintenance_raw."Unit Serial"; maintenance_raw.FormNo=store_sp_maintenance_raw.formNo; assets_raw.POS=installments_raw.pos; store_sp_raw.notes=transactions_raw.POSN; store_sp_raw.type=failure_points_raw.type.
+
+BRANCH vs HQ parts: branch=store_sp_raw (notes=serial, type=name, sum NEGATIVE count_in); HQ=store_sp_maintenance_raw (count_out, formNo).
+
+OUTPUT: ONLY a raw JSON object (no markdown): {"sql":"SELECT ...","explanation":"شرح عربي موجز","suggested_title":"عنوان قصير"}. Quote spaced columns with double quotes. Append LIMIT 100 unless aggregate/smaller limit. Read-only SELECT only; never INSERT/UPDATE/DELETE/DROP/ALTER/CREATE/REPLACE/PRAGMA/ATTACH/VACUUM.`;
+}
+
 // -------------------------------------------------------------
 // 2. Strict SQL Safety Sandbox
 // -------------------------------------------------------------
@@ -335,7 +367,7 @@ function validateSqlSafety(sql) {
 }
 
 // -------------------------------------------------------------
-async function callLlmApi(prompt, question, modelOverride, apiKeyOverride) {
+async function callLlmApi(prompt, question, modelOverride, apiKeyOverride, isLitePrompt = false) {
     const config = readConfigSafely();
     let targetModel = modelOverride || config.openRouterModel || '';
     let provider = 'openrouter';
@@ -470,11 +502,23 @@ async function callLlmApi(prompt, question, modelOverride, apiKeyOverride) {
             // Resilient Rate-Limit Fallback Chain for Groq
             if (response.status === 429 && provider === 'groq' && model === 'openai/gpt-oss-120b') {
                 console.warn('[AI COPILOT] Groq 120B rate limit reached. Auto-falling back to ultra-fast 20B model ⚡');
-                return await callLlmApi(prompt, question, 'openai/gpt-oss-20b', apiKeyOverride);
+                return await callLlmApi(prompt, question, 'openai/gpt-oss-20b', apiKeyOverride, isLitePrompt);
             }
             if (response.status === 429 && provider === 'groq' && model === 'openai/gpt-oss-20b') {
                 console.warn('[AI COPILOT] Groq 20B rate limit reached. Auto-falling back to Qwen 3.8 model ⚡');
-                return await callLlmApi(prompt, question, 'qwen/qwen3.8-27b', apiKeyOverride);
+                return await callLlmApi(prompt, question, 'qwen/qwen3.8-27b', apiKeyOverride, isLitePrompt);
+            }
+
+            // Groq HTTP 413 "Request too large ... tokens per minute (TPM)": the prompt itself
+            // exceeds the model's per-request budget. Retry ONCE with the compacted schema prompt
+            // (drops verbose rules/training/custom-knowledge) so small free-tier models still answer.
+            const isTooLarge = response.status === 413 || /Request too large|tokens per minute|reduce your message size/i.test(errText);
+            if (provider === 'groq' && isTooLarge && !isLitePrompt) {
+                console.warn('[AI COPILOT] Groq prompt exceeded TPM budget (413). Retrying with compacted schema prompt...');
+                return await callLlmApi(buildSystemPromptLite(), question, model, apiKeyOverride, true);
+            }
+            if (provider === 'groq' && isTooLarge) {
+                throw new Error('خطأ من خادم Groq (413): حتى الطلب المختصر تجاوز حدّ الرموز للدقيقة (TPM) على هذه الخطة. اختصر سؤالك أكثر، أو استخدم موديل `openai/gpt-oss-120b`، أو قم بالترقية إلى خطة Dev Tier من console.groq.com.');
             }
 
             // Friendly DeepSeek Insufficient Balance handling
