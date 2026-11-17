@@ -1,7 +1,7 @@
 {
-  "version": "5.1.7-stable",
-  "commit": "ai-413-lite-retry",
-  "date": "2026-11-17 09:57",
-  "message": "fix(ai): survive Groq HTTP 413 (TPM request-too-large) by retrying once with a compacted schema prompt (buildSystemPromptLite); preserve lite flag across the 429 model-fallback chain; friendly 413 message when even lite is rejected (T-34)",
+  "version": "5.1.8-stable",
+  "commit": "delta-id-collision-guard",
+  "date": "2026-11-17 10:26",
+  "message": "fix(sync): stop delta from adopting the source's volatile surrogate id when a row is keyed by sync_key (prevents VPS PRIMARY KEY(id) collision -> HTTP 422 poison -> DLQ -> content drift); exclude id from reconciliation checksum projection for sync_key tables (T-35)",
   "branch": "main"
 }

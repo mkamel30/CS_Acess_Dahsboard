@@ -5685,15 +5685,24 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
                 if (Array.isArray(rows) && rows.length > 0) {
                     const escTbl = escapeSqlIdentifier(tbl);
                     for (const row of rows) {
-                        const rowKeys = Object.keys(row).filter(k => isValidSqlIdentifier(k));
-                        if (rowKeys.length === 0) continue;
+                        const rawRowKeys = Object.keys(row).filter(k => isValidSqlIdentifier(k));
+                        if (rawRowKeys.length === 0) continue;
+                        let matchedPk = null;
+                        if (appCfg.isCloudServer) matchedPk = await getPgValidConstraintCol(tbl, rawRowKeys);
+                        // Keyed by a stable natural key (sync_key): do NOT adopt the source's volatile
+                        // auto-sequence `id`, which can collide with a DIFFERENT row's PRIMARY KEY(id)
+                        // on the replica and poison the batch (HTTP 422 -> DLQ). Let VPS keep its own id.
+                        let rowKeys = rawRowKeys;
+                        if (appCfg.isCloudServer && matchedPk && matchedPk.toLowerCase() !== 'id'
+                            && rawRowKeys.some(k => k.toLowerCase() === 'id')) {
+                            rowKeys = rawRowKeys.filter(k => k.toLowerCase() !== 'id');
+                        }
                         const placeholders = rowKeys.map(() => '?').join(', ');
                         const quotedCols = rowKeys.map(k => escapeSqlIdentifier(k)).join(', ');
                         const rowValues = rowKeys.map(k => row[k]);
-                        
+
                         let insertSql = `INSERT OR REPLACE INTO ${escTbl} (${quotedCols}) VALUES (${placeholders})`;
                         if (appCfg.isCloudServer) {
-                            const matchedPk = await getPgValidConstraintCol(tbl, rowKeys);
                             if (matchedPk && isValidSqlIdentifier(matchedPk)) {
                                 const updateCols = rowKeys.filter(k => k !== matchedPk).map(k => `${escapeSqlIdentifier(k)} = EXCLUDED.${escapeSqlIdentifier(k)}`).join(', ');
                                 insertSql = `INSERT INTO ${escTbl} (${quotedCols}) VALUES (${placeholders}) ON CONFLICT (${escapeSqlIdentifier(matchedPk)}) DO UPDATE SET ${updateCols || `${escapeSqlIdentifier(matchedPk)} = EXCLUDED.${escapeSqlIdentifier(matchedPk)}`}`;
@@ -5715,19 +5724,27 @@ app.post('/api/sync/delta', syncLimiter, express.json({ limit: '50mb' }), async 
                 if (change.table_name && isAllowedSyncTable(change.table_name) && change.new_data) {
                     const parsed = typeof change.new_data === 'string' ? JSON.parse(change.new_data) : change.new_data;
                     const rawKeys = Object.keys(parsed || {});
-                    const keys = rawKeys.filter(k => isValidSqlIdentifier(k));
-                    if (keys.length > 0) {
+                    const rawValidKeys = rawKeys.filter(k => isValidSqlIdentifier(k));
+                    if (rawValidKeys.length > 0) {
                         const escChangeTbl = escapeSqlIdentifier(change.table_name);
+                        let matchedPk = null;
+                        if (appCfg.isCloudServer) matchedPk = await getPgValidConstraintCol(change.table_name, rawValidKeys);
+                        // Same guard as the bulk path: when keyed by sync_key, never force the replica's
+                        // PRIMARY KEY(id) to the source's volatile id (collides across rows -> 422 poison).
+                        let keys = rawValidKeys;
+                        if (appCfg.isCloudServer && matchedPk && matchedPk.toLowerCase() !== 'id'
+                            && rawValidKeys.some(k => k.toLowerCase() === 'id')) {
+                            keys = rawValidKeys.filter(k => k.toLowerCase() !== 'id');
+                        }
                         const placeholders = keys.map(() => '?').join(', ');
                         const quotedCols = keys.map(k => escapeSqlIdentifier(k)).join(', ');
                         const values = keys.map(k => {
                             const v = parsed[k];
                             return v === null || v === undefined ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
                         });
-                        
+
                         let insertSql = `INSERT OR REPLACE INTO ${escChangeTbl} (${quotedCols}) VALUES (${placeholders})`;
                         if (appCfg.isCloudServer) {
-                            const matchedPk = await getPgValidConstraintCol(change.table_name, keys);
                             if (matchedPk && isValidSqlIdentifier(matchedPk)) {
                                 const updateCols = keys.filter(k => k !== matchedPk).map(k => `${escapeSqlIdentifier(k)} = EXCLUDED.${escapeSqlIdentifier(k)}`).join(', ');
                                 insertSql = `INSERT INTO ${escChangeTbl} (${quotedCols}) VALUES (${placeholders}) ON CONFLICT (${escapeSqlIdentifier(matchedPk)}) DO UPDATE SET ${updateCols || `${escapeSqlIdentifier(matchedPk)} = EXCLUDED.${escapeSqlIdentifier(matchedPk)}`}`;
@@ -6178,6 +6195,12 @@ app.get('/api/diagnostics/reconciliation', async (req, res) => {
             try {
                 const info = await allQuery(`PRAGMA table_info("${item.table}")`);
                 localCols[item.table] = (info || []).map(c => c.name);
+                // For tables whose identity is the stable sync_key, the surrogate `id` is a volatile
+                // Access-autonumber serial that legitimately differs across engines; exclude it from
+                // the canonical projection so id churn is not misreported as CONTENT_MISMATCH (F-01/F-02).
+                if (RAW_TABLE_PK_MAP[item.table] === 'sync_key') {
+                    localCols[item.table] = localCols[item.table].filter(c => c.toLowerCase() !== 'id');
+                }
             } catch (e) {
                 localCols[item.table] = null;
             }
